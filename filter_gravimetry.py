@@ -43,9 +43,9 @@ EXCL_FILE = BASE / "Data/Gravimetry/exclusions.csv"
 
 # ── Global filtering parameters ───────────────────────────────────────────────
 N_WARMUP  = 5     # readings to drop at the start of each station (instrument settling)
-SD_MAX    = 0.15  # mGal  — drop readings with SD above this
-TILT_MAX  = 20    # arcsec — drop readings where |TiltX| or |TiltY| exceeds this
-REJ_MAX   = 10   # counts — drop readings with more than this many rejected 6 Hz samples
+SD_MAX    = 0.15  # mGal, drop readings with SD above this
+TILT_MAX  = 20    # arcsec, drop readings where |TiltX| or |TiltY| exceeds this
+REJ_MAX   = 10   # counts, drop readings with more than this many rejected 6 Hz samples
 
 # ── Per-station overrides ─────────────────────────────────────────────────────
 # Stations listed here skip the warmup drop and ALL automatic filters.
