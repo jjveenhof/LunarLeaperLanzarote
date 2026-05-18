@@ -22,6 +22,8 @@ Filters applied in order
   5. Rej threshold  — readings with Rej > REJ_MAX dropped.
      Note: Rej does not appear in the SE formula (SD already reflects accepted samples only),
      but high Rej is still a useful proxy for an unstable setup or noisy environment.
+  6. Keep last reading (optional) — if KEEP_LAST is True, retain only the most recent
+     reading per station that passed all above filters.
 
 Per-station overrides
 ---------------------
@@ -38,14 +40,18 @@ from pathlib import Path
 
 BASE      = Path(__file__).resolve().parents[1]
 RAW_FILE  = BASE / "Data/Gravimetry/combined_gravimetry.csv"
-FILT_FILE = BASE / "Data/Gravimetry/filtered_gravimetry.csv"
+DATA_DIR  = BASE / "Data/Gravimetry"
 EXCL_FILE = BASE / "Data/Gravimetry/exclusions.csv"
 
-# ── Global filtering parameters ───────────────────────────────────────────────
-N_WARMUP  = 5     # readings to drop at the start of each station (instrument settling)
-SD_MAX    = 0.15  # mGal, drop readings with SD above this
-TILT_MAX  = 20    # arcsec, drop readings where |TiltX| or |TiltY| exceeds this
-REJ_MAX   = 10   # counts, drop readings with more than this many rejected 6 Hz samples
+# ── Filtering configurations ───────────────────────────────────────────────────
+# Each entry produces a separate output file named filtered_gravimetry_{name}.csv
+# when run via run_pipeline.py. Running this script directly uses DEFAULT_CONFIG.
+CONFIGS = {
+    "drop5":    {"N_WARMUP": 5, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": False},
+    "drop0":    {"N_WARMUP": 0, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": False},
+    "keepLast": {"N_WARMUP": 0, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": True},
+}
+DEFAULT_CONFIG = "drop5"
 
 # ── Per-station overrides ─────────────────────────────────────────────────────
 # Stations listed here skip the warmup drop and ALL automatic filters.
@@ -58,7 +64,8 @@ KEEP_ALL = {
 # Override individual filter parameters for specific stations.
 # Any key not listed falls back to the global default above.
 OVERRIDES = {
-    (3, 29): {"tilt_max": 35},  # ground was unstable — relax tilt threshold
+    (3, 29): {"tilt_max": 70},  # ground was unstable — relax tilt threshold
+    (3,  0): {"n_warmup": 0},   # first 9 excluded manually in exclusion list, remaining are settled
 }
 
 
@@ -133,7 +140,13 @@ def _apply_exclusions(df, exclusions):
 
 # ── Main filter pipeline ──────────────────────────────────────────────────────
 
-def apply_filters(df, exclusions):
+def apply_filters(df, exclusions, cfg):
+    n_warmup  = cfg["N_WARMUP"]
+    sd_max    = cfg["SD_MAX"]
+    tilt_max  = cfg["TILT_MAX"]
+    rej_max   = cfg["REJ_MAX"]
+    keep_last = cfg["KEEP_LAST"]
+
     n_start = len(df)
     report  = []
 
@@ -143,43 +156,49 @@ def apply_filters(df, exclusions):
     report.append(("Exclusion list", n_before - len(df)))
 
     # Split off KEEP_ALL stations — they skip every automatic filter from here on
-    station_key  = list(zip(df["Line"], df["Station"]))
+    station_key   = list(zip(df["Line"], df["Station"]))
     keep_all_mask = pd.Series([k in KEEP_ALL for k in station_key], index=df.index)
     df_keep = df[keep_all_mask]
     df      = df[~keep_all_mask]
 
-    # 2. Warmup drop — first N_WARMUP readings per station (sorted by Time)
-    n_before   = len(df)
-    warmup_idx = (
-        df.sort_values("Time")
-          .groupby(["Line", "Station"])
-          .head(N_WARMUP)
-          .index
-    )
-    df = df.drop(index=warmup_idx)
-    report.append(("Warmup drop", n_before - len(df)))
-
-    # Helper: get per-station parameter, falling back to global default
+    # Helper: get per-station parameter, falling back to config default
     def param(line, station, key, default):
         return OVERRIDES.get((line, station), {}).get(key, default)
 
+    # 2. Warmup drop — first n_warmup readings per station (sorted by Time).
+    # Per-station override supported via OVERRIDES {"n_warmup": N}.
+    n_before   = len(df)
+    sorted_df  = df.sort_values("Time")
+    warmup_idx = []
+    for (line, station), grp in sorted_df.groupby(["Line", "Station"]):
+        sta_warmup = param(line, station, "n_warmup", n_warmup)
+        warmup_idx.extend(grp.head(sta_warmup).index.tolist())
+    df = df.drop(index=warmup_idx)
+    report.append(("Warmup drop", n_before - len(df)))
+
     # 3. SD threshold
-    n_before = len(df)
-    sd_thresh = df.apply(lambda r: param(r["Line"], r["Station"], "sd_max", SD_MAX), axis=1)
+    n_before  = len(df)
+    sd_thresh = df.apply(lambda r: param(r["Line"], r["Station"], "sd_max", sd_max), axis=1)
     df = df[df["SD"] <= sd_thresh]
-    report.append((f"SD > {SD_MAX} mGal", n_before - len(df)))
+    report.append((f"SD > {sd_max} mGal", n_before - len(df)))
 
     # 4. Tilt threshold (per-station override supported)
-    n_before   = len(df)
-    tilt_thresh = df.apply(lambda r: param(r["Line"], r["Station"], "tilt_max", TILT_MAX), axis=1)
+    n_before    = len(df)
+    tilt_thresh = df.apply(lambda r: param(r["Line"], r["Station"], "tilt_max", tilt_max), axis=1)
     df = df[(df["TiltX"].abs() <= tilt_thresh) & (df["TiltY"].abs() <= tilt_thresh)]
-    report.append((f"|Tilt| > {TILT_MAX} arcsec", n_before - len(df)))
+    report.append((f"|Tilt| > {tilt_max} arcsec", n_before - len(df)))
 
     # 5. Rej threshold
-    n_before  = len(df)
-    rej_thresh = df.apply(lambda r: param(r["Line"], r["Station"], "rej_max", REJ_MAX), axis=1)
+    n_before   = len(df)
+    rej_thresh = df.apply(lambda r: param(r["Line"], r["Station"], "rej_max", rej_max), axis=1)
     df = df[df["Rej"] <= rej_thresh]
-    report.append((f"Rej > {REJ_MAX} samples", n_before - len(df)))
+    report.append((f"Rej > {rej_max} samples", n_before - len(df)))
+
+    # 6. Keep last reading per station (optional)
+    if keep_last:
+        n_before = len(df)
+        df = df.sort_values("Time").groupby(["Line", "Station"]).tail(1).reset_index(drop=True)
+        report.append(("Keep last reading per station", n_before - len(df)))
 
     # Recombine keep-all stations with the filtered set
     df = pd.concat([df_keep, df]).sort_values(["Line", "Station", "Time"]).reset_index(drop=True)
@@ -194,7 +213,12 @@ def apply_filters(df, exclusions):
     return df
 
 
-def main():
+def main(config_name=DEFAULT_CONFIG, out_file=None):
+    cfg = CONFIGS[config_name]
+    if out_file is None:
+        out_file = DATA_DIR / f"filtered_gravimetry_{config_name}.csv"
+
+    print(f"Config: {config_name}  ({cfg})")
     print(f"Reading {RAW_FILE.name} …")
     df = pd.read_csv(RAW_FILE, dtype={"Time": str, "Date": str})
     print(f"  {len(df)} readings across {df.groupby(['Line', 'Station']).ngroups} stations")
@@ -204,10 +228,10 @@ def main():
     print(f"  {len(exclusions)} manual exclusions")
 
     print("\nApplying filters …")
-    filtered = apply_filters(df, exclusions)
+    filtered = apply_filters(df, exclusions, cfg)
 
-    filtered.to_csv(FILT_FILE, index=False, float_format="%.6f")
-    print(f"\nSaved → {FILT_FILE.name}")
+    filtered.to_csv(out_file, index=False, float_format="%.6f")
+    print(f"\nSaved → {out_file.name}")
 
     n_stations  = filtered.groupby(["Line", "Station"]).ngroups
     n_no_gnss   = filtered.groupby(["Line", "Station"])["Easting"].first().isna().sum()
@@ -217,7 +241,7 @@ def main():
     print(f"  Stations retained     : {n_stations}")
     print(f"  Without GNSS position : {n_no_gnss}")
     print(f"  Station types:\n{type_counts.to_string()}")
-    print(f"  Readings with SE_i = NaN (Dur*6 - Rej ≤ 0): {n_nan_se}")
+    print(f"  Readings with SE_i = NaN (Dur = 0): {n_nan_se}")
 
 
 if __name__ == "__main__":

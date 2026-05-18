@@ -51,9 +51,13 @@ def weighted_mean(grp):
     })
 
 
-def main():
-    print(f"Reading {FILT_FILE.name} …")
-    df = pd.read_csv(FILT_FILE, dtype={"Time": str, "Date": str})
+def main(in_file=None, out_file=None):
+    if in_file  is None: in_file  = FILT_FILE
+    if out_file is None: out_file = OUT_FILE
+    in_file, out_file = Path(in_file), Path(out_file)
+
+    print(f"Reading {in_file.name} …")
+    df = pd.read_csv(in_file, dtype={"Time": str, "Date": str})
     print(f"  {len(df)} readings across {df.groupby(['Line', 'Station']).ngroups} stations")
 
     # Metadata columns that are constant per station — take first value
@@ -81,9 +85,9 @@ def main():
         "Temp_mean", "Date", "Time_first", "Time_last",
         "StationType", "Notes",
     ]
-    result[cols].to_csv(OUT_FILE, index=False, float_format="%.6f")
+    result[cols].to_csv(out_file, index=False, float_format="%.6f")
 
-    print(f"\nSaved → {OUT_FILE.name}")
+    print(f"\nSaved → {out_file.name}")
     preview_cols = ["Line", "Station", "Easting", "Northing", "Elevation",
                     "Grav_wmean", "SE_wmean", "n_readings", "StationType"]
     print(f"\nPreview (first 5 rows):")

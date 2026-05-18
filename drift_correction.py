@@ -145,9 +145,13 @@ def consistency_check(df):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
-    print(f"Reading {MEANS_FILE.name} …")
-    df = pd.read_csv(MEANS_FILE, dtype={"Time_first": str, "Date": str})
+def main(in_file=None, out_file=None):
+    if in_file  is None: in_file  = MEANS_FILE
+    if out_file is None: out_file = OUT_FILE
+    in_file, out_file = Path(in_file), Path(out_file)
+
+    print(f"Reading {in_file.name} …")
+    df = pd.read_csv(in_file, dtype={"Time_first": str, "Date": str})
     df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time_first"],
                                     format="%Y/%m/%d %H:%M:%S")
     print(f"  {len(df)} stations across Lines {sorted(df['Line'].unique())}")
@@ -184,8 +188,8 @@ def main():
         "Date", "Time_first", "Time_last",
         "StationType", "Notes",
     ]
-    result[cols].to_csv(OUT_FILE, index=False, float_format="%.6f")
-    print(f"\nSaved → {OUT_FILE.name}")
+    result[cols].to_csv(out_file, index=False, float_format="%.6f")
+    print(f"\nSaved → {out_file.name}")
 
 
 if __name__ == "__main__":
