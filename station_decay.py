@@ -31,12 +31,13 @@ import matplotlib.gridspec as gridspec
 from pathlib import Path
 from scipy.optimize import curve_fit
 
-BASE      = Path(__file__).resolve().parents[1]
-FILT_FILE = BASE / "Data/Gravimetry/filtered_gravimetry_drop0.csv"
-OUT_FILE  = BASE / "Data/Gravimetry/station_decay.csv"
+BASE       = Path(__file__).resolve().parents[1]
+FILT_FILE  = BASE / "Data/Gravimetry/filtered_gravimetry_drop0.csv"
+OUT_FILE   = BASE / "Data/Gravimetry/station_decay.csv"
+MEANS_FILE = BASE / "Data/Gravimetry/station_means_decay.csv"   # pipeline-compatible
 
 # A / SE_A must exceed this ratio to be considered "real settling"
-SIGNIFICANCE_THRESHOLD = 1.0
+SIGNIFICANCE_THRESHOLD = 0.8
 
 
 # ── Model ─────────────────────────────────────────────────────────────────────
@@ -114,18 +115,22 @@ def plot_line(line_df, line_id, results):
                 color=fit_color, linewidth=1.2, zorder=2,
                 label="decay fit" if not settled else "flat fit")
 
+        # Weighted mean (always computed, shown as reference for settled stations)
+        w_plot     = 1.0 / se**2
+        g_wmean_p  = (w_plot * grav).sum() / w_plot.sum()
+
         # Asymptote: always show g_inf from fit as dashed line
         ax.axhline(g_inf, color=fit_color, linewidth=0.9,
                    linestyle="--", alpha=0.8, label="g∞ (fit)")
-        # For settled stations also overlay the simple mean for comparison
+        # For settled stations also overlay the weighted mean
         if settled:
-            ax.axhline(grav.mean(), color="darkorange", linewidth=0.9,
-                       linestyle=":", alpha=0.9, label="mean")
+            ax.axhline(g_wmean_p, color="darkorange", linewidth=0.9,
+                       linestyle=":", alpha=0.9, label="weighted mean")
 
-        # Title shows mean for settled, g_inf for settling
-        display_g = grav.mean() if settled else g_inf
+        # Title and CSV use weighted mean for settled, g_inf for settling
+        display_g = g_wmean_p if settled else g_inf
         status    = "settled" if settled else f"τ={tau:.1f}m"
-        ax.set_title(f"S{station}\ng={display_g:.3f} {status}",
+        ax.set_title(f"S{station}\ng={display_g:.3f}, {status}",
                      fontsize=7, color=label_color, pad=3)
         ax.tick_params(labelsize=6)
         ax.yaxis.set_major_formatter(plt.matplotlib.ticker.FormatStrFormatter("%.3f"))
@@ -152,17 +157,18 @@ def plot_line(line_df, line_id, results):
         Line2D([0], [0], color="grey", linewidth=0.9, linestyle="--",
                label="g∞ (settled)"),
         Line2D([0], [0], color="darkorange", linewidth=0.9, linestyle=":",
-               label="Mean (settled)"),
+               label="Weighted mean (settled)"),
     ]
-    plt.tight_layout(rect=[0, 0.07, 1, 0.97], h_pad=2.5, w_pad=1.0)
+    plt.tight_layout(rect=[0, 0.06, 1, 0.97], h_pad=2.5, w_pad=1.0)
     fig.legend(handles=legend_elements, loc="lower center",
                ncol=6, fontsize=7, frameon=True,
-               bbox_to_anchor=(0.5, 0.0), bbox_transform=fig.transFigure)
+               bbox_to_anchor=(0.5, 0.02), bbox_transform=fig.transFigure)
+    return fig
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
+def main(plot=True):
     print(f"Reading {FILT_FILE.name} …")
     df = pd.read_csv(FILT_FILE, dtype={"Time": str, "Date": str})
     print(f"  {df.groupby(['Line','Station']).ngroups} stations")
@@ -175,16 +181,30 @@ def main():
         t_min = (t_abs - t_abs.iloc[0]).dt.total_seconds() / 60
         se    = grp["SE_i"].fillna(grp["SE_i"].mean())
 
+        # Weighted mean — fallback for settled stations
+        w         = 1.0 / se**2
+        g_wmean   = (w * grp["Grav"]).sum() / w.sum()
+        se_wmean  = 1.0 / np.sqrt(w.sum())
+
         g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grp["Grav"], se)
         settled = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
+
+        # Best gravity estimate: g_inf from fit for settling stations,
+        # weighted mean for settled ones (fit asymptote unreliable when A ≈ 0)
+        best_g  = g_wmean  if settled else g_inf
+        best_se = se_wmean if settled else se_g_inf
 
         records.append({
             "Line": line, "Station": station,
             "Easting":   grp["Easting"].iloc[0],
             "Northing":  grp["Northing"].iloc[0],
             "Elevation": grp["Elevation"].iloc[0],
-            "g_inf":     g_inf,
-            "SE_g_inf":  se_g_inf,
+            "HorizErr":  grp["HorizErr"].iloc[0],
+            "VertErr":   grp["VertErr"].iloc[0],
+            "g_inf":     best_g,
+            "SE_g_inf":  best_se,
+            "g_wmean":   g_wmean,
+            "SE_wmean":  se_wmean,
             "A":         A,
             "SE_A":      se_A,
             "tau_min":   tau,
@@ -204,12 +224,41 @@ def main():
     print(f"  Fit failed:               {n_failed}")
 
     results.to_csv(OUT_FILE, index=False, float_format="%.6f")
-    print(f"\nSaved → {OUT_FILE.name}")
+    print(f"Saved → {OUT_FILE.name}")
 
-    for line_id in sorted(df["Line"].unique()):
-        plot_line(df[df["Line"] == line_id], line_id, results)
+    # Pipeline-compatible version: rename g_inf/SE_g_inf to Grav_wmean/SE_wmean
+    # so drift_correction.py can consume it directly.
+    pipe_cols = {
+        "g_inf":    "Grav_wmean",
+        "SE_g_inf": "SE_wmean",
+    }
+    means_df = results.rename(columns=pipe_cols)[[
+        "Line", "Station", "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
+        "Grav_wmean", "SE_wmean", "n_readings",
+        "StationType", "Notes",
+    ]]
+    # station_means.py also writes Date/Time_first/Time_last/Temp_mean;
+    # carry them from the filtered readings
+    meta = (df.sort_values("Time")
+              .groupby(["Line", "Station"])
+              .agg(Temp_mean=("Temp", "mean"),
+                   Date=("Date", "first"),
+                   Time_first=("Time", "first"),
+                   Time_last=("Time", "last"))
+              .reset_index())
+    means_df = means_df.merge(meta, on=["Line", "Station"], how="left")
+    means_df.to_csv(MEANS_FILE, index=False, float_format="%.6f")
+    print(f"Saved → {MEANS_FILE.name}  (pipeline-compatible)")
 
-    plt.show()
+    if plot:
+        fig_dir = BASE / "Results/Grav/Decay fitting"
+        fig_dir.mkdir(parents=True, exist_ok=True)
+        for line_id in sorted(df["Line"].unique()):
+            fig = plot_line(df[df["Line"] == line_id], line_id, results)
+            save_path = fig_dir / f"decay_line{line_id}.png"
+            fig.savefig(save_path, dpi=150, bbox_inches="tight")
+            print(f"Saved → {save_path.name}")
+        plt.show()
 
 
 if __name__ == "__main__":
