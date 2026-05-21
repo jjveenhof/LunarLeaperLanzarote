@@ -1,5 +1,5 @@
 """
-Visualise LSQ drift-corrected gravity profiles — one figure per Line.
+Visualise LSQ drift-corrected gravity profiles -- one figure per Line.
 
 Input
 -----
@@ -7,8 +7,8 @@ Input
     Pass a different filename as a command-line argument.
 
 Each subplot shows
-    ● (large, grey)   — LSQ estimate g_k ± SE_lsq per unique physical location
-    · (small, coloured by loop) — individual drift-corrected measurements
+    ?--? (large, grey)   -- LSQ estimate g_k +/- SE_lsq per unique physical location
+    . (small, coloured by loop) -- individual drift-corrected measurements
                                   (= Grav_wmean - drift - offset = g_k + residual)
       The spread of the dots around the grey marker is the actual fit quality
       at that location.
@@ -32,15 +32,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from visualise_lines import along_profile_distance
 
-BASE      = Path(__file__).resolve().parents[1]
+BASE      = Path(__file__).resolve().parents[2]
 DATA_DIR  = BASE / "Data/Gravimetry"
-DEFAULT   = DATA_DIR / "lsq_corrected_decay.csv"
+PROC_DIR  = BASE / "Data/Gravimetry/Processed"
+DEFAULT   = PROC_DIR / "lsq_corrected_decay.csv"
 
 LOOP_CMAP   = plt.cm.tab10
 INVERT_LINES = {4}
 
 
-# ── Per-location mean GNSS position ───────────────────────────────────────────
+# -- Per-location mean GNSS position -------------------------------------------
 
 def location_positions(line_df):
     """
@@ -52,7 +53,7 @@ def location_positions(line_df):
             .mean())
 
 
-# ── Plot one line ──────────────────────────────────────────────────────────────
+# -- Plot one line --------------------------------------------------------------
 
 def plot_line(ax, line_df, line_id):
     # Exclude base stations from the profile (same as visualise_lines.py)
@@ -77,7 +78,7 @@ def plot_line(ax, line_df, line_id):
     loops    = sorted(plot_df["loop_id"].dropna().unique())
     loop_map = {l: i for i, l in enumerate(loops)}
 
-    # ── One pass per location ─────────────────────────────────────────────────
+    # -- One pass per location -------------------------------------------------
     for loc_id, loc_grp in plot_df.groupby("loc_id"):
         dist = loc_grp["dist"].iloc[0]
         if pd.isna(dist):
@@ -128,7 +129,7 @@ def plot_line(ax, line_df, line_id):
     ]
     symbol_handles = [
         mlines.Line2D([], [], marker="o", color="black", linestyle="None",
-                      markersize=6, label="g_k ± SE_lsq  (location estimate)"),
+                      markersize=6, label="g_k +/- SE_lsq  (location estimate)"),
         mlines.Line2D([], [], marker="+", color="steelblue", linestyle="None",
                       markersize=8, markeredgewidth=1.8,
                       label="Individual drift-corrected meas."),
@@ -136,14 +137,14 @@ def plot_line(ax, line_df, line_id):
     ax.legend(handles=symbol_handles + loop_handles, fontsize=7, ncol=2, loc="best")
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main(filepath=None):
     path = Path(filepath) if filepath else (
-        DATA_DIR / sys.argv[1] if len(sys.argv) > 1 else DEFAULT
+        PROC_DIR / sys.argv[1] if len(sys.argv) > 1 else DEFAULT
     )
 
-    print(f"Reading {path.name} …")
+    print(f"Reading {path.name} ...")
     df = pd.read_csv(path, dtype={"Time_first": str, "Date": str})
     print(f"  {df.groupby(['Line','loc_id']).ngroups} unique locations across "
           f"Lines {sorted(df['Line'].unique())}")
@@ -158,10 +159,11 @@ def main(filepath=None):
         fig.tight_layout()
         save_path = fig_dir / f"{stem}_line{line_id}.png"
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
-        print(f"Saved → {save_path.name}")
+        print(f"Saved -> {save_path.name}")
 
     plt.show()
 
 
 if __name__ == "__main__":
     main()
+

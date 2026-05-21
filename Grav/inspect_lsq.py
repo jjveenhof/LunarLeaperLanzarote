@@ -11,7 +11,7 @@ Produces two figures per Line:
 
   2. Base-station timeline
        - Raw Grav_wmean vs absolute time, coloured by loop
-       - LSQ estimate g_base ± SE_lsq as horizontal band
+       - LSQ estimate g_base +/- SE_lsq as horizontal band
        - Drift-corrected individual measurements (g_base + residual)
        - Vertical lines at loop boundaries
 
@@ -31,15 +31,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from drift_correction_lsq import (
-    assign_loops, assign_locations, build_G, DATA_DIR
+    assign_loops, assign_locations, build_G, PROC_DIR
 )
 
-BASE    = Path(__file__).resolve().parents[1]
+BASE    = Path(__file__).resolve().parents[2]
 SAVE_DIR = BASE / "Analysis/Grav"
 LOOP_CMAP = plt.cm.tab10
 
 
-# ── Re-run LS to get covariance ───────────────────────────────────────────────
+# -- Re-run LS to get covariance -----------------------------------------------
 
 def solve_with_cov(group):
     """Return solution + full covariance matrix + normalised residuals."""
@@ -88,7 +88,7 @@ def solve_with_cov(group):
     }
 
 
-# ── Figure 1: Statistics sheet ────────────────────────────────────────────────
+# -- Figure 1: Statistics sheet ------------------------------------------------
 
 def plot_stats(line_id, res, config_name):
     obs        = res["obs"]
@@ -97,8 +97,8 @@ def plot_stats(line_id, res, config_name):
     K, J       = res["K"], res["J"]
 
     fig = plt.figure(figsize=(22, 5.5))
-    fig.suptitle(f"LSQ statistics — Line {line_id}  [{config_name}]   "
-                 f"σ₀ = {res['sigma_0']:.3f}  (dof = {res['dof']})",
+    fig.suptitle(f"LSQ statistics -- Line {line_id}  [{config_name}]   "
+                 f"sigma0 = {res['sigma_0']:.3f}  (dof = {res['dof']})",
                  fontsize=12, fontweight="bold")
 
     gs = fig.add_gridspec(1, 3, wspace=0.35, width_ratios=[1, 1, 1])
@@ -106,8 +106,8 @@ def plot_stats(line_id, res, config_name):
     ax_hist = fig.add_subplot(gs[0, 1])
     ax_corr = fig.add_subplot(gs[0, 2])
 
-    # ── SE_lsq per location ───────────────────────────────────────────────────
-    se_g = np.sqrt(np.diag(res["C_m"]))[:K] * 1000   # µGal
+    # -- SE_lsq per location ---------------------------------------------------
+    se_g = np.sqrt(np.diag(res["C_m"]))[:K] * 1000   # uGal
     locs = res["locs"]
     # Annotate base and tie locations
     obs       = res["obs"]
@@ -122,12 +122,12 @@ def plot_stats(line_id, res, config_name):
     ax_se.bar(range(K), se_g, color=colors)
     ax_se.set_xticks(range(K))
     ax_se.set_xticklabels(loc_labels, rotation=45, ha="right", fontsize=7)
-    ax_se.set_ylabel("SE_lsq (µGal)")
+    ax_se.set_ylabel("SE_lsq (uGal)")
     ax_se.set_title("Formal uncertainty per location")
     ax_se.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
 
-    # ── Normalised residuals — co-located stations only ───────────────────────
-    # Unique-location stations always have residual ≈ 0 by construction (the LS
+    # -- Normalised residuals -- co-located stations only -----------------------
+    # Unique-location stations always have residual ~= 0 by construction (the LS
     # fits them exactly), so only co-located stations carry meaningful residuals.
     obs = res["obs"]
     loc_counts = obs.groupby("loc_id")["loc_id"].transform("count")
@@ -145,7 +145,7 @@ def plot_stats(line_id, res, config_name):
     ax_hist.set_title("Normalised residuals\n(co-located stations = filled; all = grey)")
     ax_hist.legend(fontsize=7)
 
-    # ── Correlation matrix ────────────────────────────────────────────────────
+    # -- Correlation matrix ----------------------------------------------------
     n_unk = corr_m.shape[0]
     im = ax_corr.imshow(corr_m, cmap="RdBu_r", vmin=-1, vmax=1,
                         aspect="equal", interpolation="none")
@@ -165,7 +165,7 @@ def plot_stats(line_id, res, config_name):
     return fig
 
 
-# ── Figure 2: Base-station timeline ───────────────────────────────────────────
+# -- Figure 2: Base-station timeline -------------------------------------------
 
 def plot_base_timeline(line_id, res, lsq_df, config_name):
     obs      = res["obs"]
@@ -186,7 +186,7 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     base_obs["t_h"] = (base_obs["datetime"] - t0).dt.total_seconds() / 3600
 
     fig, ax = plt.subplots(figsize=(12, 5))
-    fig.suptitle(f"Base station measurements — Line {line_id}  [{config_name}]",
+    fig.suptitle(f"Base station measurements -- Line {line_id}  [{config_name}]",
                  fontsize=12, fontweight="bold")
 
     # Loop boundary lines
@@ -206,10 +206,10 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
                     fmt="o", color=color, markersize=6,
                     capsize=3, elinewidth=0.8, zorder=3)
 
-    # LSQ estimate ± SE as horizontal band
+    # LSQ estimate +/- SE as horizontal band
     ax.axhline(g_base, color="black", linewidth=1.5, label=f"g_base = {g_base:.4f} mGal")
     ax.axhspan(g_base - se_base, g_base + se_base,
-               alpha=0.15, color="black", label=f"± SE_lsq = {se_base*1000:.2f} µGal")
+               alpha=0.15, color="black", label=f"+/- SE_lsq = {se_base*1000:.2f} uGal")
 
     # Drift-corrected measurements (g_base + residual)
     base_idx = [i for i, row in obs.iterrows() if row["StationType"] == "base"]
@@ -230,7 +230,7 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     ]
     symbol_patches = [
         plt.Line2D([0], [0], marker="o", color="grey", linestyle="None",
-                   markersize=6, label="Raw Grav_wmean ± SE_wmean"),
+                   markersize=6, label="Raw Grav_wmean +/- SE_wmean"),
         plt.Line2D([0], [0], marker="x", color="grey", linestyle="None",
                    markersize=8, markeredgewidth=1.8, label="Drift-corrected"),
     ]
@@ -244,14 +244,14 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     return fig
 
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# -- Main ----------------------------------------------------------------------
 
 def main(config_name=None):
     if config_name is None:
         config_name = sys.argv[1] if len(sys.argv) > 1 else "decay"
 
-    in_file  = DATA_DIR / f"station_means_{config_name}.csv"
-    lsq_file = DATA_DIR / f"lsq_corrected_{config_name}.csv"
+    in_file  = PROC_DIR / f"station_means_{config_name}.csv"
+    lsq_file = PROC_DIR / f"lsq_corrected_{config_name}.csv"
 
     print(f"Config: {config_name}")
     df = pd.read_csv(in_file, dtype={"Time_first": str, "Date": str})
@@ -262,7 +262,7 @@ def main(config_name=None):
     SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
     for line_id, group in df.groupby("Line"):
-        print(f"\nLine {line_id} …")
+        print(f"\nLine {line_id}:")
         group = assign_loops(group.copy())
         group = assign_locations(group)
         group["datetime"] = group["datetime"]  # keep datetime
@@ -272,13 +272,13 @@ def main(config_name=None):
             print("  LS failed, skipping.")
             continue
 
-        print(f"  σ₀ = {res['sigma_0']:.4f}  (dof = {res['dof']})")
+        print(f"  sigma0 = {res['sigma_0']:.4f}  (dof = {res['dof']})")
 
         # Figure 1: stats sheet
         fig1 = plot_stats(line_id, res, config_name)
         p1   = SAVE_DIR / f"lsq_stats_{config_name}_line{line_id}.png"
         fig1.savefig(p1, dpi=150, bbox_inches="tight")
-        print(f"  Saved → {p1.name}")
+        print(f"  Saved -> {p1.name}")
 
         # Figure 2: base station timeline (need datetime in obs)
         obs = res["obs"]
@@ -296,10 +296,11 @@ def main(config_name=None):
         if fig2 is not None:
             p2 = SAVE_DIR / f"lsq_base_{config_name}_line{line_id}.png"
             fig2.savefig(p2, dpi=150, bbox_inches="tight")
-            print(f"  Saved → {p2.name}")
+            print(f"  Saved -> {p2.name}")
 
     plt.show()
 
 
 if __name__ == "__main__":
     main()
+
