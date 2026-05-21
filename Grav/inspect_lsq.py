@@ -6,11 +6,11 @@ Produces two figures per Line:
   1. Statistics sheet
        - sigma_0 and degrees of freedom
        - SE_lsq per location (bar chart)
-       - Normalised residuals histogram  r_i / SE_wmean_i
+       - Normalised residuals histogram  r_i / SE_est_i
        - Correlation matrix of all unknowns (heatmap)
 
   2. Base-station timeline
-       - Raw Grav_wmean vs absolute time, coloured by loop
+       - Raw Grav_est vs absolute time, coloured by loop
        - LSQ estimate g_base +/- SE_lsq as horizontal band
        - Drift-corrected individual measurements (g_base + residual)
        - Vertical lines at loop boundaries
@@ -54,8 +54,8 @@ def solve_with_cov(group):
     J, K = len(loops), len(locs)
     G, col_labels, row_labels = build_G(obs, loops, locs, loop_map, loc_map)
 
-    u_vec = obs["Grav_wmean"].values
-    sigma = obs["SE_wmean"].values
+    u_vec = obs["Grav_est"].values
+    sigma = obs["SE_est"].values
     W     = np.diag(1.0 / sigma**2)
     GtW   = G.T @ W
     N_mat = GtW @ G
@@ -71,7 +71,7 @@ def solve_with_cov(group):
     dof          = len(obs) - G.shape[1]
     sigma_0_sq   = float((residuals @ W @ residuals) / dof) if dof > 0 else 1.0
     C_m          = sigma_0_sq * N_inv
-    norm_resid   = residuals / sigma          # r_i / SE_wmean_i
+    norm_resid   = residuals / sigma          # r_i / SE_est_i
 
     # Correlation matrix
     se_m   = np.sqrt(np.diag(C_m))
@@ -140,7 +140,7 @@ def plot_stats(line_id, res, config_name):
     ax_hist.hist(nr_all,   bins=12, color="lightgrey", edgecolor="white",
                  alpha=0.4, density=True, label=f"All (n={len(nr_all)})")
     ax_hist.axvline(0, color="k", linewidth=0.8, linestyle="--")
-    ax_hist.set_xlabel("r_i / SE_wmean_i")
+    ax_hist.set_xlabel("r_i / SE_est_i")
     ax_hist.set_ylabel("Density")
     ax_hist.set_title("Normalised residuals\n(co-located stations = filled; all = grey)")
     ax_hist.legend(fontsize=7)
@@ -202,7 +202,7 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     for _, row in base_obs.iterrows():
         j     = loop_map.get(row["loop_id"], 0) if pd.notna(row["loop_id"]) else 0
         color = LOOP_CMAP(int(j) % 10)
-        ax.errorbar(row["t_h"], row["Grav_wmean"], yerr=row["SE_wmean"],
+        ax.errorbar(row["t_h"], row["Grav_est"], yerr=row["SE_est"],
                     fmt="o", color=color, markersize=6,
                     capsize=3, elinewidth=0.8, zorder=3)
 
@@ -230,7 +230,7 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     ]
     symbol_patches = [
         plt.Line2D([0], [0], marker="o", color="grey", linestyle="None",
-                   markersize=6, label="Raw Grav_wmean +/- SE_wmean"),
+                   markersize=6, label="Raw Grav_est +/- SE_est"),
         plt.Line2D([0], [0], marker="x", color="grey", linestyle="None",
                    markersize=8, markeredgewidth=1.8, label="Drift-corrected"),
     ]

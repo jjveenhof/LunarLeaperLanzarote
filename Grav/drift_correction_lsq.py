@@ -216,8 +216,8 @@ def solve_line(group):
     n_unk = K + J + (J - 1)
 
     G, _, _ = build_G(obs, loops, locs, loop_map, loc_map)
-    u_vec   = obs["Grav_wmean"].values
-    sigma   = obs["SE_wmean"].values
+    u_vec   = obs["Grav_est"].values
+    sigma   = obs["SE_est"].values
 
     W     = np.diag(1.0 / sigma**2)
     GtW   = G.T @ W
@@ -257,17 +257,17 @@ def solve_line(group):
             "Elevation":   row["Elevation"],
             "HorizErr":    row["HorizErr"],
             "VertErr":     row["VertErr"],
-            "Grav_wmean":  row["Grav_wmean"],
-            "SE_wmean":    row["SE_wmean"],
+            "Grav_est":  row["Grav_est"],
+            "SE_est":    row["SE_est"],
             "Grav_lsq":    g_vals[k],
             "SE_lsq":      se_g[k],
             "loc_id":      int(row["loc_id"]),
             "loop_id":     int(row["loop_id"]),
             "residual":    residuals[i],
-            "StationType": row["StationType"],
-            "Notes":       row["Notes"],
             "Date":        row["Date"],
             "Time_first":  row["Time_first"],
+            "StationType": row["StationType"],
+            "Notes":       row["Notes"],
         })
 
     # Loop parameters
@@ -318,7 +318,7 @@ def main(config_name="decay"):
         if result_df is None:
             continue
 
-        print(f"  sigma_0 = {sigma_0:.4f}  (dimensionless; 1 = model fits within SE_wmean)")
+        print(f"  sigma_0 = {sigma_0:.4f}  (dimensionless; 1 = model fits within SE_est)")
         print(f"  {'Loop':>4}  {'drift (mGal/h)':>16}  {'offset (microGal)':>14}")
         for _, lr in loop_df.iterrows():
             print(f"  {int(lr['loop_id']):>4}  {lr['drift_mGal_h']:>+16.4f}  "

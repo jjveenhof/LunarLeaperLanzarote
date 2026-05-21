@@ -227,17 +227,18 @@ def main(plot=True):
     results.to_csv(OUT_FILE, index=False, float_format="%.6f")
     print(f"Saved -> {OUT_FILE.name}")
 
-    # Pipeline-compatible version: rename g_inf/SE_g_inf to Grav_wmean/SE_wmean
+    # Pipeline-compatible version: rename g_inf/SE_g_inf to Grav_est/SE_est
     # so drift_correction.py can consume it directly.
     pipe_cols = {
-        "g_inf":    "Grav_wmean",
-        "SE_g_inf": "SE_wmean",
+        "g_inf":    "Grav_est",
+        "SE_g_inf": "SE_est",
     }
-    means_df = results.rename(columns=pipe_cols)[[
-        "Line", "Station", "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
-        "Grav_wmean", "SE_wmean", "n_readings",
-        "StationType", "Notes",
-    ]]
+    means_df = (results
+        .drop(columns=["SE_wmean", "g_wmean"])   # drop raw diagnostics; SE_g_inf becomes SE_est
+        .rename(columns=pipe_cols)
+        [["Line", "Station", "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
+          "Grav_est", "SE_est", "n_readings", "StationType", "Notes"]]
+    )
     # station_means.py also writes Date/Time_first/Time_last/Temp_mean;
     # carry them from the filtered readings
     meta = (df.sort_values("Time")
@@ -248,6 +249,11 @@ def main(plot=True):
                    Time_last=("Time", "last"))
               .reset_index())
     means_df = means_df.merge(meta, on=["Line", "Station"], how="left")
+    means_df = means_df[[
+        "Line", "Station", "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
+        "Grav_est", "SE_est", "n_readings", "Temp_mean",
+        "Date", "Time_first", "Time_last", "StationType", "Notes",
+    ]]
     means_df.to_csv(MEANS_FILE, index=False, float_format="%.6f")
     print(f"Saved -> {MEANS_FILE.name}  (pipeline-compatible)")
 

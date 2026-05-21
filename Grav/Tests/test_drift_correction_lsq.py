@@ -34,6 +34,6 @@ print(loop_df.to_string(index=False))
 
 print("\nStation results (sorted by Station):")
 print(result_df[["Station", "StationType", "loc_id", "loop_id",
-                 "Grav_wmean", "Grav_lsq", "SE_lsq", "residual"]]
+                 "Grav_est", "Grav_lsq", "SE_lsq", "residual"]]
       .sort_values("Station")
       .to_string(index=False))

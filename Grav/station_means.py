@@ -15,7 +15,7 @@ Method
 
     w_i      = 1 / SE_i^2  = Dur_i / SD_i^2
     Grav_w   = sum(w_i * Grav_i) / sum(w_i)
-    SE_wmean = 1 / sqrt(sum(w_i))
+    SE_est = 1 / sqrt(sum(w_i))
 
   Readings with SE_i = NaN (Dur = 0) are excluded from the weighted mean.
   Stations with no valid readings after exclusion are dropped entirely.
@@ -42,8 +42,8 @@ def weighted_mean(grp):
     se_wmean = 1.0 / np.sqrt(w.sum())
 
     return pd.Series({
-        "Grav_wmean":  grav_w,
-        "SE_wmean":    se_wmean,
+        "Grav_est":  grav_w,
+        "SE_est":    se_wmean,
         "n_readings":  len(g),
         "Temp_mean":   g["Temp"].mean(),
         "Date":        g["Date"].iloc[0],
@@ -82,7 +82,7 @@ def main(in_file=None, out_file=None):
     cols = [
         "Line", "Station",
         "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
-        "Grav_wmean", "SE_wmean", "n_readings",
+        "Grav_est", "SE_est", "n_readings",
         "Temp_mean", "Date", "Time_first", "Time_last",
         "StationType", "Notes",
     ]
@@ -90,7 +90,7 @@ def main(in_file=None, out_file=None):
 
     print(f"\nSaved -> {out_file.name}")
     preview_cols = ["Line", "Station", "Easting", "Northing", "Elevation",
-                    "Grav_wmean", "SE_wmean", "n_readings", "StationType"]
+                    "Grav_est", "SE_est", "n_readings", "StationType"]
     print(f"\nPreview (first 5 rows):")
     with pd.option_context("display.width", 120, "display.float_format", "{:.4f}".format):
         print(result[preview_cols].head(5).to_string(index=False))
@@ -98,7 +98,7 @@ def main(in_file=None, out_file=None):
     print(f"\nSummary:")
     print(f"  Stations: {len(result)}")
     print(f"  Median readings per station: {result['n_readings'].median():.0f}")
-    print(f"  Median SE_wmean: {result['SE_wmean'].median()*1000:.4f} microGal")
+    print(f"  Median SE_est: {result['SE_est'].median()*1000:.4f} microGal")
 
 
 if __name__ == "__main__":

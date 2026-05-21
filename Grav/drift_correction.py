@@ -24,7 +24,7 @@ Method
   Uncertainty propagation:
     SE_drift_rate    = sqrt(SE_start^2 + SE_end^2) / (t_end - t_start)
     SE_correction(t) = SE_drift_rate * (t - t_start)
-    SE_corr(t)       = sqrt(SE_wmean(t)^2 + SE_correction(t)^2)
+    SE_corr(t)       = sqrt(SE_est(t)^2 + SE_correction(t)^2)
 
 Consistency check
 -----------------
@@ -75,15 +75,15 @@ def correct_line(group):
 
         t_start       = base_s["datetime"]
         dt_min        = (base_e["datetime"] - t_start).total_seconds() / 60
-        drift_rate    = (base_e["Grav_wmean"] - base_s["Grav_wmean"]) / dt_min
-        SE_drift_rate = np.sqrt(base_s["SE_wmean"]**2 + base_e["SE_wmean"]**2) / dt_min
+        drift_rate    = (base_e["Grav_est"] - base_s["Grav_est"]) / dt_min
+        SE_drift_rate = np.sqrt(base_s["SE_est"]**2 + base_e["SE_est"]**2) / dt_min
 
         for idx in [i_start] + inner + [i_end]:
             t_elapsed  = (group.loc[idx, "datetime"] - t_start).total_seconds() / 60
             correction = drift_rate * t_elapsed
-            SE_corr    = np.sqrt(group.loc[idx, "SE_wmean"]**2
+            SE_corr    = np.sqrt(group.loc[idx, "SE_est"]**2
                                  + (SE_drift_rate * t_elapsed)**2)
-            group.loc[idx, "Grav_corr"]         = group.loc[idx, "Grav_wmean"] - correction
+            group.loc[idx, "Grav_corr"]         = group.loc[idx, "Grav_est"] - correction
             group.loc[idx, "SE_corr"]           = SE_corr
             group.loc[idx, "drift_rate_mGal_h"] = drift_rate * 60
             group.loc[idx, "loop_id"]           = loop_id
@@ -184,7 +184,7 @@ def main(in_file=None, out_file=None):
     cols = [
         "Line", "Station",
         "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
-        "Grav_wmean", "Grav_corr", "SE_wmean", "SE_corr",
+        "Grav_est", "SE_est", "Grav_corr", "SE_corr",
         "drift_rate_mGal_h", "loop_id", "n_readings",
         "Date", "Time_first", "Time_last",
         "StationType", "Notes",
