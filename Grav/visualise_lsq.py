@@ -7,7 +7,7 @@ Input
     Pass a different filename as a command-line argument.
 
 Each subplot shows
-    ?--? (large, grey)   -- LSQ estimate g_k +/- SE_lsq per unique physical location
+    * (large, grey)   -- LSQ estimate g_k +/- SE_lsq per unique physical location
     . (small, coloured by loop) -- individual drift-corrected measurements
                                   (= Grav_wmean - drift - offset = g_k + residual)
       The spread of the dots around the grey marker is the actual fit quality

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Combine CG-5 gravimetry data, GNSS positions, and field notes into one CSV.
 
 Inputs
@@ -18,7 +18,7 @@ Structure
   GNSS positions and field notes are joined by (Line, Station) and repeated
   for every reading at that station.
 
-  SE_i = SD_i / sqrt(Dur_i)  â€” per-reading instrument SE (CG-5 manual formula ERR = SD/sqrt(Dur)).
+  SE_i = SD_i / sqrt(Dur_i), per-reading instrument SE (CG-5 manual formula ERR = SD/sqrt(Dur)).
   Rej is already reflected in SD (instrument computes SD from accepted samples only).
   To compute the weighted station mean later:
     w_i = 1/SE_i^2,  g_w = sum(w_i * Grav_i) / sum(w_i),  SE_station = 1/sqrt(sum(w_i))
@@ -27,7 +27,6 @@ Notes
 -----
   - Lines 0 and 1 are excluded (calibration / test data).
   - When a station has multiple GNSS measurements the last one is kept.
-  - Readings where Dur*6 - Rej <= 0 get SE_i = NaN (exclude from weighting).
 """
 
 import re
@@ -42,11 +41,11 @@ GNSS_FILE = BASE / "Data/GNSS/01.05.26/LunLeapLanzGrav.txt"
 OUT_FILE  = BASE / "Data/Gravimetry/combined_gravimetry.csv"
 
 
-# â”€â”€ CG-5 â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- CG-5 ----------------------------------------------------------------------
 
 def load_cg5():
     # The CG-5 accumulates all measurements in each dump, so only the most
-    # recently modified file is needed â€” it contains the complete dataset.
+    # recently modified file is needed, it contains the complete dataset.
     latest = max(CG5_DIR.glob("*.txt"), key=lambda f: f.stat().st_mtime)
     print(f"  Using CG-5 file: {latest.name}")
 
@@ -88,7 +87,7 @@ def load_cg5():
     return df.reset_index(drop=True)
 
 
-# â”€â”€ GNSS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- GNSS ----------------------------------------------------------------------
 
 _GNSS_PAT = re.compile(r"^GRAVL(\d+)S(\d+)$")
 
@@ -121,7 +120,7 @@ def load_gnss():
     return df.groupby(["Line", "Station"]).last().reset_index()
 
 
-# â”€â”€ Field notes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Field notes ---------------------------------------------------------------
 
 _LINE_HDR   = re.compile(r"line\s+(\d+)\s+grav", re.IGNORECASE)
 _STATION_RE = re.compile(r"^\s*(\d+)[.:]\s+(.+)$")
@@ -180,19 +179,19 @@ def load_notes():
     return pd.DataFrame(records)
 
 
-# â”€â”€ Main â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# -- Main ----------------------------------------------------------------------
 
 def main():
-    print("Loading CG-5 data â€¦")
+    print("Loading CG-5 data ...")
     cg5 = load_cg5()
     n_stations = cg5.groupby(["Line", "Station"]).ngroups
-    print(f"  {len(cg5)} readings across {n_stations} stations (Lines â‰¥ 2)")
+    print(f"  {len(cg5)} readings across {n_stations} stations (Lines >= 2)")
 
-    print("Loading GNSS positions â€¦")
+    print("Loading GNSS positions ...")
     gnss = load_gnss()
     print(f"  {len(gnss)} positions")
 
-    print("Loading field notes â€¦")
+    print("Loading field notes ...")
     notes = load_notes()
     print(f"  {len(notes)} annotated stations")
 
@@ -218,7 +217,7 @@ def main():
     ]
     combined[cols].to_csv(OUT_FILE, index=False, float_format="%.6f")
 
-    print(f"\nSaved â†’ {OUT_FILE.name}")
+    print(f"\nSaved -> {OUT_FILE.name}")
     n_no_gnss  = combined.groupby(["Line", "Station"])["Easting"].first().isna().sum()
     n_no_notes = combined.groupby(["Line", "Station"])["Notes"].first().isna().sum()
     type_counts = combined.groupby(["Line", "Station"])["StationType"].first().value_counts()

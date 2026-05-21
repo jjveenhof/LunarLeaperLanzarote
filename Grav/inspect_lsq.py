@@ -98,7 +98,7 @@ def plot_stats(line_id, res, config_name):
 
     fig = plt.figure(figsize=(22, 5.5))
     fig.suptitle(f"LSQ statistics -- Line {line_id}  [{config_name}]   "
-                 f"sigma0 = {res['sigma_0']:.3f}  (dof = {res['dof']})",
+                 f"$\\sigma_0$ = {res['sigma_0']:.3f}  (dof = {res['dof']})",
                  fontsize=12, fontweight="bold")
 
     gs = fig.add_gridspec(1, 3, wspace=0.35, width_ratios=[1, 1, 1])
@@ -107,7 +107,7 @@ def plot_stats(line_id, res, config_name):
     ax_corr = fig.add_subplot(gs[0, 2])
 
     # -- SE_lsq per location ---------------------------------------------------
-    se_g = np.sqrt(np.diag(res["C_m"]))[:K] * 1000   # uGal
+    se_g = np.sqrt(np.diag(res["C_m"]))[:K] * 1000   # microGal
     locs = res["locs"]
     # Annotate base and tie locations
     obs       = res["obs"]
@@ -122,7 +122,7 @@ def plot_stats(line_id, res, config_name):
     ax_se.bar(range(K), se_g, color=colors)
     ax_se.set_xticks(range(K))
     ax_se.set_xticklabels(loc_labels, rotation=45, ha="right", fontsize=7)
-    ax_se.set_ylabel("SE_lsq (uGal)")
+    ax_se.set_ylabel(r"SE$_\mathrm{lsq}$ ($\mu$Gal)")
     ax_se.set_title("Formal uncertainty per location")
     ax_se.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
 
@@ -209,7 +209,7 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     # LSQ estimate +/- SE as horizontal band
     ax.axhline(g_base, color="black", linewidth=1.5, label=f"g_base = {g_base:.4f} mGal")
     ax.axhspan(g_base - se_base, g_base + se_base,
-               alpha=0.15, color="black", label=f"+/- SE_lsq = {se_base*1000:.2f} uGal")
+               alpha=0.15, color="black", label=f"$\\pm$ SE$_{{lsq}}$ = {se_base*1000:.2f} $\\mu$Gal")
 
     # Drift-corrected measurements (g_base + residual)
     base_idx = [i for i, row in obs.iterrows() if row["StationType"] == "base"]
