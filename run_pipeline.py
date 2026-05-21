@@ -13,9 +13,10 @@ Decay pipeline (run_decay()):
 """
 
 from pathlib import Path
-from filter_gravimetry import main as run_filter, CONFIGS
-from station_means     import main as run_means
-from drift_correction  import main as run_drift
+from filter_gravimetry    import main as run_filter, CONFIGS
+from station_means        import main as run_means
+from drift_correction     import main as run_drift
+from drift_correction_lsq import main as run_lsq
 
 DATA = Path(__file__).resolve().parents[1] / "Data/Gravimetry"
 
@@ -37,6 +38,9 @@ def run(config_name):
     print("\n── Step 3: drift correction ──")
     run_drift(in_file=means, out_file=corr)
 
+    print("\n── Step 4: LSQ drift correction ──")
+    run_lsq(config_name)
+
 
 def run_decay():
     """Drift-correct the exponential-decay gravity estimates."""
@@ -54,12 +58,23 @@ def run_decay():
         out_file = DATA / "drift_corrected_decay.csv",
     )
 
+    print("\n── Step 3: LSQ drift correction ──")
+    run_lsq("decay")
+
 
 if __name__ == "__main__":
     for name in CONFIGS:
         run(name)
-    run_decay()
+    
+    run_decay_success = True
+    try:
+        run_decay()
+    except Exception:
+        run_decay_success = False
 
     print(f"\n{'─'*60}")
     print(f"  All {len(CONFIGS)} configs complete.")
+    if run_decay_success:
+        print(f"  Decay config complete.")
+    
     print(f"{'─'*60}")

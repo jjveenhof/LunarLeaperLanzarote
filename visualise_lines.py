@@ -148,18 +148,17 @@ def plot_line(ax, line_df, line_id):
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
-def main():
-    df = pd.read_csv(CORR_FILE, dtype={"Time_first": str, "Date": str})
-    lines = sorted(df["Line"].unique())
-
+def main(filepath=None):
+    path = Path(filepath) if filepath else CORR_FILE
+    df   = pd.read_csv(path, dtype={"Time_first": str, "Date": str})
+    lines   = sorted(df["Line"].unique())
     fig_dir = BASE / "Results/Grav/First result (non-corrected)"
     fig_dir.mkdir(parents=True, exist_ok=True)
-    stem = CORR_FILE.stem   # e.g. "drift_corrected_drop5"
+    stem = path.stem
 
     for line_id in lines:
         fig, ax = plt.subplots(figsize=(12, 5))
-        line_df = df[df["Line"] == line_id].copy()
-        plot_line(ax, line_df, line_id)
+        plot_line(ax, df[df["Line"] == line_id].copy(), line_id)
         fig.tight_layout()
         save_path = fig_dir / f"{stem}_line{line_id}.png"
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
