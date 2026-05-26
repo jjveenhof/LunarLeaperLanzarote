@@ -98,7 +98,7 @@ def plot_line(line_df, line_id, results):
         grav = grp["Grav"]
         se   = grp["SE_i"].fillna(grp["SE_i"].mean())
 
-        g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grav, se)
+        g_inf, _, A, se_A, tau, converged = fit_station(t_min, grav, se)
 
         settled     = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
         fit_color   = "grey" if settled else "tab:green"
@@ -117,16 +117,19 @@ def plot_line(line_df, line_id, results):
                 label="decay fit" if not settled else "flat fit")
 
         # Weighted mean (always computed, shown as reference for settled stations)
-        w_plot     = 1.0 / se**2
-        g_wmean_p  = (w_plot * grav).sum() / w_plot.sum()
+        w_plot      = 1.0 / se**2
+        g_wmean_p   = (w_plot * grav).sum() / w_plot.sum()
+        se_wmean_p  = 1.0 / np.sqrt(w_plot.sum())
 
-        # Asymptote: always show g_inf from fit as dashed line
+        # Asymptote line + uncertainty band
         ax.axhline(g_inf, color=fit_color, linewidth=0.9,
                    linestyle="--", alpha=0.8, label="$g_\\infty$ (fit)")
-        # For settled stations also overlay the weighted mean
         if settled:
+            # Settled: show weighted mean with its uncertainty band
             ax.axhline(g_wmean_p, color="darkorange", linewidth=0.9,
                        linestyle=":", alpha=0.9, label="weighted mean")
+            ax.axhspan(g_wmean_p - se_wmean_p, g_wmean_p + se_wmean_p,
+                       color="darkorange", alpha=0.15, zorder=1)
 
         # Title and CSV use weighted mean for settled, g_inf for settling
         display_g = g_wmean_p if settled else g_inf
@@ -146,23 +149,28 @@ def plot_line(line_df, line_id, results):
 
     # Figure-level legend placed inside the figure at the bottom
     from matplotlib.lines import Line2D
+    import matplotlib.patches as mpatches
     legend_elements = [
         Line2D([0], [0], marker="o", color="steelblue", linestyle="None",
                markersize=4, label="Readings +/- SE"),
         Line2D([0], [0], color="tab:green", linewidth=1.2,
                label="Decay fit (settling)"),
         Line2D([0], [0], color="tab:green", linewidth=0.9, linestyle="--",
-               label="$g_\\infty$ asymptote"),
+               label="$g_\\infty$ (settling)"),
+        mpatches.Patch(color="tab:green", alpha=0.25,
+               label="+/- SE($g_\\infty$) (settling)"),
         Line2D([0], [0], color="grey", linewidth=1.2,
                label="Flat fit (settled)"),
         Line2D([0], [0], color="grey", linewidth=0.9, linestyle="--",
                label="$g_\\infty$ (settled)"),
         Line2D([0], [0], color="darkorange", linewidth=0.9, linestyle=":",
                label="Weighted mean (settled)"),
+        mpatches.Patch(color="darkorange", alpha=0.3,
+               label="+/- SE(mean) (settled)"),
     ]
-    plt.tight_layout(rect=[0, 0.06, 1, 0.97], h_pad=2.5, w_pad=1.0)
+    plt.tight_layout(rect=[0, 0.07, 1, 0.97], h_pad=2.5, w_pad=1.0)
     fig.legend(handles=legend_elements, loc="lower center",
-               ncol=6, fontsize=7, frameon=True,
+               ncol=4, fontsize=7, frameon=True,
                bbox_to_anchor=(0.5, 0.02), bbox_transform=fig.transFigure)
     return fig
 
