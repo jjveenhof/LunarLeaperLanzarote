@@ -176,8 +176,8 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     if base_obs.empty:
         return None
 
-    g_base  = res["m_star"][0]               # loc_id=0 is always first
-    se_base = float(np.sqrt(res["C_m"][0, 0]))
+    g_base  = 0.0    # base station is the datum (g_base = 0 by definition)
+    se_base = 0.0
 
     # Absolute time in hours from first measurement of the line
     t0  = obs["datetime"].min() if "datetime" in obs.columns else None
@@ -237,7 +237,7 @@ def plot_base_timeline(line_id, res, lsq_df, config_name):
     ax.legend(handles=symbol_patches + loop_patches, fontsize=8, ncol=3)
 
     ax.set_xlabel("Time since first measurement (hours)")
-    ax.set_ylabel("Gravity (mGal)")
+    ax.set_ylabel("Gravity anomaly (mGal)")
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.4f"))
     ax.grid(True, alpha=0.25, linestyle="--")
 

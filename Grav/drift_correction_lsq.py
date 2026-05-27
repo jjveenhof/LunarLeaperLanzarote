@@ -4,10 +4,10 @@ Least-squares network adjustment for gravimetry drift correction.
 Model (supervisor's notes):
     u_i = g_k(i)  +  d_j(i) * (t_i - t0_j)  +  s_j(i)  +  n_i
 
-Unknowns  m = [g_1,...,g_K,  d_1,...,d_J,  s_2,...,s_J]
-    g_k : gravity at physical location k          (K unknowns)
-    d_j : linear drift rate for loop j            (J unknowns, mGal/min)
-    s_j : static offset for loop j                (J-1 unknowns, s_1=0 datum)
+Unknowns  m = [g_1,...,g_{K-1},  d_1,...,d_J,  s_1,...,s_J]
+    g_k : gravity anomaly at location k rel. to base  (K-1 unknowns, g_base=0 datum)
+    d_j : linear drift rate for loop j                (J unknowns, mGal/min)
+    s_j : static offset for loop j                    (J unknowns, all loops free)
 
 Weighted solution:
     m* = (G^T P^{-1} G)^{-1} G^T P^{-1} u
@@ -29,7 +29,7 @@ Output
 Usage
 -----
     python drift_correction_lsq.py drop5      # specific config
-    python drift_correction_lsq.py            # defaults to drop5
+    python drift_correction_lsq.py            # defaults to decay
 """
 
 import sys
@@ -162,29 +162,34 @@ def build_G(obs, loops, locs, loop_map, loc_map):
     """
     Build the design matrix G and return it together with row and column labels.
 
-    Columns: [g_loc0, ..., g_locK-1,  d_loop1, ..., d_loopJ,  s_loop2, ..., s_loopJ]
+    Datum: g_base = 0 (loc_id=0 fixed, not an unknown).
+    All other g_k are gravity anomalies relative to the base station.
+
+    Columns: [g_loc1, ..., g_loc{K-1},  d_loop1, ..., d_loopJ,  s_loop1, ..., s_loopJ]
     Rows:    one per observation in obs (already reset_index'd).
     """
-    J     = len(loops)
-    K     = len(locs)
-    N     = len(obs)
-    n_unk = K + J + (J - 1)
+    J      = len(loops)
+    locs_free = [l for l in locs if l != 0]   # base excluded from unknowns
+    K_free = len(locs_free)
+    loc_map_free = {l: i for i, l in enumerate(locs_free)}
+    N      = len(obs)
+    n_unk  = K_free + J + J               # same total as before: (K-1) + J + J = K+2J-1
 
     G = np.zeros((N, n_unk))
 
     for i, row in obs.iterrows():
         j  = loop_map[row["loop_id"]]
-        k  = loc_map[row["loc_id"]]
         dt = row["t_line_min"] - row["t0_min"]
-        G[i, k]       = 1.0        # g_k
-        G[i, K + j]   = dt         # d_j  (mGal/min)
-        if j > 0:                   # s_j, s_1=0 fixed
-            G[i, K + J + (j - 1)] = 1.0
+        if row["loc_id"] != 0:             # base is fixed to 0, no g column
+            k = loc_map_free[row["loc_id"]]
+            G[i, k] = 1.0                  # g_k (anomaly)
+        G[i, K_free + j]     = dt          # d_j  (mGal/min)
+        G[i, K_free + J + j] = 1.0        # s_j  (all loops free)
 
     col_labels = (
-        [f"g_loc{int(l)}" + (" (base)" if l == 0 else "") for l in locs] +
+        [f"g_loc{int(l)}" for l in locs_free] +
         [f"d_loop{l}" for l in loops] +
-        [f"s_loop{l}" for l in loops[1:]]
+        [f"s_loop{l}" for l in loops]
     )
     row_labels = [
         f"S{int(r['Station'])} {r['StationType'][0].upper()} L{int(r['loop_id'])}"
@@ -210,10 +215,12 @@ def solve_line(group):
     loop_map = {l: i for i, l in enumerate(loops)}
     loc_map  = {l: i for i, l in enumerate(locs)}
 
-    J     = len(loops)
-    K     = len(locs)
-    N     = len(obs)
-    n_unk = K + J + (J - 1)
+    J      = len(loops)
+    locs_free = [l for l in locs if l != 0]
+    K_free = len(locs_free)
+    loc_map_free = {l: i for i, l in enumerate(locs_free)}
+    N      = len(obs)
+    n_unk  = K_free + J + J
 
     G, _, _ = build_G(obs, loops, locs, loop_map, loc_map)
     u_vec   = obs["Grav_est"].values
@@ -240,15 +247,21 @@ def solve_line(group):
     C_m        = sigma_0_sq * N_inv
     se_m       = np.sqrt(np.diag(C_m))
 
-    g_vals = m_star[:K];               se_g  = se_m[:K]
-    d_vals = m_star[K:K+J];            se_d  = se_m[K:K+J]
-    s_vals = np.concatenate([[0.0], m_star[K+J:]])   # prepend s_1=0
-    se_s   = np.concatenate([[0.0], se_m[K+J:]])
+    g_vals = m_star[:K_free];          se_g  = se_m[:K_free]
+    d_vals = m_star[K_free:K_free+J];  se_d  = se_m[K_free:K_free+J]
+    s_vals = m_star[K_free+J:];        se_s  = se_m[K_free+J:]
 
-    # Results per station
+    # Results per station; base station (loc_id=0) gets anomaly=0 by datum definition
     result_rows = []
     for i, row in obs.iterrows():
-        k = loc_map[row["loc_id"]]
+        loc_id = int(row["loc_id"])
+        if loc_id == 0:
+            g_lsq  = 0.0
+            se_lsq = 0.0
+        else:
+            k      = loc_map_free[loc_id]
+            g_lsq  = g_vals[k]
+            se_lsq = se_g[k]
         result_rows.append({
             "Line":        int(row["Line"]),
             "Station":     int(row["Station"]),
@@ -257,11 +270,11 @@ def solve_line(group):
             "Elevation":   row["Elevation"],
             "HorizErr":    row["HorizErr"],
             "VertErr":     row["VertErr"],
-            "Grav_est":  row["Grav_est"],
-            "SE_est":    row["SE_est"],
-            "Grav_lsq":    g_vals[k],
-            "SE_lsq":      se_g[k],
-            "loc_id":      int(row["loc_id"]),
+            "Grav_est":    row["Grav_est"],
+            "SE_est":      row["SE_est"],
+            "Grav_lsq":    g_lsq,
+            "SE_lsq":      se_lsq,
+            "loc_id":      loc_id,
             "loop_id":     int(row["loop_id"]),
             "residual":    residuals[i],
             "Date":        row["Date"],
@@ -274,12 +287,12 @@ def solve_line(group):
     loop_rows = []
     for j, loop_id in enumerate(loops):
         loop_rows.append({
-            "Line":            int(obs["Line"].iloc[0]),
-            "loop_id":         loop_id,
-            "drift_mGal_h":    d_vals[j] * 60,
-            "SE_drift_mGal_h": se_d[j] * 60,
-            "offset_microGal":     s_vals[j] * 1000,
-            "SE_offset_microGal":  se_s[j] * 1000,
+            "Line":               int(obs["Line"].iloc[0]),
+            "loop_id":            loop_id,
+            "drift_mGal_h":       d_vals[j] * 60,
+            "SE_drift_mGal_h":    se_d[j] * 60,
+            "offset_microGal":    s_vals[j] * 1000,
+            "SE_offset_microGal": se_s[j] * 1000,
         })
 
     return pd.DataFrame(result_rows), pd.DataFrame(loop_rows), float(np.sqrt(sigma_0_sq))
@@ -356,6 +369,6 @@ def main(config_name="decay"):
 
 
 if __name__ == "__main__":
-    config = sys.argv[1] if len(sys.argv) > 1 else "drop5"
+    config = sys.argv[1] if len(sys.argv) > 1 else "decay"
     main(config)
 

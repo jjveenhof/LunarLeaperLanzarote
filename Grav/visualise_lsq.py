@@ -118,7 +118,7 @@ def plot_line(ax, line_df, line_id):
 
     ax.set_title(f"Line {line_id}", fontsize=11, fontweight="bold")
     ax.set_xlabel("Distance along profile (m)")
-    ax.set_ylabel("Gravity (mGal)")
+    ax.set_ylabel("Gravity anomaly (mGal)")
     ax.grid(True, alpha=0.25, linestyle="--")
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
 
@@ -130,7 +130,7 @@ def plot_line(ax, line_df, line_id):
     symbol_handles = [
         mlines.Line2D([], [], marker="o", color="black", linestyle="None",
                       markersize=6, label="g_k +/- SE_lsq  (location estimate)"),
-        mlines.Line2D([], [], marker="+", color="steelblue", linestyle="None",
+        mlines.Line2D([], [], marker="x", color="steelblue", linestyle="None",
                       markersize=8, markeredgewidth=1.8,
                       label="Individual drift-corrected meas."),
     ]
