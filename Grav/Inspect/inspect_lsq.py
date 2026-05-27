@@ -29,12 +29,12 @@ import matplotlib.ticker as mticker
 import matplotlib.colors as mcolors
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Grav"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from drift_correction_lsq import (
     assign_loops, assign_locations, build_G, PROC_DIR
 )
 
-BASE    = Path(__file__).resolve().parents[2]
+BASE    = Path(__file__).resolve().parents[3]
 SAVE_DIR = BASE / "Analysis/Grav"
 LOOP_CMAP = plt.cm.tab10
 

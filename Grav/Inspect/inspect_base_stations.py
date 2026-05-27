@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[2]
+BASE     = Path(__file__).resolve().parents[3]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
 SAVE_DIR = BASE / "Analysis/Grav"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)

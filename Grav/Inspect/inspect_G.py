@@ -5,10 +5,10 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Grav"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from drift_correction_lsq import assign_loops, assign_locations, build_G
 
-BASE = Path(__file__).resolve().parents[2]
+BASE = Path(__file__).resolve().parents[3]
 df   = pd.read_csv(BASE / "Data/Gravimetry/Processed/station_means_drop5.csv",
                    dtype={"Time_first": str, "Date": str})
 df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time_first"],

@@ -19,10 +19,10 @@ import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Grav"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from station_decay import fit_station, decay_model, SIGNIFICANCE_THRESHOLD, FILT_FILE
 
-BASE     = Path(__file__).resolve().parents[2]
+BASE     = Path(__file__).resolve().parents[3]
 SAVE_DIR = BASE / "Analysis/Grav"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
