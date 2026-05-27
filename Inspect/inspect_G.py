@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Grav"))
 from drift_correction_lsq import assign_loops, assign_locations, build_G
 
 BASE = Path(__file__).resolve().parents[2]

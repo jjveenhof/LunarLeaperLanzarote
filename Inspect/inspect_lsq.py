@@ -29,7 +29,7 @@ import matplotlib.ticker as mticker
 import matplotlib.colors as mcolors
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "Grav"))
 from drift_correction_lsq import (
     assign_loops, assign_locations, build_G, PROC_DIR
 )
