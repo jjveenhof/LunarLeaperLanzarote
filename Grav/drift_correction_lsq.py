@@ -94,6 +94,7 @@ def assign_loops(group):
     if extra_rows:
         group = pd.concat([group, pd.DataFrame(extra_rows)],
                           ignore_index=True)
+        group = group.sort_values(["datetime", "loop_id"]).reset_index(drop=True)
 
     return group
 

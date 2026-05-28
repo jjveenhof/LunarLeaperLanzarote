@@ -29,6 +29,7 @@ for line_id, df_line in df.groupby("Line"):
     G, col_labels, row_labels = build_G(obs, loops, locs, loop_map, loc_map)
 
     J, K, N, n_unk = len(loops), len(locs), len(obs), G.shape[1]
+    K_free = K - 1  # base excluded from g_k unknowns (anomaly datum)
 
     fig, ax = plt.subplots(figsize=(max(10, n_unk * 0.6), max(8, N * 0.38)))
 
@@ -45,8 +46,8 @@ for line_id, df_line in df.groupby("Line"):
                         color="white" if abs(v) > 0.5 * vmax else "black")
 
     # Vertical separators between g / d / s blocks
-    ax.axvline(K - 0.5,     color="k", linewidth=1.5)
-    ax.axvline(K + J - 0.5, color="k", linewidth=1.5)
+    ax.axvline(K_free - 0.5,        color="k", linewidth=1.5)
+    ax.axvline(K_free + J - 0.5,    color="k", linewidth=1.5)
 
     ax.set_xticks(range(n_unk))
     ax.set_xticklabels(col_labels, rotation=45, ha="right", fontsize=8)
@@ -54,15 +55,15 @@ for line_id, df_line in df.groupby("Line"):
     ax.set_yticklabels(row_labels, fontsize=8)
 
     # Block labels above
-    ax.text((K - 1) / 2,        -1.2, "g_k  (locations)", ha="center", fontsize=9, style="italic")
-    ax.text(K + (J - 1) / 2,    -1.2, "d_j  (drift)",     ha="center", fontsize=9, style="italic")
+    ax.text((K_free - 1) / 2,              -1.2, "g_k  (locations)", ha="center", fontsize=9, style="italic")
+    ax.text(K_free + (J - 1) / 2,          -1.2, "d_j  (drift)",     ha="center", fontsize=9, style="italic")
     if J > 1:
-        ax.text(K + J + (J - 2) / 2, -1.2, "s_j  (offset)", ha="center", fontsize=9, style="italic")
+        ax.text(K_free + J + (J - 2) / 2,  -1.2, "s_j  (offset)",    ha="center", fontsize=9, style="italic")
 
     plt.colorbar(im, ax=ax, fraction=0.02, label="Entry value")
     ax.set_title(
         f"Design matrix G  --  Line {line_id}   "
-        f"(K={K} locs, J={J} loops, N={N} obs, dof={N - n_unk})",
+        f"(K={K} locs [{K_free} free], J={J} loops, N={N} obs, dof={N - n_unk})",
         fontsize=11
     )
     plt.tight_layout()
