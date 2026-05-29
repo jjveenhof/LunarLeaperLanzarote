@@ -44,13 +44,14 @@ PROC_DIR   = HERE / '../../Data/GPR/Processed'
 # ------------------------------------------------------------------------------
 
 
-def apply_processing(data, info, params):
+def apply_processing(data, time_axis, info, params):
     """
     Apply the processing chain to a raw data array.
     Mirrors the apply_processing() function in GPRProcessing.ipynb exactly.
     """
     from gdp.preprocessing.filtering import dewow as dewow_fn, filter_data
     from gdp.preprocessing.gain import apply_gain as apply_gain_fn
+    from gdp.preprocessing.normalizing import normalize_data
 
     n_samples   = info['samples']
     time_window = info['Total_time_window']
@@ -58,12 +59,30 @@ def apply_processing(data, info, params):
 
     processed = data.copy()
 
+    n_orig        = processed.shape[0]
+    time_axis_out = time_axis.copy()
+
+    if params.get('normalize', False):
+        norm_window = params.get('norm_window', None)
+        win = (0, int(norm_window)) if norm_window and int(norm_window) < n_orig else (0, n_orig)
+        processed = normalize_data(processed, typ='tracewise-rms', window=win)
+
     processed = dewow_fn(processed, window_length=params['dewow_window'])
 
     tzero = params['tzero_shift']
     if tzero != 0:
         processed = ndshift(processed, (tzero, 0), order=1,
                             mode='constant', cval=0)
+        trim = max(0, -int(tzero))
+        if trim > 0:
+            processed = processed[:n_orig - trim, :]
+            time_axis_out = time_axis_out[:n_orig - trim]
+
+    max_time_ns = params.get('max_time_ns', None)
+    if max_time_ns and max_time_ns > 0:
+        mask          = time_axis_out <= max_time_ns
+        processed     = processed[mask, :]
+        time_axis_out = time_axis_out[mask]
 
     try:
         processed = filter_data(
@@ -80,7 +99,7 @@ def apply_processing(data, info, params):
     except Exception as e:
         print('    WARNING: gain failed: {}'.format(e))
 
-    return processed
+    return processed, time_axis_out
 
 
 def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
@@ -117,11 +136,11 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
           'gain={gain_exponent:.1f}  v={velocity_mns:.3f} m/ns'.format(**params))
 
     # --- step 1: processing ---
-    processed = apply_processing(data, info, params)
+    processed, time_axis_out = apply_processing(data, time_axis, info, params)
 
     PROC_DIR.mkdir(parents=True, exist_ok=True)
     out_proc = PROC_DIR / (stem + '_processed.npz')
-    np.savez(str(out_proc), data=processed, dist_axis=dist_axis, time_axis=time_axis)
+    np.savez(str(out_proc), data=processed, dist_axis=dist_axis, time_axis=time_axis_out)
     print('    saved processed: {}'.format(out_proc.name))
 
     # --- step 2: topo correction ---
