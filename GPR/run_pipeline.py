@@ -84,6 +84,24 @@ def apply_processing(data, time_axis, info, params):
         processed     = processed[mask, :]
         time_axis_out = time_axis_out[mask]
 
+    n_svd  = params.get('n_svd', 0)
+    whiten = params.get('whiten', False)
+
+    if n_svd > 0 and whiten:
+        print('    WARNING: both SVD removal and spectral whitening are active -- usually only one is needed.')
+
+    if whiten:
+        try:
+            n_samp   = processed.shape[0]
+            whitened = np.zeros_like(processed)
+            for i in range(processed.shape[1]):
+                spec = np.fft.rfft(processed[:, i])
+                whitened[:, i] = np.fft.irfft(
+                    spec / np.maximum(np.abs(spec), 1e-10), n=n_samp)
+            processed = whitened
+        except Exception as e:
+            print('    WARNING: spectral whitening failed: {}'.format(e))
+
     try:
         processed = filter_data(
             processed,
@@ -92,6 +110,13 @@ def apply_processing(data, time_axis, info, params):
         )
     except Exception as e:
         print('    WARNING: bandpass failed: {}'.format(e))
+
+    if n_svd > 0:
+        from gdp.preprocessing.image_processing import remove_svd
+        try:
+            processed, _ = remove_svd(processed, low_s=0, high_s=int(n_svd))
+        except Exception as e:
+            print('    WARNING: SVD removal failed: {}'.format(e))
 
     try:
         processed, _ = apply_gain_fn(processed, sfreq, 'linear',
