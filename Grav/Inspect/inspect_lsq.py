@@ -27,6 +27,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import matplotlib.colors as mcolors
+import matplotlib.patches as mpatches
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -69,8 +70,8 @@ def solve_with_cov(group):
 
     residuals    = u_vec - G @ m_star
     dof          = len(obs) - G.shape[1]
-    sigma_0_sq   = float((residuals @ W @ residuals) / dof) if dof > 0 else 1.0
-    C_m          = sigma_0_sq * N_inv
+    chi2_red     = float((residuals @ W @ residuals) / dof) if dof > 0 else 1.0
+    C_m          = chi2_red * N_inv
     norm_resid   = residuals / sigma          # r_i / SE_est_i
 
     # Correlation matrix
@@ -82,7 +83,7 @@ def solve_with_cov(group):
         "obs": obs, "G": G, "m_star": m_star,
         "C_m": C_m, "corr_m": corr_m,
         "residuals": residuals, "norm_resid": norm_resid,
-        "sigma_0": float(np.sqrt(sigma_0_sq)), "dof": dof,
+        "chi2_red": chi2_red, "dof": dof,
         "loops": loops, "locs": locs, "loop_map": loop_map, "loc_map": loc_map,
         "K": K, "J": J, "col_labels": col_labels, "row_labels": row_labels,
     }
@@ -94,11 +95,13 @@ def plot_stats(line_id, res, config_name):
     obs        = res["obs"]
     corr_m     = res["corr_m"]
     norm_resid = res["norm_resid"]
-    K, J       = res["K"], res["J"]
+    J          = res["J"]
+    locs_free  = [l for l in res["locs"] if l != 0]
+    K_free     = len(locs_free)
 
     fig = plt.figure(figsize=(22, 5.5))
     fig.suptitle(f"LSQ statistics -- Line {line_id}  [{config_name}]   "
-                 f"$\\sigma_0$ = {res['sigma_0']:.3f}  (dof = {res['dof']})",
+                 f"$\\chi^2_{{red}}$ = {res['chi2_red']:.3f}  (dof = {res['dof']})",
                  fontsize=12, fontweight="bold")
 
     gs = fig.add_gridspec(1, 3, wspace=0.35, width_ratios=[1, 1, 1])
@@ -107,60 +110,62 @@ def plot_stats(line_id, res, config_name):
     ax_corr = fig.add_subplot(gs[0, 2])
 
     # -- SE_lsq per location ---------------------------------------------------
-    se_g = np.sqrt(np.diag(res["C_m"]))[:K] * 1000   # microGal
-    locs = res["locs"]
-    # Annotate base and tie locations
+    se_g = np.sqrt(np.diag(res["C_m"]))[:K_free] * 1000   # microGal
     obs       = res["obs"]
     loc_sizes = obs.groupby("loc_id")["loc_id"].transform("count")
     tie_locs  = set(obs[loc_sizes > 1]["loc_id"].unique()) - {0}
 
-    loc_labels = [
-        f"loc{int(l)}" + (" (base)" if l == 0 else " (tie)" if l in tie_locs else "")
-        for l in locs
-    ]
-    colors = ["dimgrey" if l == 0 else "steelblue" for l in locs]
-    ax_se.bar(range(K), se_g, color=colors)
-    ax_se.set_xticks(range(K))
+    loc_labels = [f"P{int(l)}" for l in locs_free]
+    colors = ["darkorange" if l in tie_locs else "steelblue" for l in locs_free]
+    ax_se.bar(range(K_free), se_g, color=colors)
+    ax_se.set_xticks(range(K_free))
     ax_se.set_xticklabels(loc_labels, rotation=45, ha="right", fontsize=7)
     ax_se.set_ylabel(r"SE$_\mathrm{lsq}$ ($\mu$Gal)")
     ax_se.set_title("Formal uncertainty per location")
     ax_se.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.1f"))
+    ax_se.legend(handles=[
+        mpatches.Patch(color="steelblue",  label="Regular"),
+        mpatches.Patch(color="darkorange", label="Tie"),
+    ], fontsize=7)
 
-    # -- Normalised residuals -- co-located stations only -----------------------
-    # Unique-location stations always have residual ~= 0 by construction (the LS
-    # fits them exactly), so only co-located stations carry meaningful residuals.
-    obs = res["obs"]
-    loc_counts = obs.groupby("loc_id")["loc_id"].transform("count")
-    coloc_mask = loc_counts > 1
-    nr_coloc   = norm_resid[coloc_mask.values]
-    nr_all     = norm_resid
-
-    ax_hist.hist(nr_coloc, bins=12, color="steelblue", edgecolor="white",
-                 alpha=0.8, density=True, label=f"Co-located (n={coloc_mask.sum()})")
-    ax_hist.hist(nr_all,   bins=12, color="lightgrey", edgecolor="white",
-                 alpha=0.4, density=True, label=f"All (n={len(nr_all)})")
+    # -- Normalised residuals ---------------------------------------------------
+    ax_hist.hist(norm_resid, bins=12, color="steelblue", edgecolor="white",
+                 alpha=0.85, density=True, label=f"n = {len(norm_resid)}")
     ax_hist.axvline(0, color="k", linewidth=0.8, linestyle="--")
     ax_hist.set_xlabel("r_i / SE_est_i")
     ax_hist.set_ylabel("Density")
-    ax_hist.set_title("Normalised residuals\n(co-located stations = filled; all = grey)")
+    ax_hist.set_title("Normalised residuals")
     ax_hist.legend(fontsize=7)
 
     # -- Correlation matrix ----------------------------------------------------
     n_unk = corr_m.shape[0]
     im = ax_corr.imshow(corr_m, cmap="RdBu_r", vmin=-1, vmax=1,
                         aspect="equal", interpolation="none")
-    ax_corr.axvline(K - 0.5, color="k", linewidth=1.2)
-    ax_corr.axvline(K + J - 0.5, color="k", linewidth=1.2)
-    ax_corr.axhline(K - 0.5, color="k", linewidth=1.2)
-    ax_corr.axhline(K + J - 0.5, color="k", linewidth=1.2)
+
+    # Main block separators (thick black)
+    for pos in [K_free - 0.5, K_free + J - 0.5]:
+        ax_corr.axvline(pos, color="k", linewidth=1.5)
+        ax_corr.axhline(pos, color="k", linewidth=1.5)
+
+    # Dashed lines through tie station columns/rows — skip if all are tie stations
+    if tie_locs != set(locs_free):
+        for col_idx, l in enumerate(locs_free):
+            if l in tie_locs:
+                ax_corr.axvline(col_idx, color="grey", linewidth=0.8, linestyle="--", zorder=3)
+                ax_corr.axhline(col_idx, color="grey", linewidth=0.8, linestyle="--", zorder=3)
+
     labels = res["col_labels"]
     ax_corr.set_xticks(range(n_unk))
     ax_corr.set_xticklabels(labels, rotation=45, ha="right", fontsize=7)
     ax_corr.set_yticks(range(n_unk))
     ax_corr.set_yticklabels(labels, fontsize=7)
-    ax_corr.set_title("Correlation matrix of all unknowns  "
-                      "(g_k | d_j | s_j,  separated by black lines)")
-    plt.colorbar(im, ax=ax_corr, fraction=0.015, label="Correlation")
+    ax_corr.set_title("Correlation matrix", fontsize=9)
+    cbar = plt.colorbar(im, ax=ax_corr, fraction=0.015, label="Correlation")
+    cbar.ax.legend(handles=[
+        plt.Line2D([0], [0], color="k",    linewidth=1.5, label="g$_k$ | d$_j$ | s$_j$"),
+        plt.Line2D([0], [0], color="grey", linewidth=0.8, linestyle="--", label="Tie station"),
+    ], fontsize=6, loc="upper left",
+       bbox_to_anchor=(-1.0, 1.5), framealpha=0.8)
 
     return fig
 
@@ -272,7 +277,7 @@ def main(config_name=None):
             print("  LS failed, skipping.")
             continue
 
-        print(f"  sigma0 = {res['sigma_0']:.4f}  (dof = {res['dof']})")
+        print(f"  chi2_red = {res['chi2_red']:.4f}  (dof = {res['dof']})")
 
         # Figure 1: stats sheet
         fig1 = plot_stats(line_id, res, config_name)

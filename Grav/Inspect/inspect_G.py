@@ -31,18 +31,24 @@ for line_id, df_line in df.groupby("Line"):
     J, K, N, n_unk = len(loops), len(locs), len(obs), G.shape[1]
     K_free = K - 1  # base excluded from g_k unknowns (anomaly datum)
 
-    fig, ax = plt.subplots(figsize=(max(10, n_unk * 0.6), max(8, N * 0.38)))
+    w = min(n_unk * 0.38, 20)
+    h = min(N * 0.28, 16)
+    fig, ax = plt.subplots(figsize=(max(8, w), max(5, h)))
 
     vmax = max(abs(G).max(), 1.0)
     im   = ax.imshow(G, aspect="auto", cmap="RdBu_r",
                      vmin=-vmax, vmax=vmax, interpolation="none")
+
+    cell_w = fig.get_figwidth()  / (n_unk + 2)   # inches per column
+    cell_h = fig.get_figheight() / (N + 2)        # inches per row
+    fsize  = max(5.0, min(9.0, min(cell_w, cell_h) * 72 * 0.45))
 
     for r in range(N):
         for c in range(n_unk):
             v = G[r, c]
             if abs(v) > 1e-10:
                 ax.text(c, r, f"{v:.1f}", ha="center", va="center",
-                        fontsize=6.5,
+                        fontsize=fsize,
                         color="white" if abs(v) > 0.5 * vmax else "black")
 
     # Vertical separators between g / d / s blocks
@@ -55,16 +61,16 @@ for line_id, df_line in df.groupby("Line"):
     ax.set_yticklabels(row_labels, fontsize=8)
 
     # Block labels above
-    ax.text((K_free - 1) / 2,              -1.2, "g_k  (locations)", ha="center", fontsize=9, style="italic")
-    ax.text(K_free + (J - 1) / 2,          -1.2, "d_j  (drift)",     ha="center", fontsize=9, style="italic")
+    ax.text((K_free - 1) / 2,              -0.8, "g_k  (locations)", ha="center", fontsize=9, style="italic")
+    ax.text(K_free + (J - 1) / 2,          -0.8, "d_j  (drift)",     ha="center", fontsize=9, style="italic")
     if J > 1:
-        ax.text(K_free + J + (J - 2) / 2,  -1.2, "s_j  (offset)",    ha="center", fontsize=9, style="italic")
+        ax.text(K_free + J + (J - 1) / 2,  -0.8, "s_j  (offset)",    ha="center", fontsize=9, style="italic")
 
     plt.colorbar(im, ax=ax, fraction=0.02, label="Entry value")
     ax.set_title(
         f"Design matrix G  --  Line {line_id}   "
         f"(K={K} locs [{K_free} free], J={J} loops, N={N} obs, dof={N - n_unk})",
-        fontsize=11
+        fontsize=11, pad=20
     )
     plt.tight_layout()
     save_dir = BASE / "Analysis/Grav"

@@ -11,8 +11,8 @@ Unknowns  m = [g_1,...,g_{K-1},  d_1,...,d_J,  s_1,...,s_J]
 
 Weighted solution:
     m* = (G^T P^{-1} G)^{-1} G^T P^{-1} u
-    C_m = sigma_0^2 * (G^T P^{-1} G)^{-1}
-    sigma_0^2 = r^T P^{-1} r / (N - K - 2J + 1)
+    C_m = chi2_red * (G^T P^{-1} G)^{-1}
+    chi2_red = r^T P^{-1} r / (N - K - 2J + 1)   # reduced chi-squared
 
 Physical location grouping:
     - All base stations on a line share one location (the datum).
@@ -166,7 +166,7 @@ def build_G(obs, loops, locs, loop_map, loc_map):
     Datum: g_base = 0 (loc_id=0 fixed, not an unknown).
     All other g_k are gravity anomalies relative to the base station.
 
-    Columns: [g_loc1, ..., g_loc{K-1},  d_loop1, ..., d_loopJ,  s_loop1, ..., s_loopJ]
+    Columns: [g_P1, ..., g_P{K-1},  d_loop1, ..., d_loopJ,  s_loop1, ..., s_loopJ]
     Rows:    one per observation in obs (already reset_index'd).
     """
     J      = len(loops)
@@ -188,7 +188,7 @@ def build_G(obs, loops, locs, loop_map, loc_map):
         G[i, K_free + J + j] = 1.0        # s_j  (all loops free)
 
     col_labels = (
-        [f"g_loc{int(l)}" for l in locs_free] +
+        [f"g_P{int(l)}" for l in locs_free] +
         [f"d_loop{l}" for l in loops] +
         [f"s_loop{l}" for l in loops]
     )
@@ -203,7 +203,7 @@ def build_G(obs, loops, locs, loop_map, loc_map):
 def solve_line(group):
     """
     Build and solve the weighted LS system for one line.
-    Returns (result_df, loop_df, sigma_0) or (None, None, None) on failure.
+    Returns (result_df, loop_df, chi2_red) or (None, None, None) on failure.
     """
     obs = group[group["loop_id"].notna()].copy().reset_index(drop=True)
     if obs.empty:
@@ -244,9 +244,9 @@ def solve_line(group):
 
     residuals  = u_vec - G @ m_star
     dof        = N - n_unk
-    sigma_0_sq = float((residuals @ W @ residuals) / dof) if dof > 0 else 1.0
-    C_m        = sigma_0_sq * N_inv
-    se_m       = np.sqrt(np.diag(C_m))
+    chi2_red = float((residuals @ W @ residuals) / dof) if dof > 0 else 1.0
+    C_m      = chi2_red * N_inv
+    se_m     = np.sqrt(np.diag(C_m))
 
     g_vals = m_star[:K_free];          se_g  = se_m[:K_free]
     d_vals = m_star[K_free:K_free+J];  se_d  = se_m[K_free:K_free+J]
@@ -296,7 +296,7 @@ def solve_line(group):
             "SE_offset_microGal": se_s[j] * 1000,
         })
 
-    return pd.DataFrame(result_rows), pd.DataFrame(loop_rows), float(np.sqrt(sigma_0_sq))
+    return pd.DataFrame(result_rows), pd.DataFrame(loop_rows), chi2_red
 
 
 # -- Main ----------------------------------------------------------------------
@@ -328,11 +328,11 @@ def main(config_name="decay"):
               f"({'over-determined' if over else 'UNDER-DETERMINED'}, "
               f"need N > {K + 2*J - 1})")
 
-        result_df, loop_df, sigma_0 = solve_line(group)
+        result_df, loop_df, chi2_red = solve_line(group)
         if result_df is None:
             continue
 
-        print(f"  sigma_0 = {sigma_0:.4f}  (dimensionless; 1 = model fits within SE_est)")
+        print(f"  chi2_red = {chi2_red:.4f}  (reduced chi-squared; 1 = model fits within SE_est)")
         print(f"  {'Loop':>4}  {'drift (mGal/h)':>16}  {'offset (microGal)':>14}")
         for _, lr in loop_df.iterrows():
             print(f"  {int(lr['loop_id']):>4}  {lr['drift_mGal_h']:>+16.4f}  "

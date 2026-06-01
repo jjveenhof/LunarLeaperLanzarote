@@ -25,9 +25,9 @@ print(result_locs[["Station", "StationType", "loc_id", "Easting", "Northing"]]
       .to_string(index=False))
 
 
-result_df, loop_df, sigma_0 = solve_line(result_locs)
+result_df, loop_df, chi2_red = solve_line(result_locs)
 
-print(f"sigma_0 = {sigma_0:.5f} mGal\n")
+print(f"chi2_red = {chi2_red:.5f}\n")
 
 print("Loop parameters:")
 print(loop_df.to_string(index=False))

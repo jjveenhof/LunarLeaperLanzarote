@@ -115,10 +115,21 @@ def plot_line(ax, line_df, line_id):
                     markersize=6, capsize=4,
                     linewidth=1.2, elinewidth=1.2,
                     zorder=5)
+        ax.annotate(f"P{int(loc_id)}",
+                    (dist, g_k + se_lsq),
+                    fontsize=6, ha="center", va="bottom",
+                    xytext=(0, 4), textcoords="offset points",
+                    color="black", zorder=7)
 
     ax.set_title(f"Line {line_id}", fontsize=11, fontweight="bold")
     ax.set_xlabel("Distance along profile (m)")
     ax.set_ylabel("Gravity anomaly (mGal)")
+
+    if line_id in {2, 3, 5}:
+        ax.text(0.01, 0.97, "S", transform=ax.transAxes,
+                fontsize=11, fontweight="bold", va="top", ha="left")
+        ax.text(0.99, 0.97, "N", transform=ax.transAxes,
+                fontsize=11, fontweight="bold", va="top", ha="right")
     ax.grid(True, alpha=0.25, linestyle="--")
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
 
@@ -129,7 +140,7 @@ def plot_line(ax, line_df, line_id):
     ]
     symbol_handles = [
         mlines.Line2D([], [], marker="o", color="black", linestyle="None",
-                      markersize=6, label="g_k +/- SE_lsq  (location estimate)"),
+                      markersize=6, label="g_k +/- SE_lsq"),
         mlines.Line2D([], [], marker="x", color="steelblue", linestyle="None",
                       markersize=8, markeredgewidth=1.8,
                       label="Individual drift-corrected meas."),
