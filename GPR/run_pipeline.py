@@ -32,9 +32,9 @@ matplotlib.use('Agg')
 from pathlib import Path
 from scipy.ndimage import shift as ndshift
 
-# Import topo_correction functions directly
 sys.path.insert(0, str(Path(__file__).parent))
 import topo_correction as tc
+from gpr_processing import apply_processing as _core_processing
 
 # ---- PATHS -------------------------------------------------------------------
 HERE       = Path(__file__).parent
@@ -45,86 +45,11 @@ PROC_DIR   = HERE / '../../Data/GPR/Processed'
 
 
 def apply_processing(data, time_axis, info, params):
-    """
-    Apply the processing chain to a raw data array.
-    Mirrors the apply_processing() function in GPRProcessing.ipynb exactly.
-    """
-    from gdp.preprocessing.filtering import dewow as dewow_fn, filter_data
-    from gdp.preprocessing.gain import apply_gain as apply_gain_fn
-    from gdp.preprocessing.normalizing import normalize_data
-
+    """Thin wrapper — delegates to gpr_processing.apply_processing."""
     n_samples   = info['samples']
     time_window = info['Total_time_window']
     sfreq       = n_samples / time_window * 1000   # MHz
-
-    processed = data.copy()
-
-    n_orig        = processed.shape[0]
-    time_axis_out = time_axis.copy()
-
-    if params.get('normalize', False):
-        norm_window = params.get('norm_window', None)
-        win = (0, int(norm_window)) if norm_window and int(norm_window) < n_orig else (0, n_orig)
-        processed = normalize_data(processed, typ='tracewise-rms', window=win)
-
-    processed = dewow_fn(processed, window_length=params['dewow_window'])
-
-    tzero = params['tzero_shift']
-    if tzero != 0:
-        processed = ndshift(processed, (tzero, 0), order=1,
-                            mode='constant', cval=0)
-        trim = max(0, -int(tzero))
-        if trim > 0:
-            processed = processed[:n_orig - trim, :]
-            time_axis_out = time_axis_out[:n_orig - trim]
-
-    max_time_ns = params.get('max_time_ns', None)
-    if max_time_ns and max_time_ns > 0:
-        mask          = time_axis_out <= max_time_ns
-        processed     = processed[mask, :]
-        time_axis_out = time_axis_out[mask]
-
-    n_svd  = params.get('n_svd', 0)
-    whiten = params.get('whiten', False)
-
-    if n_svd > 0 and whiten:
-        print('    WARNING: both SVD removal and spectral whitening are active -- usually only one is needed.')
-
-    if whiten:
-        try:
-            n_samp   = processed.shape[0]
-            whitened = np.zeros_like(processed)
-            for i in range(processed.shape[1]):
-                spec = np.fft.rfft(processed[:, i])
-                whitened[:, i] = np.fft.irfft(
-                    spec / np.maximum(np.abs(spec), 1e-10), n=n_samp)
-            processed = whitened
-        except Exception as e:
-            print('    WARNING: spectral whitening failed: {}'.format(e))
-
-    try:
-        processed = filter_data(
-            processed,
-            (params['bandpass_low'], params['bandpass_high']),
-            sfreq, 'bandpass', N=4
-        )
-    except Exception as e:
-        print('    WARNING: bandpass failed: {}'.format(e))
-
-    if n_svd > 0:
-        from gdp.preprocessing.image_processing import remove_svd
-        try:
-            processed, _ = remove_svd(processed, low_s=0, high_s=int(n_svd))
-        except Exception as e:
-            print('    WARNING: SVD removal failed: {}'.format(e))
-
-    try:
-        processed, _ = apply_gain_fn(processed, sfreq, 'linear',
-                                     exponent=params['gain_exponent'])
-    except Exception as e:
-        print('    WARNING: gain failed: {}'.format(e))
-
-    return processed, time_axis_out
+    return _core_processing(data, time_axis, sfreq, params)
 
 
 def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
