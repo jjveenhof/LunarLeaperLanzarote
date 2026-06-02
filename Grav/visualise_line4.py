@@ -26,7 +26,7 @@ from pathlib import Path
 
 BASE     = Path(__file__).resolve().parents[2]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
-SAVE_DIR = BASE / "Results/Grav/LSQ"
+SAVE_DIR = BASE / "Results/Grav/LSQ/Lines"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 # -- Configuration (loc_ids) ---------------------------------------------------

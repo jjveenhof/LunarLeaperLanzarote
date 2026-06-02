@@ -307,10 +307,9 @@ def main(config_name="decay"):
 
     print(f"Config: {config_name}")
     print(f"Reading {in_file.name} ...")
-    df = pd.read_csv(in_file, dtype={"Time_first": str, "Date": str})
-    df["datetime"] = pd.to_datetime(
-        df["Date"] + " " + df["Time_first"], format="%Y/%m/%d %H:%M:%S"
-    )
+    df = pd.read_csv(in_file, dtype={"Time_first": str, "Time_mid": str, "Date": str})
+    df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time_mid"],
+                                    format="%Y/%m/%d %H:%M:%S")
     print(f"  {len(df)} stations across Lines {sorted(df['Line'].unique())}")
 
     all_results, all_loops = [], []

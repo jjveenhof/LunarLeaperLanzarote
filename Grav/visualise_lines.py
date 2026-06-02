@@ -152,7 +152,7 @@ def main(filepath=None):
     path = Path(filepath) if filepath else CORR_FILE
     df   = pd.read_csv(path, dtype={"Time_first": str, "Date": str})
     lines   = sorted(df["Line"].unique())
-    fig_dir = BASE / "Results/Grav/First result (non-corrected)"
+    fig_dir = BASE / "Results/Grav/Simple drift correction"
     fig_dir.mkdir(parents=True, exist_ok=True)
     stem = path.stem
 

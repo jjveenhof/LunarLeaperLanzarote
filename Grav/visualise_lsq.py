@@ -3,7 +3,7 @@ Visualise LSQ drift-corrected gravity profiles -- one figure per Line.
 
 Input
 -----
-    Data/Gravimetry/lsq_corrected_{name}.csv   (default: lsq_corrected_drop5.csv)
+    Data/Gravimetry/lsq_corrected_{name}.csv   (default: lsq_corrected_decay.csv)
     Pass a different filename as a command-line argument.
 
 Each subplot shows
@@ -160,7 +160,7 @@ def main(filepath=None):
     print(f"  {df.groupby(['Line','loc_id']).ngroups} unique locations across "
           f"Lines {sorted(df['Line'].unique())}")
 
-    fig_dir = BASE / "Results/Grav/LSQ"
+    fig_dir = BASE / "Results/Grav/LSQ/Lines"
     fig_dir.mkdir(parents=True, exist_ok=True)
     stem = path.stem
 

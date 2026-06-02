@@ -9,14 +9,13 @@ Two rows, one column per line:
              A flat zero line = perfect model; scatter = unmodelled drift.
 """
 
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
 BASE     = Path(__file__).resolve().parents[3]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
-SAVE_DIR = BASE / "Analysis/Grav"
+SAVE_DIR = BASE / "Results/Grav/LSQ/Stats"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 LOOP_CMAP = plt.cm.tab10
@@ -44,11 +43,13 @@ fig, axes = plt.subplots(2, n_lines,
 fig.suptitle("Base station inspection -- all lines", fontsize=13, fontweight="bold")
 
 res_axes = []
+raw_axes = []
 
 for col_idx, line_id in enumerate(lines):
     ax_raw  = axes[0, col_idx]
     ax_res  = axes[1, col_idx]
     res_axes.append(ax_res)
+    raw_axes.append(ax_raw)
 
     # -- Top: g_inf per base station -------------------------------------------
     base_means = means[(means["Line"] == line_id) &
@@ -114,19 +115,23 @@ for col_idx, line_id in enumerate(lines):
             seen[l] = h
     ax_res.legend(seen.values(), seen.keys(), fontsize=7, loc="best")
 
-# Shared y-axis scale for all residual panels
-all_res_vals = []
-for ax in res_axes:
-    for line in ax.get_lines():
-        all_res_vals.extend(line.get_ydata())
-    for coll in ax.collections:
-        offsets = coll.get_offsets()
-        if len(offsets):
-            all_res_vals.extend(offsets[:, 1])
-if all_res_vals:
-    bound = max(abs(v) for v in all_res_vals if np.isfinite(v)) * 1.15
-    for ax in res_axes:
-        ax.set_ylim(-bound, bound)
+def share_ylim(axes, symmetric=False):
+    """Set a common y range across a list of axes using their autoscaled limits."""
+    lo = min(ax.get_ylim()[0] for ax in axes)
+    hi = max(ax.get_ylim()[1] for ax in axes)
+    if symmetric:
+        bound = max(abs(lo), abs(hi))
+        ylim = (-bound, bound)
+        for ax in axes:
+            ax.set_ylim(ylim)
+    else:
+        span = max(ax.get_ylim()[1] - ax.get_ylim()[0] for ax in axes)
+        for ax in axes:
+            mid = sum(ax.get_ylim()) / 2
+            ax.set_ylim(mid - span / 2, mid + span / 2)
+
+share_ylim(raw_axes, symmetric=False)
+share_ylim(res_axes, symmetric=True)
 
 save_path = SAVE_DIR / "base_station_inspection_horiz.png"
 fig.savefig(save_path, dpi=150, bbox_inches="tight")

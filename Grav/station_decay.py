@@ -257,10 +257,18 @@ def main(plot=True):
                    Time_last=("Time", "last"))
               .reset_index())
     means_df = means_df.merge(meta, on=["Line", "Station"], how="left")
+
+    # Compute midpoint time as the representative time of each measurement
+    t_first = pd.to_datetime(means_df["Date"] + " " + means_df["Time_first"],
+                             format="%Y/%m/%d %H:%M:%S")
+    t_last  = pd.to_datetime(means_df["Date"] + " " + means_df["Time_last"],
+                             format="%Y/%m/%d %H:%M:%S")
+    means_df["Time_mid"] = (t_first + (t_last - t_first) / 2).dt.strftime("%H:%M:%S")
+
     means_df = means_df[[
         "Line", "Station", "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
         "Grav_est", "SE_est", "n_readings", "Temp_mean",
-        "Date", "Time_first", "Time_last", "StationType", "Notes",
+        "Date", "Time_first", "Time_mid", "Time_last", "StationType", "Notes",
     ]]
     means_df.to_csv(MEANS_FILE, index=False, float_format="%.6f")
     print(f"Saved -> {MEANS_FILE.name}  (pipeline-compatible)")

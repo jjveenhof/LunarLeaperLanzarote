@@ -17,7 +17,7 @@ Produces two figures per Line:
 
 Usage
 -----
-    python inspect_lsq.py                             # default: drop5
+    python inspect_lsq.py                             # default: decay
     python inspect_lsq.py decay
 """
 
@@ -36,7 +36,7 @@ from drift_correction_lsq import (
 )
 
 BASE    = Path(__file__).resolve().parents[3]
-SAVE_DIR = BASE / "Analysis/Grav"
+SAVE_DIR = BASE / "Results/Grav/LSQ/Stats"
 LOOP_CMAP = plt.cm.tab10
 
 
