@@ -28,22 +28,24 @@ from pathlib import Path
 BASE     = Path(__file__).resolve().parents[2]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
 
-# Switch between LSQ anomaly and Simple Bouguer Anomaly
-USE_BOUGUER = "--bouguer" in sys.argv
-if USE_BOUGUER:
-    IN_FILE   = PROC_DIR / "bouguer_anomaly_decay.csv"
-    G_COL     = "SBA"
-    SE_COL    = "SE_CBA"
-    YLABEL    = "Simple Bouguer Anomaly (mGal)"
-    SAVE_DIR  = BASE / "Results/Grav/Bouguer"
-    FILESTEM  = "line4_combined_SBA"
+# If a rho value is passed (e.g. --rho 2.5), use Bouguer file; otherwise use LSQ
+rho_arg = next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "--rho"), None)
+if rho_arg is not None:
+    rho     = float(rho_arg)
+    rho_str = f"{rho:.1f}".replace(".", "p")
+    IN_FILE  = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv"
+    G_COL    = "SBA"
+    SE_COL   = "SE_CBA"
+    YLABEL   = f"Simple Bouguer Anomaly (mGal)  [rho = {rho} g/cm3]"
+    SAVE_DIR = BASE / "Results/Grav/Bouguer"
+    FILESTEM = f"line4_combined_SBA_rho{rho_str}"
 else:
-    IN_FILE   = PROC_DIR / "lsq_corrected_decay.csv"
-    G_COL     = "Grav_lsq"
-    SE_COL    = "SE_lsq"
-    YLABEL    = "Gravity anomaly (mGal)"
-    SAVE_DIR  = BASE / "Results/Grav/LSQ/Lines"
-    FILESTEM  = "line4_combined"
+    IN_FILE  = PROC_DIR / "lsq_corrected_decay.csv"
+    G_COL    = "Grav_lsq"
+    SE_COL   = "SE_lsq"
+    YLABEL   = "Gravity anomaly (mGal)"
+    SAVE_DIR = BASE / "Results/Grav/LSQ/Lines"
+    FILESTEM = "line4_combined"
 
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 

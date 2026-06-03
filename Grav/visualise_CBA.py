@@ -11,11 +11,13 @@ Each subplot shows
 
 Usage
 -----
-    python visualise_CBA.py
+    python visualise_CBA.py          # default rho = 2.0
+    python visualise_CBA.py 2.5     # rho = 2.5
 """
 
 import sys
 import numpy as np
+
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
@@ -27,7 +29,10 @@ from visualise_lines import along_profile_distance
 
 BASE     = Path(__file__).resolve().parents[2]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
-DEFAULT  = PROC_DIR / "bouguer_anomaly_decay.csv"
+
+rho     = float(sys.argv[1]) if len(sys.argv) > 1 else 2.0
+rho_str = f"{rho:.1f}".replace(".", "p")
+DEFAULT = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv"
 
 INVERT_LINES = {4}
 
@@ -74,7 +79,7 @@ def plot_line(ax, line_df, line_id):
                     xytext=(0, 4), textcoords="offset points",
                     color="black", zorder=6)
 
-    ax.set_title(f"Line {line_id}", fontsize=11, fontweight="bold")
+    ax.set_title(f"Line {line_id}  [rho = {rho} g/cm3]", fontsize=11, fontweight="bold")
     ax.set_xlabel("Distance along profile (m)")
     ax.set_ylabel("Simple Bouguer Anomaly (mGal)")
 
@@ -107,7 +112,7 @@ def main():
         fig, ax = plt.subplots(figsize=(13, 5))
         plot_line(ax, df[df["Line"] == line_id].copy(), line_id)
         fig.tight_layout()
-        save_path = fig_dir / f"SBA_line{line_id}.png"
+        save_path = fig_dir / f"SBA_rho{rho_str}_line{line_id}.png"
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
         print(f"Saved -> {save_path.name}")
 

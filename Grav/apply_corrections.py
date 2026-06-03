@@ -27,9 +27,12 @@ Output
 
 Usage
 -----
-    python apply_corrections.py
+    python apply_corrections.py            # default rho = 2.0 g/cm3
+    python apply_corrections.py 2.5       # rho = 2.5 g/cm3
+    python apply_corrections.py 1.8 2.0 2.5  # run for multiple rho values
 """
 
+import sys
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -51,10 +54,7 @@ FAC_GRAD   = 0.3086       # mGal/m
 # combined         = 4.194e-10 * 1e3 * 1e5      = 0.04194 mGal m-1 per g/cm3
 G_NEWTON   = 6.674e-11    # m3 kg-1 s-2
 BOUGUER_K  = 2 * np.pi * G_NEWTON * 1e3 * 1e5       # = 0.04192 mGal m-1 per g/cm3
-ELEV_GRAD  = FAC_GRAD - BOUGUER_K * RHO              # net dCBA/dh (mGal/m)
-
-
-def main():
+def main(rho=RHO):
     df = pd.read_csv(PROC_DIR / "lsq_corrected_decay.csv")
 
     # Base station elevation per line per day -- RTK bias cancels within a day since
@@ -81,18 +81,21 @@ def main():
     if n_missing:
         print(f"WARNING: {n_missing} stations have no elevation -- corrections set to NaN")
 
+    elev_grad = FAC_GRAD - BOUGUER_K * rho
+
     df["FAC"]    =  FAC_GRAD  * df["dh"]
-    df["BC"]     = -BOUGUER_K * RHO * df["dh"]
+    df["BC"]     = -BOUGUER_K * rho * df["dh"]
     df["TC"]     =  0.0       # placeholder -- fill with collaborator values
 
     # Base station is the datum: all corrections are zero by definition
     is_base = df["StationType"] == "base"
-    df.loc[is_base, ["dh", "SE_elev", "FAC", "BC", "TC"]] = 0.0
+    df.loc[is_base, ["dh", "FAC", "BC", "TC"]] = 0.0
 
     df["SBA"]    = df["Grav_lsq"] + df["FAC"] + df["BC"]
     df["CBA"]    = df["SBA"] + df["TC"]
 
-    df["SE_elev"] = ELEV_GRAD * df["SE_dh"]
+    df["SE_elev"] = elev_grad * df["SE_dh"]
+    df.loc[is_base, "SE_elev"] = 0.0
     df["SE_CBA"]  = np.sqrt(df["SE_lsq"]**2 + df["SE_elev"]**2)
 
     out_cols = [
@@ -105,18 +108,20 @@ def main():
     ]
     out = df[out_cols].sort_values(["Line", "loc_id", "Station"]).reset_index(drop=True)
 
-    out_file = PROC_DIR / "bouguer_anomaly_decay.csv"
+    rho_str  = f"{rho:.1f}".replace(".", "p")
+    out_file = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv"
     out.to_csv(out_file, index=False, float_format="%.6f")
     print(f"Saved -> {out_file.name}")
-    print(f"  RHO = {RHO} g/cm3")
+    print(f"  RHO = {rho} g/cm3")
     print(f"  Free-air gradient = {FAC_GRAD} mGal/m")
-    print(f"  Bouguer factor    = {BOUGUER_K:.5f} x RHO x dh mGal")
-    print(f"\nElevation range: {df['Elevation'].min():.2f} -- {df['Elevation'].max():.2f} m")
-    print(f"Max |dh|:              {df['dh'].abs().max():.2f} m")
+    print(f"  Bouguer factor    = {BOUGUER_K:.5f} x {rho} x dh mGal")
+    print(f"\nMax |dh|:              {df['dh'].abs().max():.2f} m")
     print(f"Max |FAC|:             {df['FAC'].abs().max():.3f} mGal")
     print(f"Max |BC|:              {df['BC'].abs().max():.3f} mGal")
     print(f"Max |SBA - Grav_lsq|: {(df['SBA'] - df['Grav_lsq']).abs().max():.3f} mGal")
 
 
 if __name__ == "__main__":
-    main()
+    rho_values = [float(a) for a in sys.argv[1:]] if len(sys.argv) > 1 else [RHO]
+    for rho in rho_values:
+        main(rho)
