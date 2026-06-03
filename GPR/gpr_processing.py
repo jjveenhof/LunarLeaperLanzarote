@@ -87,27 +87,23 @@ def apply_processing(data, time_axis, sfreq, params):
 
     if whiten:
         try:
-            n_s      = processed.shape[0]
-            whitened = np.zeros_like(processed)
-            for i in range(processed.shape[1]):
-                spec         = np.fft.rfft(processed[:, i])
-                whitened[:, i] = np.fft.irfft(
-                    spec / np.maximum(np.abs(spec), 1e-15), n=n_s)
-            processed = whitened
+            n_s   = processed.shape[0]
+            spec  = np.fft.rfft(processed, axis=0)
+            processed = np.fft.irfft(
+                spec / np.maximum(np.abs(spec), 1e-15),
+                n=n_s, axis=0)
         except Exception as e:
             print('Spectral whitening failed: {}'.format(e))
 
     elif whiten_window > 0:
         from scipy.ndimage import uniform_filter1d
         try:
-            n_s      = processed.shape[0]
-            whitened = np.zeros_like(processed)
-            for i in range(processed.shape[1]):
-                spec       = np.fft.rfft(processed[:, i])
-                amp_smooth = uniform_filter1d(np.abs(spec), size=whiten_window)
-                whitened[:, i] = np.fft.irfft(
-                    spec / np.maximum(amp_smooth, 1e-15), n=n_s)
-            processed = whitened
+            n_s        = processed.shape[0]
+            spec       = np.fft.rfft(processed, axis=0)
+            amp_smooth = uniform_filter1d(np.abs(spec), size=whiten_window, axis=0)
+            processed  = np.fft.irfft(
+                spec / np.maximum(amp_smooth, 1e-15),
+                n=n_s, axis=0)
         except Exception as e:
             print('Smoothed spectral whitening failed: {}'.format(e))
 
