@@ -1,9 +1,9 @@
 """
-Visualise LSQ drift and offset parameters per loop, one figure per line.
+Inspect LSQ drift and offset parameters per loop, one figure per line.
 
 Two panels per line:
-  Left  -- Drift rate (mGal/h) per loop
-  Right -- Loop offset relative to loop 1 (mGal), showing inter-loop jumps
+  Left  -- Drift rate (microGal/h) per loop, with heuristic limits at +/-60 microGal/h
+  Right -- Loop offset relative to loop 1 (microGal), showing inter-loop jumps
 
 Offsets are shown relative to loop 1 because in the anomaly formulation all
 s_j absorb the absolute gravity level (~5400 mGal), making absolute values
@@ -15,8 +15,8 @@ Input
 
 Usage
 -----
-    python visualise_lsq_loops.py          # default: decay
-    python visualise_lsq_loops.py drop5
+    python inspect_lsq_loops.py          # default: decay
+    python inspect_lsq_loops.py drop5
 """
 
 import sys
@@ -25,10 +25,14 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+BASE     = Path(__file__).resolve().parents[3]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
 SAVE_DIR = BASE / "Results/Grav/LSQ/Stats"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
+
+DRIFT_LIMIT = 60   # microGal/h -- heuristic upper bound on acceptable drift
 
 config = sys.argv[1] if len(sys.argv) > 1 else "decay"
 df = pd.read_csv(PROC_DIR / f"lsq_loops_{config}.csv")
@@ -58,12 +62,17 @@ for line_id, ldf in df.groupby("Line"):
     ax_d.bar(x, d_uGal, color="steelblue", zorder=3)
     ax_d.errorbar(x, d_uGal, yerr=se_d_uGal,
                   fmt="none", color="black", capsize=4, elinewidth=1.0, zorder=4)
-    ax_d.axhline(0, color="black", linewidth=0.8, linestyle="--", zorder=2)
+    ax_d.axhline(0,            color="black", linewidth=0.8, linestyle="--", zorder=2)
+    ax_d.axhline( DRIFT_LIMIT, color="red",   linewidth=1.0, linestyle="--",
+                  alpha=0.7, zorder=2, label=f"+/-{DRIFT_LIMIT} $\\mu$Gal/h limit")
+    ax_d.axhline(-DRIFT_LIMIT, color="red",   linewidth=1.0, linestyle="--",
+                  alpha=0.7, zorder=2)
     ax_d.set_xticks(x)
     ax_d.set_xticklabels([f"Loop {int(l)}" for l in loops])
     ax_d.set_ylabel(r"Drift rate ($\mu$Gal/h)")
     ax_d.set_title("Drift rate per loop")
     ax_d.grid(True, alpha=0.25, linestyle="--", axis="y")
+    ax_d.legend(fontsize=7)
 
     # -- Relative offset -------------------------------------------------------
     ax_s.bar(x, s_rel, color="steelblue", zorder=3)
