@@ -38,7 +38,9 @@ OUT_FILE   = PROC_DIR / "station_decay.csv"
 MEANS_FILE = PROC_DIR / "station_means_decay.csv"   # pipeline-compatible
 
 # A / SE_A must exceed this ratio to be considered "real settling"
-SIGNIFICANCE_THRESHOLD = 0.8
+SIGNIFICANCE_THRESHOLD = 1.0
+# tau below this value (minutes) is physically implausible -- treat as settled
+TAU_MIN = 0.5
 
 
 # -- Model ---------------------------------------------------------------------
@@ -98,9 +100,9 @@ def plot_line(line_df, line_id, results):
         grav = grp["Grav"]
         se   = grp["SE_i"].fillna(grp["SE_i"].mean())
 
-        g_inf, _, A, se_A, tau, converged = fit_station(t_min, grav, se)
+        g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grav, se)
 
-        settled     = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
+        settled     = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A) or (tau < TAU_MIN)
         fit_color   = "grey" if settled else "tab:green"
         label_color = "red" if not converged else "black"
 
@@ -124,6 +126,10 @@ def plot_line(line_df, line_id, results):
         # Asymptote line + uncertainty band
         ax.axhline(g_inf, color=fit_color, linewidth=0.9,
                    linestyle="--", alpha=0.8, label="$g_\\infty$ (fit)")
+        if not settled:
+            ax.axhspan(g_inf - se_g_inf, g_inf + se_g_inf,
+                       color="tab:green", alpha=0.15, zorder=1,
+                       label="$g_\\infty$ uncertainty")
         if settled:
             # Settled: show weighted mean with its uncertainty band
             ax.axhline(g_wmean_p, color="darkorange", linewidth=0.9,
@@ -132,9 +138,14 @@ def plot_line(line_df, line_id, results):
                        color="darkorange", alpha=0.15, zorder=1)
 
         # Title and CSV use weighted mean for settled, g_inf for settling
-        display_g = g_wmean_p if settled else g_inf
-        status    = "settled" if settled else f"$\\tau$={tau:.1f}m"
-        ax.set_title(f"S{station}\ng={display_g:.3f}, {status}",
+        display_g  = g_wmean_p  if settled else g_inf
+        display_se = se_wmean_p if settled else se_g_inf
+        status     = "settled"  if settled else f"$\\tau$={tau:.1f}m"
+        date       = grp["Date"].iloc[0].replace("/", "-")
+        start_time = grp["Time"].iloc[0]
+        ax.set_title(f"S{station}  {status}\n"
+                     f"{date}  {start_time}\n"
+                     f"g={display_g:.3f} $\\pm$ {display_se:.3f} mGal",
                      fontsize=7, color=label_color, pad=3)
         ax.tick_params(labelsize=6)
         ax.yaxis.set_major_formatter(plt.matplotlib.ticker.FormatStrFormatter("%.3f"))
@@ -146,6 +157,13 @@ def plot_line(line_df, line_id, results):
     # Hide unused subplots
     for idx in range(n, nrows * ncols):
         axes[idx // ncols][idx % ncols].set_visible(False)
+
+    # Same y-axis span for all subplots, each centered on its own data
+    visible_axes = [axes[i // ncols][i % ncols] for i in range(n)]
+    span = max(ax.get_ylim()[1] - ax.get_ylim()[0] for ax in visible_axes)
+    for ax in visible_axes:
+        mid = sum(ax.get_ylim()) / 2
+        ax.set_ylim(mid - span / 2, mid + span / 2)
 
     # Figure-level legend placed inside the figure at the bottom
     from matplotlib.lines import Line2D

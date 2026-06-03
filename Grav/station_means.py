@@ -79,11 +79,17 @@ def main(in_file=None, out_file=None):
     result["n_readings"] = result["n_readings"].astype(int)
     result = result.sort_values(["Line", "Station"]).reset_index(drop=True)
 
+    t_first = pd.to_datetime(result["Date"] + " " + result["Time_first"],
+                             format="%Y/%m/%d %H:%M:%S")
+    t_last  = pd.to_datetime(result["Date"] + " " + result["Time_last"],
+                             format="%Y/%m/%d %H:%M:%S")
+    result["Time_mid"] = (t_first + (t_last - t_first) / 2).dt.strftime("%H:%M:%S")
+
     cols = [
         "Line", "Station",
         "Easting", "Northing", "Elevation", "HorizErr", "VertErr",
         "Grav_est", "SE_est", "n_readings",
-        "Temp_mean", "Date", "Time_first", "Time_last",
+        "Temp_mean", "Date", "Time_first", "Time_mid", "Time_last",
         "StationType", "Notes",
     ]
     result[cols].to_csv(out_file, index=False, float_format="%.6f")

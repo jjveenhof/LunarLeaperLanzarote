@@ -350,6 +350,13 @@ def main(config_name="decay"):
     result.to_csv(out_file, index=False, float_format="%.6f")
     print(f"\nSaved -> {out_file.name}")
 
+    loops = (pd.concat(all_loops)
+               .sort_values(["Line", "loop_id"])
+               .reset_index(drop=True))
+    loops_file = PROC_DIR / f"lsq_loops_{config_name}.csv"
+    loops.to_csv(loops_file, index=False, float_format="%.6f")
+    print(f"Saved -> {loops_file.name}")
+
     # Consistency check: residuals at co-located stations
     print("\nResiduals at co-located stations:")
     counts = (result.groupby(["Line", "loc_id"])
