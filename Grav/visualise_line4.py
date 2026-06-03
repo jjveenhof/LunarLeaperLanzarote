@@ -18,6 +18,7 @@ A sanity check prints the deviation of P15 from a distance-weighted linear
 interpolation between P4 and P3 (Line 4 values).
 """
 
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -26,7 +27,24 @@ from pathlib import Path
 
 BASE     = Path(__file__).resolve().parents[2]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
-SAVE_DIR = BASE / "Results/Grav/LSQ/Lines"
+
+# Switch between LSQ anomaly and Simple Bouguer Anomaly
+USE_BOUGUER = "--bouguer" in sys.argv
+if USE_BOUGUER:
+    IN_FILE   = PROC_DIR / "bouguer_anomaly_decay.csv"
+    G_COL     = "SBA"
+    SE_COL    = "SE_CBA"
+    YLABEL    = "Simple Bouguer Anomaly (mGal)"
+    SAVE_DIR  = BASE / "Results/Grav/Bouguer"
+    FILESTEM  = "line4_combined_SBA"
+else:
+    IN_FILE   = PROC_DIR / "lsq_corrected_decay.csv"
+    G_COL     = "Grav_lsq"
+    SE_COL    = "SE_lsq"
+    YLABEL    = "Gravity anomaly (mGal)"
+    SAVE_DIR  = BASE / "Results/Grav/LSQ/Lines"
+    FILESTEM  = "line4_combined"
+
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 # -- Configuration (loc_ids) ---------------------------------------------------
@@ -36,8 +54,7 @@ L3_P15 = 15                  # loc_id of P15 in Line 3
 L3_SUB = list(range(15, 26)) # Line 3 subset loc_ids (P15 to end)
 
 # -- Load data -----------------------------------------------------------------
-df = pd.read_csv(PROC_DIR / "lsq_corrected_decay.csv",
-                 dtype={"Time_first": str, "Date": str})
+df = pd.read_csv(IN_FILE, dtype={"Date": str})
 
 def get_locs(line, loc_ids):
     """Return one row per loc_id (sorted by loc_ids order) for a given line."""
@@ -82,11 +99,11 @@ nw_coords = np.array([
 nw_dists = cumulative_dist(nw_coords)
 
 nw_g   = np.array([
-    (l3_p15 if src == "l3" else l4_nw).loc[loc, "Grav_lsq"]
+    (l3_p15 if src == "l3" else l4_nw).loc[loc, G_COL]
     for loc, src in zip(nw_seq_locs, nw_seq_src)
 ])
 nw_se  = np.array([
-    (l3_p15 if src == "l3" else l4_nw).loc[loc, "SE_lsq"]
+    (l3_p15 if src == "l3" else l4_nw).loc[loc, SE_COL]
     for loc, src in zip(nw_seq_locs, nw_seq_src)
 ])
 
@@ -99,9 +116,9 @@ l3_coords = l3_sub[["Easting", "Northing"]].values
 l3_dists  = p15_dist + cumulative_dist(l3_coords)
 
 # -- Sanity check: P15 vs. linear interpolation between P4 and P3 --------------
-g_p4  = l4_ne.loc[4,  "Grav_lsq"]
-g_p3  = l4_nw.loc[3,  "Grav_lsq"]
-g_p15 = l3_p15.loc[L3_P15, "Grav_lsq"]
+g_p4  = l4_ne.loc[4,  G_COL]
+g_p3  = l4_nw.loc[3,  G_COL]
+g_p15 = l3_p15.loc[L3_P15, G_COL]
 
 d_p4_p15 = np.hypot(l3_p15.loc[L3_P15,"Easting"]  - l4_ne.loc[4,"Easting"],
                     l3_p15.loc[L3_P15,"Northing"] - l4_ne.loc[4,"Northing"])
@@ -120,7 +137,7 @@ print(f"  Residual (P15 - interpolated) = {delta*1000:+.1f} uGal")
 # -- Plot ----------------------------------------------------------------------
 fig, ax = plt.subplots(figsize=(13, 5))
 
-ax.errorbar(ne_dists, l4_ne["Grav_lsq"], yerr=l4_ne["SE_lsq"],
+ax.errorbar(ne_dists, l4_ne[G_COL], yerr=l4_ne[SE_COL],
             fmt="o-", color="steelblue", capsize=3, linewidth=1.5, markersize=6,
             label="L4 NE arm  (perp. to cave)")
 
@@ -128,7 +145,7 @@ ax.errorbar(nw_dists, nw_g, yerr=nw_se,
             fmt="o-", color="darkorange", capsize=3, linewidth=1.5, markersize=6,
             label="L4 NW arm  (along cave)  -- P15 from L3 inserted")
 
-ax.errorbar(l3_dists, l3_sub["Grav_lsq"], yerr=l3_sub["SE_lsq"],
+ax.errorbar(l3_dists, l3_sub[G_COL], yerr=l3_sub[SE_COL],
             fmt="o-", color="seagreen", capsize=3, linewidth=1.5, markersize=6,
             label="L3 subset  (N, ~45 deg from cave)")
 
@@ -141,14 +158,14 @@ ax.text(0,        ymax, "P4",  ha="center", va="bottom", fontsize=8, fontweight=
 ax.text(p15_dist, ymax, "P15", ha="center", va="bottom", fontsize=8, color="grey")
 
 ax.set_xlabel("Distance from P4 (m)")
-ax.set_ylabel("Gravity anomaly (mGal)")
+ax.set_ylabel(YLABEL)
 ax.set_title("Cave signature comparison -- Lines 3 and 4", fontweight="bold", fontsize=12)
 ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
 ax.grid(True, alpha=0.25, linestyle="--")
 ax.legend(fontsize=9)
 
 plt.tight_layout()
-save_path = SAVE_DIR / "line4_combined.png"
+save_path = SAVE_DIR / f"{FILESTEM}.png"
 fig.savefig(save_path, dpi=150, bbox_inches="tight")
 print(f"\nSaved -> {save_path.name}")
 plt.show()

@@ -61,6 +61,10 @@ def run_decay():
     print("\n-- Step 3: LSQ drift correction --")
     run_lsq("decay")
 
+    print("\n-- Step 4: gravity corrections (free-air, Bouguer) --")
+    from apply_corrections import main as run_corrections
+    run_corrections()
+
 
 if __name__ == "__main__":
     for name in CONFIGS:
