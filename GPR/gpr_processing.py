@@ -21,17 +21,16 @@ params        : dict -- keys and defaults below:
     bandpass_high  float     required (MHz)
     gain_exponent  float     default 0.0  (0 = no gain)
     normalize      bool      default False
-    norm_window    int|None  default None (full trace)
+    norm_start_ns  float     default 50.0 (start of norm window in ns)
+    norm_end_ns    float|None default None (end of norm window in ns; None = full trace)
     max_time_ns    float|None default None (no crop)
-    whiten         bool      default False  pure whitening: divide by amplitude
-    whiten_window  int       default 0      smoothed whitening window (bins);
-                                            0 = off; overrides whiten if both set
+    whiten_window  int       default 0      smoothed whitening window (bins); 0 = off
     n_svd          int       default 0      SVD components to remove; 0 = off
 
 Processing order
 ----------------
 normalize -> dewow -> time-zero shift + trim -> max-time crop ->
-whitening (pure or smoothed) -> bandpass -> SVD removal -> gain
+whitening -> bandpass -> SVD removal -> gain
 """
 
 import numpy as np
@@ -49,10 +48,14 @@ def apply_processing(data, time_axis, sfreq, params):
 
     # 1. tracewise-RMS normalisation
     if params.get('normalize', False):
-        norm_window = params.get('norm_window', None)
-        win = (0, int(norm_window)) if norm_window and int(norm_window) < n_orig \
-              else (0, n_orig)
-        processed = normalize_data(processed, typ='tracewise-rms', window=win)
+        norm_start_ns = float(params.get('norm_start_ns', 50.0))
+        norm_end_ns   = params.get('norm_end_ns', None)
+        start_idx = int(np.searchsorted(time_axis, norm_start_ns))
+        end_idx   = int(np.searchsorted(time_axis, float(norm_end_ns))) \
+                    if norm_end_ns is not None else n_orig
+        end_idx   = min(max(end_idx, start_idx + 1), n_orig)
+        processed = normalize_data(processed, typ='tracewise-rms-window',
+                                   window=(start_idx, end_idx))
 
     # 2. dewow
     processed = _dewow(processed, window_length=int(params['dewow_window']))
@@ -74,28 +77,8 @@ def apply_processing(data, time_axis, sfreq, params):
         time_axis_out = time_axis_out[mask]
 
     # 5. spectral whitening (before bandpass)
-    whiten        = bool(params.get('whiten', False))
     whiten_window = int(params.get('whiten_window', 0))
-    n_svd         = int(params.get('n_svd', 0))
-
-    if whiten and whiten_window > 0:
-        print('WARNING: both pure and smoothed whitening active -- using smoothed.')
-        whiten = False
-    if n_svd > 0 and (whiten or whiten_window > 0):
-        print('WARNING: SVD removal and spectral whitening both active -- '
-              'usually only one is needed.')
-
-    if whiten:
-        try:
-            n_s   = processed.shape[0]
-            spec  = np.fft.rfft(processed, axis=0)
-            processed = np.fft.irfft(
-                spec / np.maximum(np.abs(spec), 1e-15),
-                n=n_s, axis=0)
-        except Exception as e:
-            print('Spectral whitening failed: {}'.format(e))
-
-    elif whiten_window > 0:
+    if whiten_window > 0:
         from scipy.ndimage import uniform_filter1d
         try:
             n_s        = processed.shape[0]
@@ -105,7 +88,7 @@ def apply_processing(data, time_axis, sfreq, params):
                 spec / np.maximum(amp_smooth, 1e-15),
                 n=n_s, axis=0)
         except Exception as e:
-            print('Smoothed spectral whitening failed: {}'.format(e))
+            print('Spectral whitening failed: {}'.format(e))
 
     # 6. bandpass
     try:
@@ -117,6 +100,7 @@ def apply_processing(data, time_axis, sfreq, params):
         print('Bandpass failed: {}'.format(e))
 
     # 7. SVD removal
+    n_svd = int(params.get('n_svd', 0))
     if n_svd > 0:
         from gdp.preprocessing.image_processing import remove_svd
         try:
