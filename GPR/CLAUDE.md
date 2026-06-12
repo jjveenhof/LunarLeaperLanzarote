@@ -7,10 +7,7 @@ This file is loaded by sessions opened in Code/GPR/. The root CLAUDE.md
 CRS, environment, and working conventions. The project root "Thesis Lunar Leaper"
 is two levels up; data and results paths below are relative to the project root.
 
-At the start of each session, read QandA.md in this directory for pending questions or
-tasks. Any session (supervisor, Grav, QGIS) can write here -- entries are tagged
-`From: [session] -> GPR`. To ask another session something, write into their QandA.md.
-Delete entries from your own QandA.md once resolved.
+QandA.md entries directed here are tagged `From: [session] -> GPR`.
 
 ## Pipeline
 

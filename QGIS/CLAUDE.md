@@ -6,10 +6,7 @@ This file is loaded by sessions opened in Code/QGIS/. The root CLAUDE.md
 (loaded automatically alongside this) covers the overall project structure,
 CRS, environment, and working conventions.
 
-At the start of each session, read QandA.md in this directory for pending questions or
-tasks. Any session (supervisor, Grav, GPR) can write here -- entries are tagged
-`From: [session] -> QGIS`. To ask another session something, write into their QandA.md.
-Delete entries from your own QandA.md once resolved.
+QandA.md entries directed here are tagged `From: [session] -> QGIS`.
 
 QGIS project and layer files live at QGIS/ in the project root. From this
 session's working directory that is ../../QGIS/ (or use the full path).
