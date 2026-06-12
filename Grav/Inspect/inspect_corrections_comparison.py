@@ -11,7 +11,7 @@ Input
 -----
     Data/Gravimetry/Processed/bouguer_anomaly_decay_rho{X}.csv   (ours)
     Data/Gravimetry/Processed/LL_gravity_corrections.csv          (colleague)
-    Data/Gravimetry/Processed/lsq_corrected_decay.csv             (for Date/StationType)
+    Data/Gravimetry/Processed/lsq_drift_decay.csv             (for Date/StationType)
 
 Usage
 -----
@@ -26,17 +26,18 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[3]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
-SAVE_DIR = BASE / "Results/Grav/Corrections"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from grav_utils import PROC_DIR, RESULTS_DIR, RHO_DEFAULT, rho_str as rho_fmt, sba_file
+
+SAVE_DIR = RESULTS_DIR / "Corrections"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
-rho     = float(sys.argv[1]) if len(sys.argv) > 1 else 1.875
-rho_str = f"{rho:.3f}".rstrip("0").rstrip(".").replace(".", "p")
+rho     = float(sys.argv[1]) if len(sys.argv) > 1 else RHO_DEFAULT
+rho_str = rho_fmt(rho)
 
-ours = pd.read_csv(PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv")
+ours = pd.read_csv(sba_file(rho))
 col  = pd.read_csv(PROC_DIR / "LL_gravity_corrections.csv")
-lsq  = pd.read_csv(PROC_DIR / "lsq_corrected_decay.csv",
+lsq  = pd.read_csv(PROC_DIR / "lsq_drift_decay.csv",
                    dtype={"Date": str})
 
 # -- Compute colleague's relative corrections (per-day base mean) --------------

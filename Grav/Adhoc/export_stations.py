@@ -9,13 +9,14 @@ Output
     Data/Gravimetry/Processed/stations_for_corrections.csv
 """
 
+import sys
 import pandas as pd
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[2]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from grav_utils import PROC_DIR
 
-df = pd.read_csv(PROC_DIR / "lsq_corrected_decay.csv")
+df = pd.read_csv(PROC_DIR / "lsq_drift_decay.csv")
 
 export = (df[df["Easting"].notna()]
           [["Line", "Station",

@@ -20,11 +20,11 @@ Physical location grouping:
 
 Input
 -----
-    Data/Gravimetry/station_means_{name}.csv
+    Data/Gravimetry/station_gravity_{name}.csv
 
 Output
 ------
-    Data/Gravimetry/lsq_corrected_{name}.csv
+    Data/Gravimetry/lsq_drift_{name}.csv
 
 Usage
 -----
@@ -302,8 +302,8 @@ def solve_line(group):
 # -- Main ----------------------------------------------------------------------
 
 def main(config_name="decay"):
-    in_file  = PROC_DIR / f"station_means_{config_name}.csv"
-    out_file = PROC_DIR / f"lsq_corrected_{config_name}.csv"
+    in_file  = PROC_DIR / f"station_gravity_{config_name}.csv"
+    out_file = PROC_DIR / f"lsq_drift_{config_name}.csv"
 
     print(f"Config: {config_name}")
     print(f"Reading {in_file.name} ...")
@@ -353,7 +353,7 @@ def main(config_name="decay"):
     loops = (pd.concat(all_loops)
                .sort_values(["Line", "loop_id"])
                .reset_index(drop=True))
-    loops_file = PROC_DIR / f"lsq_loops_{config_name}.csv"
+    loops_file = PROC_DIR / f"lsq_drift_loops_{config_name}.csv"
     loops.to_csv(loops_file, index=False, float_format="%.6f")
     print(f"Saved -> {loops_file.name}")
 

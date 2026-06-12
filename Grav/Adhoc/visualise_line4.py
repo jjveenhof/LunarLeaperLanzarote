@@ -25,22 +25,21 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[2]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from grav_utils import BASE, PROC_DIR, rho_str as rho_fmt, sba_file
 
 # If a rho value is passed (e.g. --rho 2.5), use Bouguer file; otherwise use LSQ
 rho_arg = next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "--rho"), None)
 if rho_arg is not None:
-    rho     = float(rho_arg)
-    rho_str = f"{rho:.1f}".replace(".", "p")
-    IN_FILE  = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv"
+    rho      = float(rho_arg)
+    IN_FILE  = sba_file(rho)
     G_COL    = "SBA"
-    SE_COL   = "SE_CBA"
+    SE_COL   = "SE_SBA"
     YLABEL   = f"Simple Bouguer Anomaly (mGal)  [rho = {rho} g/cm3]"
     SAVE_DIR = BASE / "Results/Grav/Bouguer"
-    FILESTEM = f"line4_combined_SBA_rho{rho_str}"
+    FILESTEM = f"line4_combined_SBA_rho{rho_fmt(rho)}"
 else:
-    IN_FILE  = PROC_DIR / "lsq_corrected_decay.csv"
+    IN_FILE  = PROC_DIR / "lsq_drift_decay.csv"
     G_COL    = "Grav_lsq"
     SE_COL   = "SE_lsq"
     YLABEL   = "Gravity anomaly (mGal)"

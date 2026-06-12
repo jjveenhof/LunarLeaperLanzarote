@@ -6,7 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav/
 from drift_correction_lsq import assign_loops, assign_locations, solve_line
 
 BASE = Path(__file__).resolve().parents[3]   # thesis root
-df = pd.read_csv(BASE / "Data/Gravimetry/Processed/station_means_drop5.csv",
+df = pd.read_csv(BASE / "Data/Gravimetry/Processed/station_gravity_decay.csv",
                  dtype={"Time_first": str, "Date": str})
 df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time_first"],
                                 format="%Y/%m/%d %H:%M:%S")

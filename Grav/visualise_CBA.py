@@ -9,8 +9,8 @@ SE column must match anomaly: CBA -> SE_CBA, SBA -> SE_SBA. No SE = no error bar
 
 Usage
 -----
-    python visualise_CBA.py                                      # default rho=2.0 SBA file
-    python visualise_CBA.py 1.875                               # SBA file rho=1.875
+    python visualise_CBA.py                                      # default rho=1.875 SBA file
+    python visualise_CBA.py 2.0                                 # SBA file rho=2.0
     python visualise_CBA.py bouguer_anomaly_decay_colleague.csv # any file by name
     python visualise_CBA.py bouguer_anomaly_decay_rho1p875_with_TC.csv
 """
@@ -23,19 +23,15 @@ import matplotlib.ticker as mticker
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from visualise_lines import along_profile_distance
-
-BASE     = Path(__file__).resolve().parents[2]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
+from grav_utils import along_profile_distance
+from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, sba_file
 
 # Accept either a rho value or a filename
-arg = sys.argv[1] if len(sys.argv) > 1 else "1.875"
+arg = sys.argv[1] if len(sys.argv) > 1 else str(RHO_DEFAULT)
 try:
-    rho     = float(arg)
-    rho_str = f"{rho:.3f}".rstrip("0").rstrip(".").replace(".", "p")
-    INPUT   = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv"
+    INPUT = sba_file(float(arg))
 except ValueError:
-    INPUT   = PROC_DIR / arg
+    INPUT = PROC_DIR / arg
 
 INVERT_LINES = {4}
 

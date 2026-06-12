@@ -1,13 +1,16 @@
 """
+LEGACY -- station-mean branch; the decay fit (station_decay.py) is the
+preferred gravity estimate. Still used by run_pipeline.py --all.
+
 Compute weighted mean gravity per station from the filtered readings.
 
 Input
 -----
-  Data/Gravimetry/filtered_gravimetry.csv   filtered per-reading dataset
+  Data/Gravimetry/Processed/filtered_gravimetry_{config}.csv   filtered per-reading dataset
 
 Output
 ------
-  Data/Gravimetry/station_means.csv   one row per station
+  Data/Gravimetry/Processed/station_gravity_{config}.csv   one row per station
 
 Method
 ------
@@ -27,8 +30,8 @@ from pathlib import Path
 
 BASE       = Path(__file__).resolve().parents[2]
 PROC_DIR   = BASE / "Data/Gravimetry/Processed"
-FILT_FILE  = PROC_DIR / "filtered_gravimetry.csv"
-OUT_FILE   = PROC_DIR / "station_means.csv"
+FILT_FILE  = PROC_DIR / "filtered_gravimetry_all.csv"
+OUT_FILE   = PROC_DIR / "station_gravity_all.csv"
 
 
 def weighted_mean(grp):

@@ -3,7 +3,7 @@ Visualise LSQ drift-corrected gravity profiles -- one figure per Line.
 
 Input
 -----
-    Data/Gravimetry/lsq_corrected_{name}.csv   (default: lsq_corrected_decay.csv)
+    Data/Gravimetry/lsq_drift_{name}.csv   (default: lsq_drift_decay.csv)
     Pass a different filename as a command-line argument.
 
 Each subplot shows
@@ -17,7 +17,7 @@ Each subplot shows
 Usage
 -----
     python visualise_lsq.py                         # uses default file
-    python visualise_lsq.py lsq_corrected_drop0.csv
+    python visualise_lsq.py lsq_drift_drop5.csv
 """
 
 import sys
@@ -30,12 +30,9 @@ import matplotlib.ticker as mticker
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from visualise_lines import along_profile_distance
+from grav_utils import BASE, PROC_DIR, along_profile_distance
 
-BASE      = Path(__file__).resolve().parents[2]
-DATA_DIR  = BASE / "Data/Gravimetry"
-PROC_DIR  = BASE / "Data/Gravimetry/Processed"
-DEFAULT   = PROC_DIR / "lsq_corrected_decay.csv"
+DEFAULT   = PROC_DIR / "lsq_drift_decay.csv"
 
 LOOP_CMAP   = plt.cm.tab10
 INVERT_LINES = {4}

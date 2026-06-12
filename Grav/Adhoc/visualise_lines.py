@@ -1,9 +1,13 @@
 """
+LEGACY -- visualises the simple (linear) drift correction output, which is no
+longer part of the default pipeline. Use visualise_lsq.py for the LSQ branch.
+Regenerate the input with: python run_pipeline.py --with-simple-drift
+
 Visualise drift-corrected gravity profiles -- one panel per Line.
 
 Input
 -----
-  Data/Gravimetry/drift_corrected_{name}.csv
+  Data/Gravimetry/Processed/simple_drift_{name}.csv
 
 Each panel shows
   - Drift-corrected gravity with SE error bars
@@ -14,6 +18,7 @@ Each panel shows
   - Stations without GNSS coordinates are interpolated onto the axis.
 """
 
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -22,8 +27,10 @@ import matplotlib.lines as mlines
 import matplotlib.ticker as mticker
 from pathlib import Path
 
-BASE      = Path(__file__).resolve().parents[2]
-CORR_FILE = BASE / "Data/Gravimetry/Processed/drift_corrected_decay.csv"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from grav_utils import BASE, PROC_DIR, along_profile_distance
+
+CORR_FILE = PROC_DIR / "simple_drift_decay.csv"
 
 # -- Styling -------------------------------------------------------------------
 LOOP_CMAP   = plt.cm.tab10
@@ -34,43 +41,6 @@ LABELS      = {"base": "Base", "tie": "Tie", "regular": "Regular"}
 # Lines whose profile x-axis should be flipped
 INVERT_LINES = {4}
 
-
-
-# -- Geometry ------------------------------------------------------------------
-
-def along_profile_distance(df):
-    """
-    Project all stations onto the line's principal axis (PCA of GNSS coords),
-    returning a 'dist' column in metres. Stations without GNSS are linearly
-    interpolated by station number.
-    """
-    df = df.copy().sort_values("Station").reset_index(drop=True)
-    gnss = df[df["Easting"].notna()]
-
-    if len(gnss) < 2:
-        df["dist"] = df["Station"].astype(float)
-        return df
-
-    E = gnss["Easting"].values
-    N = gnss["Northing"].values
-    Ec = E - E.mean()
-    Nc = N - N.mean()
-
-    # Principal axis via 2x2 covariance eigen-decomposition
-    cov      = np.cov(np.stack([Ec, Nc]))
-    eigvals, eigvecs = np.linalg.eigh(cov)
-    axis     = eigvecs[:, eigvals.argmax()]   # unit vector along line
-
-    proj = Ec * axis[0] + Nc * axis[1]
-    proj -= proj.min()                         # shift so origin = 0
-
-    df.loc[gnss.index, "dist"] = proj
-
-    # Linear interpolation for GNSS-less stations (e.g. orphan bases)
-    df["dist"] = (df.set_index("Station")["dist"]
-                    .interpolate(method="index")
-                    .values)
-    return df
 
 
 # -- Plot ----------------------------------------------------------------------

@@ -9,11 +9,12 @@ Model:  g(t) = g_inf + A * exp(-t / tau)
 
 Input
 -----
-  Data/Gravimetry/filtered_gravimetry_drop0.csv
+  Data/Gravimetry/Processed/filtered_gravimetry_all.csv
 
 Output
 ------
-  Data/Gravimetry/station_decay.csv   one row per station with g_inf and fit quality
+  Data/Gravimetry/Processed/decay_fits.csv          fit parameters (g_inf, A, tau, quality)
+  Data/Gravimetry/Processed/station_gravity_decay.csv  g_inf per station, pipeline format
 
 Visual
 ------
@@ -33,9 +34,9 @@ from scipy.optimize import curve_fit
 
 BASE       = Path(__file__).resolve().parents[2]
 PROC_DIR   = BASE / "Data/Gravimetry/Processed"
-FILT_FILE  = PROC_DIR / "filtered_gravimetry_drop0.csv"
-OUT_FILE   = PROC_DIR / "station_decay.csv"
-MEANS_FILE = PROC_DIR / "station_means_decay.csv"   # pipeline-compatible
+FILT_FILE  = PROC_DIR / "filtered_gravimetry_all.csv"
+OUT_FILE   = PROC_DIR / "decay_fits.csv"
+MEANS_FILE = PROC_DIR / "station_gravity_decay.csv"   # g_inf per station, pipeline format
 
 # A / SE_A must exceed this ratio to be considered "real settling"
 SIGNIFICANCE_THRESHOLD = 1.0

@@ -1,13 +1,17 @@
 """
-Apply linear loop drift correction to the station-mean gravity values.
+LEGACY -- simple linear drift correction, kept for comparison only.
+The pipeline uses the LSQ network adjustment (drift_correction_lsq.py) instead.
+Run via: python run_pipeline.py --with-simple-drift
+
+Apply linear loop drift correction to the station gravity values.
 
 Input
 -----
-  Data/Gravimetry/station_means.csv
+  Data/Gravimetry/Processed/station_gravity_{config}.csv
 
 Output
 ------
-  Data/Gravimetry/drift_corrected.csv
+  Data/Gravimetry/Processed/simple_drift_{config}.csv
 
 Method
 ------
@@ -39,8 +43,8 @@ from pathlib import Path
 
 BASE       = Path(__file__).resolve().parents[2]
 PROC_DIR   = BASE / "Data/Gravimetry/Processed"
-MEANS_FILE = PROC_DIR / "station_means.csv"
-OUT_FILE   = PROC_DIR / "drift_corrected.csv"
+MEANS_FILE = PROC_DIR / "station_gravity_decay.csv"
+OUT_FILE   = PROC_DIR / "simple_drift_decay.csv"
 
 TIE_DISTANCE_M = 3.0
 

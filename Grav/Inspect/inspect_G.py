@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from drift_correction_lsq import assign_loops, assign_locations, build_G
 
 BASE = Path(__file__).resolve().parents[3]
-df = pd.read_csv(BASE / "Data/Gravimetry/Processed/station_means_decay.csv",
+df = pd.read_csv(BASE / "Data/Gravimetry/Processed/station_gravity_decay.csv",
                  dtype={"Time_first": str, "Time_mid": str, "Date": str})
 df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time_mid"],
                                 format="%Y/%m/%d %H:%M:%S")

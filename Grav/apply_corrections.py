@@ -21,7 +21,7 @@ in Leica Captivate on the CS20.
 
 Input
 -----
-    Data/Gravimetry/Processed/lsq_corrected_decay.csv
+    Data/Gravimetry/Processed/lsq_drift_decay.csv
 
 Output
 ------
@@ -37,45 +37,17 @@ Usage
 import sys
 import pandas as pd
 import numpy as np
-from pathlib import Path
 from pyproj import Transformer
 
-BASE     = Path(__file__).resolve().parents[2]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
-
-RHO       = 1.875         # g/cm3 -- assumed bulk density of rock column
-
-# Free-air gradient: dg/dh = -2g/R (standard geodetic value, valid at all latitudes)
-# g ~ 9.807 m/s2, R ~ 6371 km -> 2*9.807/6371000 = 3.079e-6 m/s2/m = 0.3079 mGal/m
-# The standard 0.3086 includes the ellipsoidal correction; at Lanzarote (29N) ~0.3085
-FAC_GRAD  = 0.3086        # mGal/m
-
-# Bouguer slab factor: g_slab = 2*pi*G * (rho_SI) * h, converted to mGal
-# 2*pi * G         = 2 * pi * 6.674e-11        = 4.194e-10  m3 kg-1 s-2 m-1
-# rho conversion   = 1e3                        kg/m3 per g/cm3
-# mGal conversion  = 1e5                        mGal per m/s2
-# combined         = 4.194e-10 * 1e3 * 1e5      = 0.04194 mGal m-1 per g/cm3
-G_NEWTON  = 6.674e-11     # m3 kg-1 s-2
-BOUGUER_K = 2 * np.pi * G_NEWTON * 1e3 * 1e5    # = 0.04192 mGal m-1 per g/cm3
-
-# WGS84 Somigliani normal gravity constants (Blakely, Potential Theory in Gravity and Magnetic Applications)
-G_E  = 978032.67714   # mGal -- normal gravity at equator
-K_S  = 0.00193185138639
-E2   = 0.00669437999013
+from grav_utils import (PROC_DIR, FAC_GRAD, BOUGUER_K, RHO_DEFAULT,
+                        normal_gravity, sba_file)
 
 # UTM zone 27N (REGCAN95) to geographic
 UTM_TO_GEO = Transformer.from_crs("EPSG:4083", "EPSG:4258", always_xy=True)
 
 
-def normal_gravity(lat_deg):
-    """WGS84 Somigliani formula. lat_deg in degrees, returns mGal."""
-    phi = np.radians(lat_deg)
-    sin2 = np.sin(phi) ** 2
-    return G_E * (1 + K_S * sin2) / np.sqrt(1 - E2 * sin2)
-
-
-def main(rho=RHO):
-    df = pd.read_csv(PROC_DIR / "lsq_corrected_decay.csv")
+def main(rho=RHO_DEFAULT):
+    df = pd.read_csv(PROC_DIR / "lsq_drift_decay.csv")
 
     # -- Latitude from UTM -----------------------------------------------------
     has_gnss = df["Easting"].notna() & df["Northing"].notna()
@@ -135,8 +107,7 @@ def main(rho=RHO):
     ]
     out = df[out_cols].sort_values(["Line", "loc_id", "Station"]).reset_index(drop=True)
 
-    rho_str  = f"{rho:.3f}".rstrip("0").rstrip(".").replace(".", "p")
-    out_file = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str}.csv"
+    out_file = sba_file(rho)
     out.to_csv(out_file, index=False, float_format="%.6f")
     print(f"Saved -> {out_file.name}")
     print(f"  RHO = {rho} g/cm3")
@@ -150,6 +121,6 @@ def main(rho=RHO):
 
 
 if __name__ == "__main__":
-    rho_values = [float(a) for a in sys.argv[1:]] if len(sys.argv) > 1 else [RHO]
+    rho_values = [float(a) for a in sys.argv[1:]] if len(sys.argv) > 1 else [RHO_DEFAULT]
     for rho in rho_values:
         main(rho)

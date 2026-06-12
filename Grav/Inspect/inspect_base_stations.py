@@ -21,14 +21,14 @@ SAVE_DIR.mkdir(parents=True, exist_ok=True)
 LOOP_CMAP = plt.cm.tab10
 
 # -- Load data -----------------------------------------------------------------
-# station_means_decay.csv: one row per station; Grav_est = g_inf from decay fit
-means = pd.read_csv(PROC_DIR / "station_means_decay.csv",
+# station_gravity_decay.csv: one row per station; Grav_est = g_inf from decay fit
+means = pd.read_csv(PROC_DIR / "station_gravity_decay.csv",
                     dtype={"Time_first": str, "Date": str})
 means["datetime"] = pd.to_datetime(means["Date"] + " " + means["Time_first"],
                                    format="%Y/%m/%d %H:%M:%S")
 
-# lsq_corrected_decay.csv: LSQ residuals per station/loop
-lsq = pd.read_csv(PROC_DIR / "lsq_corrected_decay.csv",
+# lsq_drift_decay.csv: LSQ residuals per station/loop
+lsq = pd.read_csv(PROC_DIR / "lsq_drift_decay.csv",
                   dtype={"Time_first": str, "Date": str})
 lsq["datetime"] = pd.to_datetime(lsq["Date"] + " " + lsq["Time_first"],
                                  format="%Y/%m/%d %H:%M:%S")

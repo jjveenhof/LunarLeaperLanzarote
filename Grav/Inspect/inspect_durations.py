@@ -6,7 +6,7 @@ from pathlib import Path
 BASE     = Path(__file__).resolve().parents[3]
 PROC_DIR = BASE / "Data/Gravimetry/Processed"
 
-df = pd.read_csv(PROC_DIR / "station_means_decay.csv",
+df = pd.read_csv(PROC_DIR / "station_gravity_decay.csv",
                  dtype={"Time_first": str, "Time_last": str, "Date": str})
 
 df["t_first"] = pd.to_datetime(df["Date"] + " " + df["Time_first"],

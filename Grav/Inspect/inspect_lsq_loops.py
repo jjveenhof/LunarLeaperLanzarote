@@ -11,7 +11,7 @@ uninformative. The relative offsets show instrumental jumps between loops.
 
 Input
 -----
-    Data/Gravimetry/Processed/lsq_loops_{config}.csv
+    Data/Gravimetry/Processed/lsq_drift_loops_{config}.csv
 
 Usage
 -----
@@ -35,7 +35,7 @@ SAVE_DIR.mkdir(parents=True, exist_ok=True)
 DRIFT_LIMIT = 60   # microGal/h -- heuristic upper bound on acceptable drift
 
 config = sys.argv[1] if len(sys.argv) > 1 else "decay"
-df = pd.read_csv(PROC_DIR / f"lsq_loops_{config}.csv")
+df = pd.read_csv(PROC_DIR / f"lsq_drift_loops_{config}.csv")
 
 for line_id, ldf in df.groupby("Line"):
     ldf     = ldf.sort_values("loop_id").reset_index(drop=True)
@@ -86,7 +86,7 @@ for line_id, ldf in df.groupby("Line"):
     ax_s.grid(True, alpha=0.25, linestyle="--", axis="y")
 
     plt.tight_layout()
-    save_path = SAVE_DIR / f"lsq_loops_{config}_line{line_id}.png"
+    save_path = SAVE_DIR / f"lsq_drift_loops_{config}_line{line_id}.png"
     fig.savefig(save_path, dpi=150, bbox_inches="tight")
     print(f"Saved -> {save_path.name}")
 

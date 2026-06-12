@@ -48,11 +48,14 @@ EXCL_FILE = BASE / "Data/Gravimetry/exclusions.csv"
 # Each entry produces a separate output file named filtered_gravimetry_{name}.csv
 # when run via run_pipeline.py. Running this script directly uses DEFAULT_CONFIG.
 CONFIGS = {
+    # "all": every QC-passed reading, no warmup drop. Input to the decay fit
+    # (station_decay.py needs the full settling curve). Formerly named "drop0".
+    "all":      {"N_WARMUP": 0, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": False},
+    # Legacy comparison configs (station-mean branch):
     "drop5":    {"N_WARMUP": 5, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": False},
-    "drop0":    {"N_WARMUP": 0, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": False},
     "keepLast": {"N_WARMUP": 0, "SD_MAX": 0.15, "TILT_MAX": 20, "REJ_MAX": 10, "KEEP_LAST": True},
 }
-DEFAULT_CONFIG = "drop5"
+DEFAULT_CONFIG = "all"
 
 # -- Per-station overrides -----------------------------------------------------
 # Stations listed here skip the warmup drop and ALL automatic filters.

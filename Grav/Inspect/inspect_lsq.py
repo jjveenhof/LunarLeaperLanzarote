@@ -255,8 +255,8 @@ def main(config_name=None):
     if config_name is None:
         config_name = sys.argv[1] if len(sys.argv) > 1 else "decay"
 
-    in_file  = PROC_DIR / f"station_means_{config_name}.csv"
-    lsq_file = PROC_DIR / f"lsq_corrected_{config_name}.csv"
+    in_file  = PROC_DIR / f"station_gravity_{config_name}.csv"
+    lsq_file = PROC_DIR / f"lsq_drift_{config_name}.csv"
 
     print(f"Config: {config_name}")
     df = pd.read_csv(in_file, dtype={"Time_first": str, "Date": str})
