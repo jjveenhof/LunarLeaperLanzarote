@@ -44,45 +44,54 @@ FIG_DIR    = HERE / '../../Results/GPR/Topo'
 OFFSET_50MHZ  = 1.10    # 2.2 m rig
 OFFSET_100MHZ = 0.425   # 0.85 m rig
 
-V_FALLBACK = 0.13       # m/ns used if not stored in params file
+from gpr_constants import V_DEFAULT as V_FALLBACK   # m/ns used if not stored in params file
 # ------------------------------------------------------------------------------
 
 
 PROFILE_CONFIG = {
     'Line2_100MHz': {
         'gnss_line': 2,
+        'type': 'line',
         'desc': 'Line2 100MHz -- GNSS at midpoint, 0.2 m spacing',
     },
     'Line2_50MHz': {
         'gnss_line': 2,
+        'type': 'line',
         'desc': 'Line2 50MHz -- interpolated from 100MHz GNSS, no offset',
     },
     'Line3_50MHz': {
         'gnss_line': 3,
+        'type': 'line',
         'desc': 'Line3 50MHz -- back antenna on mark, 0-120 m, 0.5 m spacing',
     },
     'Line3_100MHz': {
         'gnss_line': 3,
+        'type': 'line',
         'desc': 'Line3 100MHz -- back antenna on mark, section 60-110 m, 0.25 m spacing',
     },
     'Line5_50MHz': {
         'gnss_line': 5,
+        'type': 'line',
         'desc': 'Line5 50MHz -- back antenna on mark, 0-100 m, 0.5 m spacing',
     },
     'Line5_100MHz': {
         'gnss_line': 5,
+        'type': 'line',
         'desc': 'Line5 100MHz -- forward 30->80 m (reversed in GPRFieldVisual), back antenna on mark, 0.25 m spacing',
     },
     'FlowerPetal1_50MHz': {
         'gnss_line': 'FP1',
+        'type': 'flowerpetal',
         'desc': 'FlowerPetal1 50MHz -- back antenna at 0 m, 2.2 m rig, 0.5 m spacing',
     },
     'FlowerPetal2_50MHz': {
         'gnss_line': 'FP2',
+        'type': 'flowerpetal',
         'desc': 'FlowerPetal2 50MHz -- back antenna at 0 m, 2.2 m rig, 0.5 m spacing',
     },
     'FlowerPetal3_50MHz': {
         'gnss_line': 'FP3',
+        'type': 'flowerpetal',
         'desc': 'FlowerPetal3 50MHz -- back antenna at 0 m, 2.2 m rig, 0.5 m spacing',
     },
 }
@@ -253,7 +262,7 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
 
     # build or reuse elevation interpolator for this GNSS line
     line_key = PROFILE_CONFIG[profile_key]['gnss_line']
-    gnss_df  = gnss_fp_df if isinstance(line_key, str) else gnss_lines_df
+    gnss_df  = gnss_fp_df if PROFILE_CONFIG[profile_key]['type'] == 'flowerpetal' else gnss_lines_df
     if line_key not in interp_cache:
         interp_cache[line_key] = build_elevation_interp(gnss_df, line_key)
     elev_fn = interp_cache[line_key]
@@ -294,17 +303,18 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
         return v
 
     # load raw sidecar (instrument header, stitch/patch provenance)
-    raw_stem     = params.get('source_file', '').replace('.npz', '')
-    raw_json_path = STITCH_DIR / (raw_stem.replace('_raw', '') + '_raw.json')
+    source_file = params.get('source_file', '')
     raw_info = None
-    if raw_json_path.exists():
-        with open(str(raw_json_path), encoding='utf-8') as f:
-            raw_info = json.load(f)
+    if source_file:
+        raw_json_path = STITCH_DIR / Path(source_file).with_suffix('.json')
+        if raw_json_path.exists():
+            with open(str(raw_json_path), encoding='utf-8') as f:
+                raw_info = json.load(f)
 
     sidecar = {
         'topo_correction': {
             'profile_key':          profile_key,
-            'gnss_csv':             GNSS_FP_CSV.name if isinstance(line_key, str)
+            'gnss_csv':             GNSS_FP_CSV.name if PROFILE_CONFIG[profile_key]['type'] == 'flowerpetal'
                                     else GNSS_CSV.name,
             'velocity_mns':         v,
             'ref_elev_m':           round(ref_elev, 4),

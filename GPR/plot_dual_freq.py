@@ -25,6 +25,9 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from gpr_constants import V_DEFAULT
+
 # ---- PATHS -------------------------------------------------------------------
 HERE     = Path(__file__).parent
 DATA_GPR = HERE / '../../Data/GPR'
@@ -40,8 +43,7 @@ X_OFFSET_100MHZ = {
     'Line5': 30.0,
 }
 
-V_DEFAULT = 0.13    # m/ns
-CMAP      = 'seismic'
+CMAP = 'seismic'
 # ------------------------------------------------------------------------------
 
 

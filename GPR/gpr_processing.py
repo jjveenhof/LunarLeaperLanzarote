@@ -80,40 +80,28 @@ def apply_processing(data, time_axis, sfreq, params):
     whiten_window = int(params.get('whiten_window', 0))
     if whiten_window > 0:
         from scipy.ndimage import uniform_filter1d
-        try:
-            n_s        = processed.shape[0]
-            spec       = np.fft.rfft(processed, axis=0)
-            amp_smooth = uniform_filter1d(np.abs(spec), size=whiten_window, axis=0)
-            processed  = np.fft.irfft(
-                spec / np.maximum(amp_smooth, 1e-15),
-                n=n_s, axis=0)
-        except Exception as e:
-            print('Spectral whitening failed: {}'.format(e))
+        n_s        = processed.shape[0]
+        spec       = np.fft.rfft(processed, axis=0)
+        amp_smooth = uniform_filter1d(np.abs(spec), size=whiten_window, axis=0)
+        processed  = np.fft.irfft(
+            spec / np.maximum(amp_smooth, 1e-15),
+            n=n_s, axis=0)
 
     # 6. bandpass
-    try:
-        processed = filter_data(
-            processed,
-            (float(params['bandpass_low']), float(params['bandpass_high'])),
-            sfreq, 'bandpass', N=4)
-    except Exception as e:
-        print('Bandpass failed: {}'.format(e))
+    processed = filter_data(
+        processed,
+        (float(params['bandpass_low']), float(params['bandpass_high'])),
+        sfreq, 'bandpass', N=4)
 
     # 7. SVD removal
     n_svd = int(params.get('n_svd', 0))
     if n_svd > 0:
         from gdp.preprocessing.image_processing import remove_svd
-        try:
-            processed, _ = remove_svd(processed, low_s=0, high_s=n_svd)
-        except Exception as e:
-            print('SVD removal failed: {}'.format(e))
+        processed, _ = remove_svd(processed, low_s=0, high_s=n_svd)
 
     # 8. gain
     gain_exp = float(params.get('gain_exponent', 0.0))
     if gain_exp != 0:
-        try:
-            processed, _ = _gain(processed, sfreq, 'linear', exponent=gain_exp)
-        except Exception as e:
-            print('Gain failed: {}'.format(e))
+        processed, _ = _gain(processed, sfreq, 'linear', exponent=gain_exp)
 
     return processed, time_axis_out

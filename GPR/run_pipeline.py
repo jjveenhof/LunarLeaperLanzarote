@@ -30,11 +30,10 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 from pathlib import Path
-from scipy.ndimage import shift as ndshift
 
 sys.path.insert(0, str(Path(__file__).parent))
 import topo_correction as tc
-from gpr_processing import apply_processing as _core_processing
+from gpr_processing import apply_processing
 
 # ---- PATHS -------------------------------------------------------------------
 HERE       = Path(__file__).parent
@@ -42,14 +41,6 @@ STITCH_DIR = HERE / '../../Data/GPR/Stitched'
 PROC_DIR   = HERE / '../../Data/GPR/Processed'
 # TOPO_DIR and FIG_DIR are taken from topo_correction.py
 # ------------------------------------------------------------------------------
-
-
-def apply_processing(data, time_axis, info, params):
-    """Thin wrapper — delegates to gpr_processing.apply_processing."""
-    n_samples   = info['samples']
-    time_window = info['Total_time_window']
-    sfreq       = n_samples / time_window * 1000   # MHz
-    return _core_processing(data, time_axis, sfreq, params)
 
 
 def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
@@ -81,12 +72,22 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
     with open(str(params_json), encoding='utf-8') as f:
         params = json.load(f)
 
-    print('    params: dewow={dewow_window}  tzero={tzero_shift:.2f}  '
-          'bp={bandpass_low:.0f}-{bandpass_high:.0f} MHz  '
-          'gain={gain_exponent:.1f}  v={velocity_mns:.3f} m/ns'.format(**params))
+    print('    dewow={}  tzero={:.2f}  bp={:.0f}-{:.0f}MHz  '
+          'gain={:.1f}  norm={}  whiten={}  svd={}  v={:.3f}m/ns'.format(
+              params['dewow_window'],
+              float(params.get('tzero_shift', 0.0)),
+              float(params['bandpass_low']),
+              float(params['bandpass_high']),
+              float(params.get('gain_exponent', 0.0)),
+              params.get('normalize', False),
+              params.get('whiten_window', 0),
+              params.get('n_svd', 0),
+              float(params['velocity_mns']),
+          ))
 
     # --- step 1: processing ---
-    processed, time_axis_out = apply_processing(data, time_axis, info, params)
+    sfreq = info['samples'] / info['Total_time_window'] * 1000   # MHz
+    processed, time_axis_out = apply_processing(data, time_axis, sfreq, params)
 
     PROC_DIR.mkdir(parents=True, exist_ok=True)
     out_proc = PROC_DIR / (stem + '_processed.npz')
