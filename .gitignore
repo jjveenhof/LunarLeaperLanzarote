@@ -18,3 +18,8 @@ __pycache__/
 # OS clutter
 .DS_Store
 Thumbs.db
+GPR/QandA.md
+.gitignore
+.gitignore
+QGIS/QandA.md
+Grav/QandA.md
