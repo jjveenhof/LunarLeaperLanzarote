@@ -1,9 +1,8 @@
 """
 plot_flowerpetal_3d.py
-3D Plotly visualisation of all FlowerPetal GPR profiles along their actual
-GPS trajectories.
+3D Plotly visualisation of GPR profiles along their actual GPS trajectories.
 
-Each petal is rendered as a coloured amplitude curtain draped on the real
+Each profile is rendered as a coloured amplitude curtain draped on the real
 surface: x,y follow the GPS track, and each trace is positioned at its true
 GNSS elevation with depth hanging straight down (Z = elev - depth).  This
 elevation positioning IS the topographic correction -- it is mathematically
@@ -11,10 +10,15 @@ equivalent to the static datum shift in topo_correction.py, but done by
 placement instead of array-shifting, so it needs no datum, no zero-fill, and
 no cropping, and it preserves the real surface undulation.
 
+The FlowerPetal lines are loops (walked out and back), so each is split at its
+apex into two independently-toggleable limbs.  Line 3 is a straight profile and
+is shown whole; its 50 and 100 MHz versions are both included.
+
 Inputs (no topo step required):
     Data/GPR/Processed/{stem}_processed.npz   (un-shifted processed amplitudes)
     Data/GPR/Processed/{stem}_params.json     (velocity)
-    Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv  (track + elevation)
+    Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv  (petal track + elevation)
+    Data/GNSS/Cleaned/CleanedGNSS_GPR_Lines.csv         (line track + elevation)
 
 Usage:
     python plot_flowerpetal_3d.py
@@ -37,19 +41,35 @@ sys.path.insert(0, str(Path(__file__).parent))
 from gpr_constants import V_DEFAULT
 
 # ---- PATHS -------------------------------------------------------------------
-HERE     = Path(__file__).parent
-PROC_DIR = HERE / '../../Data/GPR/Processed'
-GNSS_FP  = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv'
-OUT_DIR  = HERE / '../../Results/GPR/FlowerPetals3D'
+HERE       = Path(__file__).parent
+PROC_DIR   = HERE / '../../Data/GPR/Processed'
+GNSS_FP    = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv'
+GNSS_LINES = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_Lines.csv'
+OUT_DIR    = HERE / '../../Results/GPR/FlowerPetals3D'
 
-# Back-antenna to rig midpoint offset for 50 MHz rig (metres).
-# Matches the value used in topo_correction.py.
-OFFSET_50MHZ = 1.10
+# Back-antenna to rig midpoint offsets (metres), matching topo_correction.py.
+OFFSET_50MHZ  = 1.10    # 2.2 m rig
+OFFSET_100MHZ = 0.425   # 0.85 m rig
 
-FP_PROFILES = [
-    ('FlowerPetal1_50MHz', 'FP1', 'crimson'),
-    ('FlowerPetal2_50MHz', 'FP2', 'royalblue'),
-    ('FlowerPetal3_50MHz', 'FP3', 'forestgreen'),
+# Profile catalogue.  'offset' maps dist_axis (m from profile start) to the
+# GNSS metre coordinate.  'metre' selects how each GNSS row's metre position is
+# read.  Loops carry a (out, back) colour pair; straight lines a single colour.
+PROFILES = [
+    dict(key='FlowerPetal1_50MHz', label='FP1', source='fp',    gnss_line='FP1',
+         metre='fieldname_tail', offset=OFFSET_50MHZ,        loop=True,
+         colours=('crimson',   'darkred')),
+    dict(key='FlowerPetal2_50MHz', label='FP2', source='fp',    gnss_line='FP2',
+         metre='fieldname_tail', offset=OFFSET_50MHZ,        loop=True,
+         colours=('royalblue', 'navy')),
+    dict(key='FlowerPetal3_50MHz', label='FP3', source='fp',    gnss_line='FP3',
+         metre='fieldname_tail', offset=OFFSET_50MHZ,        loop=True,
+         colours=('limegreen', 'darkgreen'), split_offset_m=-1.0),
+    dict(key='Line3_50MHz',  label='L3 50MHz',  source='lines', gnss_line=3,
+         metre='meter_col',     offset=OFFSET_50MHZ,         loop=False,
+         colours=('darkorange',)),
+    dict(key='Line3_100MHz', label='L3 100MHz', source='lines', gnss_line=3,
+         metre='meter_col',     offset=60.0 + OFFSET_100MHZ, loop=False,
+         colours=('purple',)),
 ]
 # ------------------------------------------------------------------------------
 
@@ -59,11 +79,51 @@ def load_gnss_fp(csv_path):
     return df[df['Line'].isin(['FP1', 'FP2', 'FP3'])].copy()
 
 
-def build_track_interps(gnss_df, line_key):
+def load_edge(csv_path):
+    """Load the pit-rim 'Edge' points, ordered by their EDGE number."""
+    df = pd.read_csv(csv_path)
+    sub = df[df['Line'] == 'Edge'].copy()
+    if sub.empty:
+        return None
+    sub['order'] = sub['FieldName'].str.extract(r'(\d+)$', expand=False).astype(float)
+    sub = sub.sort_values('order')
+    return {
+        'east':  sub['Easting'].values,
+        'north': sub['Northing'].values,
+        'elev':  sub['Elevation'].values,
+    }
+
+
+def load_plumb(csv_path):
+    """Load the 'Plumb' transfer point(s) used to tie the surface to the cave."""
+    df = pd.read_csv(csv_path)
+    sub = df[df['Line'] == 'Plumb'].copy()
+    if sub.empty:
+        return None
+    return {
+        'east':  sub['Easting'].values,
+        'north': sub['Northing'].values,
+        'elev':  sub['Elevation'].values,
+    }
+
+
+def load_gnss_lines(csv_path):
+    df = pd.read_csv(csv_path)
+    return df[df['Line'].notna()].copy()
+
+
+def build_track_interps(gnss_df, line_key, metre_mode):
     """Return (east_fn, north_fn, elev_fn): metre_pos -> UTM / elevation."""
     sub = gnss_df[gnss_df['Line'] == line_key].copy()
-    sub['metre_pos'] = sub['FieldName'].str.extract(r'(\d+)$', expand=False).astype(float)
-    sub = sub.sort_values('metre_pos')
+    if metre_mode == 'fieldname_tail':
+        sub['metre_pos'] = sub['FieldName'].str.extract(r'(\d+)$', expand=False).astype(float)
+    elif metre_mode == 'meter_col':
+        sub['metre_pos'] = pd.to_numeric(sub['Meter'], errors='coerce')
+    else:
+        raise ValueError('Unknown metre mode: ' + metre_mode)
+
+    sub = sub.dropna(subset=['metre_pos']).sort_values('metre_pos')
+    sub = sub.drop_duplicates(subset='metre_pos')   # interp1d needs strictly increasing x
     m = sub['metre_pos'].values
     e = sub['Easting'].values
     n = sub['Northing'].values
@@ -84,9 +144,9 @@ def load_velocity(profile_key):
     return V_DEFAULT
 
 
-def drape_curtain(profile_key, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
+def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
     """
-    Load processed radargram and drape it on the real surface.
+    Load a processed radargram and drape it on the real surface.
 
     Each trace is positioned at its true GNSS elevation, with depth hanging
     straight down: Z[k, i] = elev[i] - depth[k].  This placement is the topo
@@ -94,11 +154,8 @@ def drape_curtain(profile_key, east_fn, north_fn, elev_fn, velocity, gain_exp=0.
 
     gain_exp applies a gdp-style linear gain (travel_time ** exponent) indexed
     from sample 0 (the surface), matching the processing notebook.  0 = no gain.
-
-    Returns dict: X, Y, Z, amp (all shape n_samp x n_tr), name, east, north,
-                  elev, z_top (surface min/max), z_bot.
     """
-    npz_path = PROC_DIR / (profile_key + '_processed.npz')
+    npz_path = PROC_DIR / (prof['key'] + '_processed.npz')
     with np.load(str(npz_path)) as f:
         data      = f['data'].astype(np.float64)        # (n_samp, n_tr)
         dist_axis = f['dist_axis'].astype(np.float64)   # (n_tr,)
@@ -111,8 +168,8 @@ def drape_curtain(profile_key, east_fn, north_fn, elev_fn, velocity, gain_exp=0.
         idx    = np.arange(data.shape[0]) + 1
         data   = data * ((idx / sfreq) ** gain_exp)[:, np.newaxis]
 
-    # Map dist_axis to GNSS metre coordinate (back antenna + midpoint offset)
-    gnss_m = dist_axis + OFFSET_50MHZ
+    # Map dist_axis to GNSS metre coordinate (start offset + midpoint offset)
+    gnss_m = dist_axis + prof['offset']
     east   = east_fn(gnss_m)
     north  = north_fn(gnss_m)
     elev   = elev_fn(gnss_m)
@@ -125,10 +182,15 @@ def drape_curtain(profile_key, east_fn, north_fn, elev_fn, velocity, gain_exp=0.
     Y = np.tile(north[np.newaxis, :], (n_samp, 1))
     Z = elev[np.newaxis, :] - depth[:, np.newaxis]        # (n_samp, n_tr)
 
+    dtrace = float(dist_axis[1] - dist_axis[0]) if n_tr > 1 else 1.0
+
     return {
         'X': X, 'Y': Y, 'Z': Z,
         'amp': data,
-        'name': profile_key,
+        'name': prof['key'], 'label': prof['label'],
+        'colours': prof['colours'], 'loop': prof['loop'],
+        'split_offset_m': prof.get('split_offset_m', 0.0),
+        'dtrace': dtrace,
         'east': east, 'north': north, 'elev': elev,
         'z_top': float(elev.max()),
         'z_bot': float(Z.min()),
@@ -136,64 +198,73 @@ def drape_curtain(profile_key, east_fn, north_fn, elev_fn, velocity, gain_exp=0.
     }
 
 
-def split_limbs(c):
+def split_panels(c):
     """
-    Split a petal-loop curtain into its two limbs at the apex (the trace
-    farthest from the start), so each limb can be toggled independently.
+    Turn a curtain into one or two display panels.
 
-    Returns a list of two panel dicts, each carrying sliced X/Y/Z/amp/east/
-    north/elev plus a legend id, label and line dash.
+    A loop (FlowerPetal) is split at its apex (the trace farthest from the
+    start) into 'out' and 'back' limbs, each with its own colour and legend
+    toggle.  The apex trace is shared by both limbs so there is no seam.
+    A straight line is returned as a single panel.
     """
+    def panel(sl, colour, label, legend_id):
+        return {
+            'X': c['X'][:, sl], 'Y': c['Y'][:, sl], 'Z': c['Z'][:, sl],
+            'amp': c['amp'][:, sl],
+            'east': c['east'][sl], 'north': c['north'][sl], 'elev': c['elev'][sl],
+            'colour': colour, 'label': label, 'legend_id': legend_id,
+        }
+
+    if not c['loop']:
+        return [panel(slice(None), c['colours'][0], c['label'], c['name'])]
+
     east, north = c['east'], c['north']
     d2   = (east - east[0]) ** 2 + (north - north[0]) ** 2
     apex = int(np.argmax(d2))
-    # Overlap the apex trace in both limbs so there is no seam in the surface.
-    parts = [('out', slice(0, apex + 1), 'solid'),
-             ('back', slice(apex, None), 'dash')]
+    # Optional nudge of the split point along the track (metres -> traces)
+    apex += int(round(c['split_offset_m'] / c['dtrace']))
+    apex  = max(1, min(apex, len(east) - 2))
+    out_sl, back_sl = slice(0, apex + 1), slice(apex, None)
 
-    panels = []
-    for label, sl, dash in parts:
-        if c['X'][:, sl].shape[1] < 2:
-            continue   # degenerate limb (apex at an endpoint) -- keep as one
-        panels.append({
-            'X': c['X'][:, sl], 'Y': c['Y'][:, sl], 'Z': c['Z'][:, sl],
-            'amp': c['amp'][:, sl],
-            'east': east[sl], 'north': north[sl], 'elev': c['elev'][sl],
-            'colour': c['colour'],
-            'legend_id': '{}_{}'.format(c['name'], label),
-            'label': '{} {}'.format(c['short'], label),
-            'dash': dash,
-        })
-    if not panels:   # fell through (single-trace edge case): emit whole curtain
-        panels.append({
-            'X': c['X'], 'Y': c['Y'], 'Z': c['Z'], 'amp': c['amp'],
-            'east': east, 'north': north, 'elev': c['elev'],
-            'colour': c['colour'], 'legend_id': c['name'],
-            'label': c['short'], 'dash': 'solid',
-        })
-    return panels
+    if c['X'][:, out_sl].shape[1] < 2 or c['X'][:, back_sl].shape[1] < 2:
+        return [panel(slice(None), c['colours'][0], c['label'], c['name'])]
+
+    return [
+        panel(out_sl,  c['colours'][0], c['label'] + ' out',
+              c['name'] + '_out'),
+        panel(back_sl, c['colours'][1], c['label'] + ' back',
+              c['name'] + '_back'),
+    ]
 
 
-def make_figure(curtains, clip_pct):
+def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
     # Shared amplitude array for colour scaling
     all_amp = np.concatenate([c['amp'].ravel() for c in curtains])
     vmax = float(np.percentile(np.abs(all_amp), clip_pct))
 
-    # Split every petal loop into its two limbs (independent legend toggles)
+    # Split loops into limbs; straight lines stay whole
     panels = []
     for c in curtains:
-        panels.extend(split_limbs(c))
+        panels.extend(split_panels(c))
 
-    # Data extents for aspect ratio and locked axis ranges
-    all_east  = np.concatenate([c['east']  for c in curtains])
-    all_north = np.concatenate([c['north'] for c in curtains])
+    # Data extents (include the edge so the rim stays in view)
+    east_parts  = [c['east']  for c in curtains]
+    north_parts = [c['north'] for c in curtains]
+    z_tops = [c['z_top'] for c in curtains]
+    z_bots = [c['z_bot'] for c in curtains]
+    for feat in (edge, plumb):
+        if feat is not None:
+            east_parts.append(feat['east'])
+            north_parts.append(feat['north'])
+            z_tops.append(float(feat['elev'].max()))
+            z_bots.append(float(feat['elev'].min()))
+    all_east  = np.concatenate(east_parts)
+    all_north = np.concatenate(north_parts)
     dx = float(all_east.max()  - all_east.min())
     dy = float(all_north.max() - all_north.min())
-    xy_range = max(dx, dy, 1.0)
-    z_bot    = min(c['z_bot'] for c in curtains)
-    z_top    = max(c['z_top'] for c in curtains)
+    z_bot    = min(z_bots)
+    z_top    = max(z_tops)
     dz       = max(z_top - z_bot, 1.0)
-    z_ratio  = round(dz / xy_range, 2)
 
     # Padded fixed ranges -- toggling traces will NOT rescale the scene
     x_pad = max(dx * 0.05, 1.0)
@@ -202,6 +273,15 @@ def make_figure(curtains, clip_pct):
     x_range = [float(all_east.min())  - x_pad, float(all_east.max())  + x_pad]
     y_range = [float(all_north.min()) - y_pad, float(all_north.max()) + y_pad]
     z_range = [z_bot - z_pad, z_top + z_pad]
+
+    # True 1:1:1 scale: aspect ratio proportional to the displayed ranges, so a
+    # metre of Easting, Northing and Elevation all render the same length.
+    # vexag multiplies only the vertical (1.0 = no exaggeration).
+    xs = x_range[1] - x_range[0]
+    ys = y_range[1] - y_range[0]
+    zs = z_range[1] - z_range[0]
+    amax = max(xs, ys, zs)
+    aspect = dict(x=xs / amax, y=ys / amax, z=(zs / amax) * vexag)
 
     fig = go.Figure()
 
@@ -227,14 +307,37 @@ def make_figure(curtains, clip_pct):
             lightposition=dict(x=0, y=0, z=1e5),
         ))
 
-    # Track lines: one per limb, drawn along the true surface elevation
+    # Track lines: one per panel, drawn along the true surface elevation
     for p in panels:
         fig.add_trace(go.Scatter3d(
             x=p['east'], y=p['north'], z=p['elev'],
             mode='lines',
-            line=dict(color=p['colour'], width=4, dash=p['dash']),
+            line=dict(color=p['colour'], width=5),
             name=p['label'],
             legendgroup=p['legend_id'],
+            showlegend=True,
+        ))
+
+    # Pit rim: the surveyed edge where the petals terminate
+    if edge is not None:
+        fig.add_trace(go.Scatter3d(
+            x=edge['east'], y=edge['north'], z=edge['elev'],
+            mode='lines+markers',
+            line=dict(color='black', width=4),
+            marker=dict(color='black', size=3),
+            name='Pit edge',
+            legendgroup='pit_edge',
+            showlegend=True,
+        ))
+
+    # Plumb transfer point: surface-to-cave tie point
+    if plumb is not None:
+        fig.add_trace(go.Scatter3d(
+            x=plumb['east'], y=plumb['north'], z=plumb['elev'],
+            mode='markers',
+            marker=dict(color='magenta', size=6, symbol='diamond'),
+            name='Plumb point',
+            legendgroup='plumb',
             showlegend=True,
         ))
 
@@ -252,13 +355,13 @@ def make_figure(curtains, clip_pct):
         ))
 
     fig.update_layout(
-        title='FlowerPetal GPR profiles -- draped on GNSS surface',
+        title='GPR profiles -- draped on GNSS surface',
         scene=dict(
             xaxis=dict(title='Easting (m, EPSG:4083)',  range=x_range),
             yaxis=dict(title='Northing (m, EPSG:4083)', range=y_range),
             zaxis=dict(title='Elevation (m asl)',        range=z_range),
             aspectmode='manual',
-            aspectratio=dict(x=1.0, y=1.0, z=z_ratio),
+            aspectratio=aspect,
         ),
         updatemenus=[dict(
             type='buttons',
@@ -288,7 +391,7 @@ def make_figure(curtains, clip_pct):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='3D plot of FlowerPetal GPR profiles draped on the GNSS surface.'
+        description='3D plot of GPR profiles draped on the GNSS surface.'
     )
     parser.add_argument('--velocity', type=float, default=None,
                         help='Override wave velocity in m/ns (default: per-profile params)')
@@ -296,36 +399,63 @@ def main():
                         help='Linear gain exponent, indexed from surface (default: 0 = off)')
     parser.add_argument('--clip', type=float, default=99.0,
                         help='Amplitude clip percentile for initial colour scale (default: 99)')
+    parser.add_argument('--vexag', type=float, default=1.0,
+                        help='Vertical exaggeration factor (default: 1.0 = true 1:1:1 scale)')
+    parser.add_argument('--no-equalize', dest='equalize', action='store_false',
+                        help='Disable per-profile brightness equalisation (show raw shared scale)')
+    parser.add_argument('--no-edge', dest='edge', action='store_false',
+                        help='Do not draw the surveyed pit edge')
+    parser.add_argument('--no-plumb', dest='plumb', action='store_false',
+                        help='Do not draw the plumb transfer point')
+    parser.set_defaults(equalize=True, edge=True, plumb=True)
     parser.add_argument('--out', type=str, default=None,
                         help='Output HTML path (default: auto)')
     args = parser.parse_args()
 
-    if not GNSS_FP.exists():
-        sys.exit('GNSS CSV not found: ' + str(GNSS_FP.resolve()))
+    for path in (GNSS_FP, GNSS_LINES):
+        if not path.exists():
+            sys.exit('GNSS CSV not found: ' + str(path.resolve()))
 
-    gnss_df = load_gnss_fp(GNSS_FP)
-    print('Loaded {} FlowerPetal GNSS points'.format(len(gnss_df)))
+    gnss = {
+        'fp':    load_gnss_fp(GNSS_FP),
+        'lines': load_gnss_lines(GNSS_LINES),
+    }
+    print('Loaded {} petal GNSS points, {} line GNSS points'.format(
+        len(gnss['fp']), len(gnss['lines'])))
 
     curtains = []
-    for profile_key, line_key, colour in FP_PROFILES:
-        npz_path = PROC_DIR / (profile_key + '_processed.npz')
+    for prof in PROFILES:
+        npz_path = PROC_DIR / (prof['key'] + '_processed.npz')
         if not npz_path.exists():
-            print('  [skip] {} -- processed NPZ not found'.format(profile_key))
+            print('  [skip] {} -- processed NPZ not found'.format(prof['key']))
             continue
-        east_fn, north_fn, elev_fn = build_track_interps(gnss_df, line_key)
-        velocity = args.velocity if args.velocity else load_velocity(profile_key)
-        c = drape_curtain(profile_key, east_fn, north_fn, elev_fn,
+        east_fn, north_fn, elev_fn = build_track_interps(
+            gnss[prof['source']], prof['gnss_line'], prof['metre'])
+        velocity = args.velocity if args.velocity else load_velocity(prof['key'])
+        c = drape_curtain(prof, east_fn, north_fn, elev_fn,
                           velocity, gain_exp=args.gain)
-        c['colour'] = colour
-        c['short']  = line_key
+        # Per-profile brightness equalisation: scale to a common 99th-percentile
+        # so different max-time crops / frequencies render at comparable
+        # brightness on the shared colour scale (the 50 MHz set is already
+        # RMS-equal, so this mainly lifts the shorter 100 MHz record).
+        if args.equalize:
+            scale = float(np.percentile(np.abs(c['amp']), 99)) or 1.0
+            c['amp'] = c['amp'] / scale
         curtains.append(c)
         print('  {} -- {} traces, surface {:.1f} m, base {:.1f} m asl'.format(
-            profile_key, c['n_traces'], c['z_top'], c['z_bot']))
+            prof['key'], c['n_traces'], c['z_top'], c['z_bot']))
 
     if not curtains:
-        sys.exit('No FlowerPetal processed NPZ files found in {}'.format(PROC_DIR))
+        sys.exit('No processed NPZ files found in {}'.format(PROC_DIR))
 
-    fig = make_figure(curtains, args.clip)
+    edge = load_edge(GNSS_FP) if args.edge else None
+    if edge is not None:
+        print('  pit edge -- {} points'.format(len(edge['east'])))
+    plumb = load_plumb(GNSS_FP) if args.plumb else None
+    if plumb is not None:
+        print('  plumb point -- {} point(s)'.format(len(plumb['east'])))
+
+    fig = make_figure(curtains, args.clip, vexag=args.vexag, edge=edge, plumb=plumb)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = Path(args.out) if args.out else OUT_DIR / 'flowerpetal_3d.html'
