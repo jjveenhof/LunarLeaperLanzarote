@@ -26,7 +26,9 @@ Processing order inside `apply_processing` (gpr_processing.py):
 6. **Bandpass** -- 4th-order Butterworth. `bandpass_low` / `bandpass_high` (MHz).
 7. **SVD removal** -- removes first N singular vectors (horizontal coherent noise).
    `n_svd` (int); 0 = off. Interacts with whitening -- use both with care.
-8. **Gain** -- linear time-varying gain. `gain_exponent` (float); 0 = off.
+
+Gain is NOT a processing step -- it is display-only (`display_gain`), never baked
+into saved NPZs. See Conventions.
 
 Batch processing (all profiles with saved params):
     python run_pipeline.py
@@ -44,6 +46,8 @@ apply_processing, saves `_processed.npz`, then calls topo_correction.py.
 | `run_pipeline.py` | Batch re-process all profiles using saved `_params.json` |
 | `topo_correction.py` | Static topo correction using GNSS; reads `_processed.npz` |
 | `plot_dual_freq.py` | Side-by-side comparison of 50 MHz vs 100 MHz for the same line |
+| `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 draped on GNSS surface (reads `_processed.npz`, NOT topo) |
+| `gpr_constants.py` | Shared constants (`V_DEFAULT` wave velocity) |
 | `GPRFieldVisual.ipynb` | Field visualisation notebook (separate from processing) |
 | `tests/test_normalisation.py` | Verifies tracewise-rms-window window behaviour with synthetic data |
 | `tests/test_topo_correction.py` | Tests for topo_correction.py |
@@ -66,6 +70,10 @@ Scripts add this to sys.path at runtime; do not move it.
 - Processing params are stored as JSON (`_params.json`) alongside processed data.
   The notebook writes them; run_pipeline.py reads them. This is the canonical way
   to reproduce a result.
+- Gain is display-only: NPZs store raw, un-gained amplitudes; `gain_exponent` in
+  params records the intended display gain. Applied at render via `display_gain()`:
+  notebook view slider, `plot_dual_freq.py --gain`, topo PNG (auto from params),
+  and `plot_flowerpetal_3d.py` interactive gain buttons (`--gain` sets the initial one).
 - Normalisation uses `tracewise-rms-window` (not `tracewise-rms`). The plain
   `tracewise-rms` type ignores the window parameter entirely -- confirmed by
   reading gdp source and a passing unit test.
@@ -77,17 +85,16 @@ Scripts add this to sys.path at runtime; do not move it.
 - Widget layout in GPRProcessing.ipynb: two-column HBox (pre-processing left,
   filter/gain right) to keep controls compact alongside plots.
 - Colorbar in notebook radargram: `len=0.30, y=0.84` -- sized to row 1 only.
+- `plot_flowerpetal_3d.py` drapes each trace at its GNSS elevation (Z = elev - depth).
+  This positioning IS the topo correction -- equivalent to topo_correction.py's static
+  shift but it keeps real surface relief, so it uses `_processed.npz`, not topo data.
 
 ## Current Focus
 
-Interactive processing notebook (GPRProcessing.ipynb) is the active work item.
-Core processing pipeline is stable. Next steps:
+Processing pipeline and the draped 3D viz (`plot_flowerpetal_3d.py`) are stable and
+on consistent conventions. Active work: preparing the La Corona LiDAR cave geometry
+to import into the 3D plot alongside the GPR curtains.
 
-- Tune processing parameters for each line, save `_params.json` per profile.
-- Run `run_pipeline.py` once params are finalised to batch-produce processed + topo NPZs.
-- Investigate absolute signal strength differences between lines/frequencies
-  (normalised amplitude spectrum hides absolute levels -- compare raw RMS or
-  unnormalised mean spectra to assess coupling quality per line).
 - Line 2 100 MHz has spectral notches at ~75 and ~160 MHz (hardware artifact from
   pulsEKKO antenna housing geometry, not geology). No processing fix available --
   those frequency bins are dead. Note this in any results writeup.

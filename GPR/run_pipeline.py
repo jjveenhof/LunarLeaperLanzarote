@@ -12,7 +12,8 @@ Prerequisites:
 
 Steps per profile:
     1. Load  Data/GPR/Stitched/{stem}_raw.npz  +  .json sidecar
-    2. Apply processing (dewow, time-zero, bandpass, gain) from saved params
+    2. Apply processing (dewow, time-zero, bandpass, ...) from saved params
+       (gain is display-only and is NOT baked into the saved NPZ)
     3. Save  Data/GPR/Processed/{stem}_processed.npz  (overwrites previous)
     4. Apply topographic correction using GNSS data
     5. Save  Data/GPR/Topo/{stem}_topo.npz
@@ -73,12 +74,11 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
         params = json.load(f)
 
     print('    dewow={}  tzero={:.2f}  bp={:.0f}-{:.0f}MHz  '
-          'gain={:.1f}  norm={}  whiten={}  svd={}  v={:.3f}m/ns'.format(
+          'norm={}  whiten={}  svd={}  v={:.3f}m/ns'.format(
               params['dewow_window'],
               float(params.get('tzero_shift', 0.0)),
               float(params['bandpass_low']),
               float(params['bandpass_high']),
-              float(params.get('gain_exponent', 0.0)),
               params.get('normalize', False),
               params.get('whiten_window', 0),
               params.get('n_svd', 0),

@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gpr_constants import V_DEFAULT
+from gpr_processing import display_gain
 
 # ---- PATHS -------------------------------------------------------------------
 HERE     = Path(__file__).parent
@@ -80,7 +81,7 @@ def load_npz(path):
     return data, dist_axis, time_axis
 
 
-def make_figure(line, stage_override, velocity, clip_pct, save_path):
+def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=0.0):
     # --- find files ---
     if stage_override:
         p50  = find_npz(line, '50MHz',  stage_override)
@@ -103,6 +104,13 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path):
 
     d50,  x50,  t50  = load_npz(p50)
     d100, x100, t100 = load_npz(p100)
+
+    # --- display gain (not baked into the NPZ; applied here only) ---
+    if gain_exp and gain_exp > 0:
+        sfreq50  = 1000.0 / float(t50[1]  - t50[0])
+        sfreq100 = 1000.0 / float(t100[1] - t100[0])
+        d50  = display_gain(d50,  sfreq50,  gain_exp)
+        d100 = display_gain(d100, sfreq100, gain_exp)
 
     # --- depth axes ---
     z50  = t50  * velocity / 2.0   # one-way depth (m)
@@ -223,6 +231,8 @@ def main():
                         help='Wave velocity in m/ns (default: {})'.format(V_DEFAULT))
     parser.add_argument('--clip', type=float, default=98.0,
                         help='Amplitude clip percentile (default: 98)')
+    parser.add_argument('--gain', type=float, default=0.0,
+                        help='Display gain exponent, applied at render only (default: 0 = off)')
     parser.add_argument('--out', type=str, default=None,
                         help='Output PNG path (default: auto)')
     args = parser.parse_args()
@@ -230,7 +240,8 @@ def main():
     lines    = [args.line] if args.line else ['Line2', 'Line3', 'Line5']
     out_path = Path(args.out) if args.out else None
     for line in lines:
-        make_figure(line, args.stage, args.velocity, args.clip, out_path)
+        make_figure(line, args.stage, args.velocity, args.clip, out_path,
+                    gain_exp=args.gain)
 
 
 if __name__ == '__main__':

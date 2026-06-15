@@ -14,6 +14,10 @@ The FlowerPetal lines are loops (walked out and back), so each is split at its
 apex into two independently-toggleable limbs.  Line 3 is a straight profile and
 is shown whole; its 50 and 100 MHz versions are both included.
 
+Gain and clip are interactive button rows in the HTML.  Gain is display-only,
+precomputed for a fixed set of exponents (saved NPZs stay un-gained); clip just
+restyles the colour range.
+
 Inputs (no topo step required):
     Data/GPR/Processed/{stem}_processed.npz   (un-shifted processed amplitudes)
     Data/GPR/Processed/{stem}_params.json     (velocity)
@@ -22,8 +26,8 @@ Inputs (no topo step required):
 
 Usage:
     python plot_flowerpetal_3d.py
+    python plot_flowerpetal_3d.py --gain 3.0      # initial active gain button
     python plot_flowerpetal_3d.py --velocity 0.11
-    python plot_flowerpetal_3d.py --gain 4.0
     python plot_flowerpetal_3d.py --clip 99
     python plot_flowerpetal_3d.py --out my_figure.html
 """
@@ -39,6 +43,7 @@ import plotly.graph_objects as go
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gpr_constants import V_DEFAULT
+from gpr_processing import display_gain
 
 # ---- PATHS -------------------------------------------------------------------
 HERE       = Path(__file__).parent
@@ -50,6 +55,9 @@ OUT_DIR    = HERE / '../../Results/GPR/FlowerPetals3D'
 # Back-antenna to rig midpoint offsets (metres), matching topo_correction.py.
 OFFSET_50MHZ  = 1.10    # 2.2 m rig
 OFFSET_100MHZ = 0.425   # 0.85 m rig
+
+# Display-gain exponents offered as interactive buttons in the HTML.
+GAIN_PRESETS = [0.0, 1.0, 2.0, 2.5, 3.0, 3.5, 4.0]
 
 # Profile catalogue.  'offset' maps dist_axis (m from profile start) to the
 # GNSS metre coordinate.  'metre' selects how each GNSS row's metre position is
@@ -144,7 +152,7 @@ def load_velocity(profile_key):
     return V_DEFAULT
 
 
-def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
+def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity):
     """
     Load a processed radargram and drape it on the real surface.
 
@@ -152,8 +160,8 @@ def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
     straight down: Z[k, i] = elev[i] - depth[k].  This placement is the topo
     correction -- no datum, no static shift, no crop.
 
-    gain_exp applies a gdp-style linear gain (travel_time ** exponent) indexed
-    from sample 0 (the surface), matching the processing notebook.  0 = no gain.
+    Returns raw (un-gained) amplitudes plus sfreq; gain is applied per preset
+    at figure-build time so it can be switched interactively in the HTML.
     """
     npz_path = PROC_DIR / (prof['key'] + '_processed.npz')
     with np.load(str(npz_path)) as f:
@@ -161,12 +169,7 @@ def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
         dist_axis = f['dist_axis'].astype(np.float64)   # (n_tr,)
         time_axis = f['time_axis'].astype(np.float64)   # (n_samp,)
 
-    # Optional gain, indexed from sample 0 -- identical to the notebook's gain.
-    if gain_exp > 0:
-        dt_ns  = float(time_axis[1] - time_axis[0])     # ns per sample
-        sfreq  = 1000.0 / dt_ns                          # MHz (samples per us)
-        idx    = np.arange(data.shape[0]) + 1
-        data   = data * ((idx / sfreq) ** gain_exp)[:, np.newaxis]
+    sfreq = 1000.0 / float(time_axis[1] - time_axis[0])  # MHz (samples per us)
 
     # Map dist_axis to GNSS metre coordinate (start offset + midpoint offset)
     gnss_m = dist_axis + prof['offset']
@@ -186,7 +189,8 @@ def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
 
     return {
         'X': X, 'Y': Y, 'Z': Z,
-        'amp': data,
+        'amp': data,          # raw, un-gained; gain applied per preset in make_figure
+        'sfreq': sfreq,
         'name': prof['key'], 'label': prof['label'],
         'colours': prof['colours'], 'loop': prof['loop'],
         'split_offset_m': prof.get('split_offset_m', 0.0),
@@ -198,21 +202,22 @@ def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity, gain_exp=0.0):
     }
 
 
-def split_panels(c):
+def split_panels(c, idx):
     """
-    Turn a curtain into one or two display panels.
+    Turn a curtain into one or two display panels (geometry only).
 
     A loop (FlowerPetal) is split at its apex (the trace farthest from the
     start) into 'out' and 'back' limbs, each with its own colour and legend
-    toggle.  The apex trace is shared by both limbs so there is no seam.
-    A straight line is returned as a single panel.
+    toggle.  A straight line is returned as a single panel.  Each panel carries
+    the parent curtain index and its trace slice so the per-gain surfacecolor
+    can be sliced out later.
     """
     def panel(sl, colour, label, legend_id):
         return {
             'X': c['X'][:, sl], 'Y': c['Y'][:, sl], 'Z': c['Z'][:, sl],
-            'amp': c['amp'][:, sl],
             'east': c['east'][sl], 'north': c['north'][sl], 'elev': c['elev'][sl],
             'colour': colour, 'label': label, 'legend_id': legend_id,
+            'curtain_idx': idx, 'sl': sl,
         }
 
     if not c['loop']:
@@ -221,8 +226,7 @@ def split_panels(c):
     east, north = c['east'], c['north']
     d2   = (east - east[0]) ** 2 + (north - north[0]) ** 2
     apex = int(np.argmax(d2))
-    # Optional nudge of the split point along the track (metres -> traces)
-    apex += int(round(c['split_offset_m'] / c['dtrace']))
+    apex += int(round(c['split_offset_m'] / c['dtrace']))   # optional nudge (m -> traces)
     apex  = max(1, min(apex, len(east) - 2))
     out_sl, back_sl = slice(0, apex + 1), slice(apex, None)
 
@@ -230,24 +234,42 @@ def split_panels(c):
         return [panel(slice(None), c['colours'][0], c['label'], c['name'])]
 
     return [
-        panel(out_sl,  c['colours'][0], c['label'] + ' out',
-              c['name'] + '_out'),
-        panel(back_sl, c['colours'][1], c['label'] + ' back',
-              c['name'] + '_back'),
+        panel(out_sl,  c['colours'][0], c['label'] + ' out',  c['name'] + '_out'),
+        panel(back_sl, c['colours'][1], c['label'] + ' back', c['name'] + '_back'),
     ]
 
 
-def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
-    # Shared amplitude array for colour scaling
-    all_amp = np.concatenate([c['amp'].ravel() for c in curtains])
-    vmax = float(np.percentile(np.abs(all_amp), clip_pct))
-
-    # Split loops into limbs; straight lines stay whole
+def make_figure(curtains, clip_pct, gain_presets, default_gain,
+                vexag=1.0, edge=None, plumb=None, equalize=True):
+    # Geometry panels (split loops into limbs; straight lines stay whole)
     panels = []
-    for c in curtains:
-        panels.extend(split_panels(c))
+    for i, c in enumerate(curtains):
+        panels.extend(split_panels(c, i))
+    n_surfs = len(panels)
 
-    # Data extents (include the edge so the rim stays in view)
+    # Per-gain equalised amplitudes: eq[g] is a list (one 2D array per curtain).
+    # Each profile is scaled to a common 99th percentile so different max-time
+    # crops / frequencies render at comparable brightness on the shared scale.
+    eq = {}
+    for g in gain_presets:
+        arrs = []
+        for c in curtains:
+            gained = display_gain(c['amp'], c['sfreq'], g)
+            if equalize:
+                fac = float(np.percentile(np.abs(gained), 99)) or 1.0
+                gained = gained / fac
+            arrs.append(gained)
+        eq[g] = arrs
+
+    def panel_surf(g):
+        """Surfacecolor arrays for every panel at gain exponent g (trace order)."""
+        return [eq[g][p['curtain_idx']][:, p['sl']] for p in panels]
+
+    surf0   = panel_surf(default_gain)
+    all_amp = np.concatenate([a.ravel() for a in surf0])
+    vmax    = float(np.percentile(np.abs(all_amp), clip_pct))
+
+    # Data extents (include the edge/plumb so they stay in view)
     east_parts  = [c['east']  for c in curtains]
     north_parts = [c['north'] for c in curtains]
     z_tops = [c['z_top'] for c in curtains]
@@ -262,9 +284,9 @@ def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
     all_north = np.concatenate(north_parts)
     dx = float(all_east.max()  - all_east.min())
     dy = float(all_north.max() - all_north.min())
-    z_bot    = min(z_bots)
-    z_top    = max(z_tops)
-    dz       = max(z_top - z_bot, 1.0)
+    z_bot = min(z_bots)
+    z_top = max(z_tops)
+    dz    = max(z_top - z_bot, 1.0)
 
     # Padded fixed ranges -- toggling traces will NOT rescale the scene
     x_pad = max(dx * 0.05, 1.0)
@@ -274,8 +296,7 @@ def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
     y_range = [float(all_north.min()) - y_pad, float(all_north.max()) + y_pad]
     z_range = [z_bot - z_pad, z_top + z_pad]
 
-    # True 1:1:1 scale: aspect ratio proportional to the displayed ranges, so a
-    # metre of Easting, Northing and Elevation all render the same length.
+    # True 1:1:1 scale: aspect ratio proportional to the displayed ranges.
     # vexag multiplies only the vertical (1.0 = no exaggeration).
     xs = x_range[1] - x_range[0]
     ys = y_range[1] - y_range[0]
@@ -285,12 +306,11 @@ def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
 
     fig = go.Figure()
 
-    n_surfs = len(panels)
     for i, p in enumerate(panels):
         show_cb = (i == 0)
         fig.add_trace(go.Surface(
             x=p['X'], y=p['Y'], z=p['Z'],
-            surfacecolor=p['amp'],
+            surfacecolor=surf0[i],
             colorscale='RdBu_r',
             cmin=-vmax, cmax=vmax,
             showscale=show_cb,
@@ -341,8 +361,16 @@ def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
             showlegend=True,
         ))
 
-    # Clip preset buttons (updates cmin/cmax on all surface traces)
-    surf_idx     = list(range(n_surfs))
+    surf_idx = list(range(n_surfs))
+
+    # Gain buttons: swap the precomputed surfacecolor arrays for all surfaces
+    gain_buttons = [
+        dict(label='{:.1f}'.format(g), method='restyle',
+             args=[{'surfacecolor': panel_surf(g)}, surf_idx])
+        for g in gain_presets
+    ]
+
+    # Clip buttons: restyle the colour range (computed at the default gain)
     clip_presets = [90, 95, 98, 99, 99.5]
     clip_buttons = []
     for cp in clip_presets:
@@ -355,7 +383,8 @@ def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
         ))
 
     fig.update_layout(
-        title='GPR profiles -- draped on GNSS surface',
+        title=dict(text='GPR profiles -- draped on GNSS surface',
+                   x=0.5, xanchor='center', y=0.98, yanchor='top'),
         scene=dict(
             xaxis=dict(title='Easting (m, EPSG:4083)',  range=x_range),
             yaxis=dict(title='Northing (m, EPSG:4083)', range=y_range),
@@ -363,24 +392,26 @@ def make_figure(curtains, clip_pct, vexag=1.0, edge=None, plumb=None):
             aspectmode='manual',
             aspectratio=aspect,
         ),
-        updatemenus=[dict(
-            type='buttons',
-            direction='left',
-            buttons=clip_buttons,
-            x=0.0, xanchor='left',
-            y=1.07, yanchor='top',
-            showactive=True,
-            bgcolor='white',
-            bordercolor='lightgray',
-        )],
-        annotations=[dict(
-            text='Clip:', showarrow=False,
-            x=0.0, xref='paper', xanchor='right',
-            y=1.07, yref='paper', yanchor='top',
-            font=dict(size=12),
-        )],
+        updatemenus=[
+            dict(type='buttons', direction='left', buttons=gain_buttons,
+                 x=0.0, xanchor='left', y=-0.04, yanchor='top',
+                 active=gain_presets.index(default_gain),
+                 showactive=True, bgcolor='white', bordercolor='lightgray'),
+            dict(type='buttons', direction='left', buttons=clip_buttons,
+                 x=0.0, xanchor='left', y=-0.13, yanchor='top',
+                 active=clip_presets.index(99) if 99 in clip_presets else 0,
+                 showactive=True, bgcolor='white', bordercolor='lightgray'),
+        ],
+        annotations=[
+            dict(text='Gain:', showarrow=False,
+                 x=0.0, xref='paper', xanchor='right',
+                 y=-0.04, yref='paper', yanchor='top', font=dict(size=12)),
+            dict(text='Clip:', showarrow=False,
+                 x=0.0, xref='paper', xanchor='right',
+                 y=-0.13, yref='paper', yanchor='top', font=dict(size=12)),
+        ],
         legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.7)'),
-        margin=dict(l=0, r=80, t=60, b=0),
+        margin=dict(l=0, r=80, t=60, b=95),
         height=750,
         scene_camera=dict(
             eye=dict(x=1.4, y=1.4, z=0.6),
@@ -396,7 +427,7 @@ def main():
     parser.add_argument('--velocity', type=float, default=None,
                         help='Override wave velocity in m/ns (default: per-profile params)')
     parser.add_argument('--gain', type=float, default=0.0,
-                        help='Linear gain exponent, indexed from surface (default: 0 = off)')
+                        help='Initial active gain preset (snapped to the nearest button)')
     parser.add_argument('--clip', type=float, default=99.0,
                         help='Amplitude clip percentile for initial colour scale (default: 99)')
     parser.add_argument('--vexag', type=float, default=1.0,
@@ -432,21 +463,16 @@ def main():
         east_fn, north_fn, elev_fn = build_track_interps(
             gnss[prof['source']], prof['gnss_line'], prof['metre'])
         velocity = args.velocity if args.velocity else load_velocity(prof['key'])
-        c = drape_curtain(prof, east_fn, north_fn, elev_fn,
-                          velocity, gain_exp=args.gain)
-        # Per-profile brightness equalisation: scale to a common 99th-percentile
-        # so different max-time crops / frequencies render at comparable
-        # brightness on the shared colour scale (the 50 MHz set is already
-        # RMS-equal, so this mainly lifts the shorter 100 MHz record).
-        if args.equalize:
-            scale = float(np.percentile(np.abs(c['amp']), 99)) or 1.0
-            c['amp'] = c['amp'] / scale
+        c = drape_curtain(prof, east_fn, north_fn, elev_fn, velocity)
         curtains.append(c)
         print('  {} -- {} traces, surface {:.1f} m, base {:.1f} m asl'.format(
             prof['key'], c['n_traces'], c['z_top'], c['z_bot']))
 
     if not curtains:
-        sys.exit('No processed NPZ files found in {}'.format(PROC_DIR))
+        sys.exit('No FlowerPetal processed NPZ files found in {}'.format(PROC_DIR))
+
+    # Snap the requested initial gain to the nearest available preset button
+    default_gain = min(GAIN_PRESETS, key=lambda g: abs(g - args.gain))
 
     edge = load_edge(GNSS_FP) if args.edge else None
     if edge is not None:
@@ -455,12 +481,15 @@ def main():
     if plumb is not None:
         print('  plumb point -- {} point(s)'.format(len(plumb['east'])))
 
-    fig = make_figure(curtains, args.clip, vexag=args.vexag, edge=edge, plumb=plumb)
+    fig = make_figure(curtains, args.clip, GAIN_PRESETS, default_gain,
+                      vexag=args.vexag, edge=edge, plumb=plumb,
+                      equalize=args.equalize)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = Path(args.out) if args.out else OUT_DIR / 'flowerpetal_3d.html'
     fig.write_html(str(out_path))
-    print('Saved: {}'.format(out_path.resolve()))
+    print('Saved: {}  (gain buttons {}, active {})'.format(
+        out_path.resolve(), GAIN_PRESETS, default_gain))
 
 
 if __name__ == '__main__':

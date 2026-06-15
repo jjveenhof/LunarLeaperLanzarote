@@ -19,7 +19,6 @@ params        : dict -- keys and defaults below:
     tzero_shift    float     default 0.0
     bandpass_low   float     required (MHz)
     bandpass_high  float     required (MHz)
-    gain_exponent  float     default 0.0  (0 = no gain)
     normalize      bool      default False
     norm_start_ns  float     default 50.0 (start of norm window in ns)
     norm_end_ns    float|None default None (end of norm window in ns; None = full trace)
@@ -30,16 +29,35 @@ params        : dict -- keys and defaults below:
 Processing order
 ----------------
 normalize -> dewow -> time-zero shift + trim -> max-time crop ->
-whitening -> bandpass -> SVD removal -> gain
+whitening -> bandpass -> SVD removal
+
+Gain is NOT part of processing -- it is a display-only enhancement applied at
+render time (see display_gain).  Saved NPZs therefore hold raw, un-gained
+amplitudes; gain_exponent in the params JSON records the intended display gain.
 """
 
 import numpy as np
 from scipy.ndimage import shift as ndshift
 
 
+def display_gain(data, sfreq, exponent):
+    """
+    Linear time gain for DISPLAY only: multiplies each sample by
+    travel_time ** exponent (gdp 'linear' gain).  Never baked into saved data.
+
+    data     : ndarray (n_samples, n_traces)
+    sfreq    : sampling frequency in MHz
+    exponent : gain exponent; <= 0 returns the data unchanged.
+    """
+    if exponent is None or exponent <= 0:
+        return data
+    from gdp.preprocessing.gain import apply_gain as _gain
+    gained, _ = _gain(data, sfreq, 'linear', exponent=float(exponent))
+    return gained
+
+
 def apply_processing(data, time_axis, sfreq, params):
     from gdp.preprocessing.filtering import dewow as _dewow, filter_data
-    from gdp.preprocessing.gain import apply_gain as _gain
     from gdp.preprocessing.normalizing import normalize_data
 
     processed     = data.copy()
@@ -98,10 +116,5 @@ def apply_processing(data, time_axis, sfreq, params):
     if n_svd > 0:
         from gdp.preprocessing.image_processing import remove_svd
         processed, _ = remove_svd(processed, low_s=0, high_s=n_svd)
-
-    # 8. gain
-    gain_exp = float(params.get('gain_exponent', 0.0))
-    if gain_exp != 0:
-        processed, _ = _gain(processed, sfreq, 'linear', exponent=gain_exp)
 
     return processed, time_axis_out

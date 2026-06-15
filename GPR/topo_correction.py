@@ -45,6 +45,7 @@ OFFSET_50MHZ  = 1.10    # 2.2 m rig
 OFFSET_100MHZ = 0.425   # 0.85 m rig
 
 from gpr_constants import V_DEFAULT as V_FALLBACK   # m/ns used if not stored in params file
+from gpr_processing import display_gain             # display-only gain for the QC PNG
 # ------------------------------------------------------------------------------
 
 
@@ -205,22 +206,30 @@ def apply_topo_correction(data, time_axis, elevations, v):
 
 
 def save_figure(out_path, profile_key, dist_axis, time_axis,
-                corrected, elevations, v, ref_elev):
+                corrected, elevations, v, ref_elev, gain_exp=0.0):
     fig, axes = plt.subplots(2, 1, figsize=(14, 8),
                              gridspec_kw={'height_ratios': [1, 3]})
+
+    # Display-only gain (saved NPZ stays un-gained); uses the recorded view gain
+    disp = corrected
+    gain_note = ''
+    if gain_exp and gain_exp > 0:
+        sfreq = 1000.0 / float(time_axis[1] - time_axis[0])   # MHz
+        disp = display_gain(corrected, sfreq, gain_exp)
+        gain_note = ' | view gain {:.1f}'.format(gain_exp)
 
     axes[0].plot(dist_axis, elevations, 'k-', linewidth=1.2)
     axes[0].axhline(ref_elev, color='r', linewidth=0.8, linestyle='--',
                     label='datum (max) = {:.2f} m'.format(ref_elev))
     axes[0].set_ylabel('Elevation (m asl)')
-    axes[0].set_title('{} | v = {:.3f} m/ns | topo corrected'.format(
-        profile_key, v))
+    axes[0].set_title('{} | v = {:.3f} m/ns | topo corrected{}'.format(
+        profile_key, v, gain_note))
     axes[0].legend(fontsize=8)
     axes[0].grid(True, alpha=0.3)
     axes[0].set_xlim(dist_axis[0], dist_axis[-1])
 
-    clip_val = np.percentile(np.abs(corrected), 99)
-    axes[1].imshow(corrected, aspect='auto', cmap='seismic',
+    clip_val = np.percentile(np.abs(disp), 99)
+    axes[1].imshow(disp, aspect='auto', cmap='seismic',
                    vmin=-clip_val, vmax=clip_val,
                    extent=[dist_axis[0], dist_axis[-1],
                            time_axis[-1], time_axis[0]])
@@ -293,7 +302,8 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
                         ref_elev=np.array(ref_elev))
 
     save_figure(out_png, profile_key, dist_axis, time_axis,
-                corrected, elevations, v, ref_elev)
+                corrected, elevations, v, ref_elev,
+                gain_exp=float(params.get('gain_exponent', 0.0)))
 
     # --- sidecar JSON: topo info + processing params + raw instrument header ---
     def _serial(v):
