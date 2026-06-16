@@ -27,6 +27,26 @@ cross-method spatial context.
 
 ### Rasters
 - `QGIS/cavebottom.tif`, `cavetop.tif` -- LiDAR-derived cave depth rasters (depth of cave ceiling/floor)
+Roof-thickness (overburden) workflow, full cave + Puerta Falsa junction (both EPSG:4083, 2 m cells):
+overburden = ground surface - cave ceiling. Align the surface onto the ceiling grid (Raster > Align
+Rasters, bilinear, clip to ceiling extent), subtract (depth = surface - ceiling; ceiling nodata ->
+depth nodata, so it self-clips to the cave footprint), then mask the jameos/open rims to nodata by
+burning the `QGIS/Jameos.shp` polygons with GDAL Rasterize (overwrite with fixed value = nodata).
+Style singleband pseudocolor 1-36 m, clip-out-of-range so <1 m (jameos + negatives) is transparent.
+NOTE: the mask burn must target a SEPARATELY SAVED copy -- copy-pasting a layer in QGIS keeps the same
+source file, so the burn hits the original. Files:
+- `QGIS/caveheight_clean.tif` -- full-cave CEILING (MAX height, cave footprint only, empties nodata)
+- `QGIS/drone_topo.tif` -- ground SURFACE; `QGIS/drone_topo_rasterAligned.tif` = aligned to full-cave grid
+- `QGIS/cavetop_clean.tif` -- full-cave depth (raw subtraction, before masking). Min -10.7 / mean 17.0 / max 36.3 m
+- `QGIS/cavetop_clean_masked.tif` -- full-cave ROOF-THICKNESS map, jameos masked (FINAL, used in figures).
+  CAPTION CAVEAT: reliable near the fieldwork site, rougher to the west (source LiDAR horizontal accuracy
+  degrades westward, Jameo de la Gente ~5-6 m off -- see Code/LiDAR/alignment_transforms.md).
+- `QGIS/caveheight_clean_PuertaFalsa.tif` -- CEILING of the re-registered junction tube at Puerta Falsa
+  (RTK-anchored fieldwork section only); `QGIS/drone_topo_rasterAligned2.tif` = surface aligned to its grid
+- `QGIS/cavetop_clean_PuertaFalsa.tif` -- junction depth (raw subtraction, before masking)
+- `QGIS/cavetop_clean_masked_PuertaFalsa.tif` -- junction ROOF-THICKNESS map, jameos masked (FINAL).
+  Exactly georeferenced (RTK at Puerta Falsa) -- NO westward-accuracy caveat.
+- `QGIS/Jameos.shp` -- hand-digitized jameo/open-rim polygons used as the nodata burn mask (EPSG:4083)
 - `Data/IGN data/DTM/MDT02-REGCAN95-HU28-1080-2-COB2.tif` -- 2m DTM tile 1 (IGN)
 - `Data/IGN data/DTM/MDT02-REGCAN95-HU28-1080-4-COB2.tif` -- 2m DTM tile 2 (IGN)
 - `Data/IGN data/Processed/MergedDTM.sdat` -- merged DTM (use this in QGIS)
