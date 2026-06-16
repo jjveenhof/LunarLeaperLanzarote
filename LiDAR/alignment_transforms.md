@@ -52,6 +52,71 @@ Component transforms (time order):
 
 ---
 
+## Georef correction at Puerta Falsa (2026-06-16)
+
+Separate from the junction re-registration above. The author's LiDAR had no valid
+georeferencing; it was manually shifted earlier (~ -1100 m W / +6900 m N) to fit jameos
+to a Google basemap. That left a residual ~4-7 m eastward offset (basemap-judged), worse
+near jameos because surface points past the rim biased the fit. Corrected here against
+RTK truth at the Puerta Falsa jameo:
+- RTK rim trace (25 pts, `Line=Edge`) + 1 plumb tie point, cm accuracy, EPSG:4083,
+  extracted from `Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv` to
+  `Reregistered clouds/PuertaFalsa_edge_RTK.xyz` and `_plumb_RTK.xyz`.
+- Plumb pick on the (corrected-junction) cloud was ~9.17 m E / 1.27 m S of RTK truth.
+- Fit done on the CORRECTED junction (full data is internally inconsistent at the rim).
+  TRANSLATION ONLY (no rotation -- a 20 m rim arc cannot constrain rotation safely over a
+  6-7 km lever arm). Plumb-derived translation also seats the edge arc -> two RTK features
+  agree, no large rotational residual.
+
+Applied translation (to be propagated to the ENTIRE dataset via Edit > Apply transformation):
+
+```
+1 0 0  -9.170000076294
+0 1 0   1.269999980927
+0 0 1   0.000000000000
+0 0 0   1.000000000000
+```
+
+- dE = -9.17 m (move west), dN = +1.27 m (move north), dZ = 0 (elevations preserved).
+- Scope: anchors Puerta Falsa to RTK; rest of cave stays approximate (dataset is internally
+  inconsistent, so per-jameo offsets are NOT uniform -- a single translation cannot fix all).
+- VALIDATION: an independent, separately-georeferenced drone surface topo (RGB) aligns
+  perfectly with the RTK rim after correction -> third independent dataset confirms the
+  georef (RTK edge + RTK plumb + drone all agree).
+- Applied to the full cave + junction. NOTE: envelope polylines do NOT auto-move with their
+  cloud -- shift their vertices by the same matrix or regenerate them after moving.
+- TODO: remove the original misaligned idx1/idx2 from the full cave (duplicate junction);
+  regenerate the final envelope from the corrected, georeferenced cloud.
+- LIMITATION (accepted): a single rigid translation cannot align all jameos -- the source
+  LiDAR is internally inconsistent. After anchoring to RTK at Puerta Falsa, Jameo de la
+  Gente (~1 km west) sits ~5-6 m too far west. This offset is attributed to the LiDAR's
+  internal coregistration error, NOT the basemap: Google imagery error varies smoothly over
+  ~1 km (no mosaic seam between the jameos, low-relief terrain), and the basemap is
+  independently confirmed accurate at Puerta Falsa (RTK + drone). The internal distortion is
+  directly evidenced by the re-registration the fieldwork junction required. Kept as-is: the
+  fieldwork site is exact; the rest is approximate by the dataset's own error. Do NOT
+  least-squares-balance it away -- that would degrade the one RTK-validated anchor for
+  cosmetics elsewhere.
+
+## Cumulative georef: author's raw LiDAR -> final frame
+
+Pure translation (two manual shifts, they commute). Applies to the bulk dataset (idx0 and
+unmodified parts); the junction movers idx1/idx2 carry their own re-registration on top
+(see their sections). The -1100/+6900 are the exact values applied in CloudCompare for the
+jameo fit; the -9.17/+1.27 RTK edge fit then pinned the final position -> cumulative is exact
+and RTK-validated at Puerta Falsa.
+
+```
+1 0 0  -1109.17     (= -1100 west  +  -9.17 RTK correction)
+0 1 0   6901.27     (= +6900 north +  +1.27 RTK correction)
+0 0 1      0.00
+0 0 0      1.00
+```
+
+- dE = -1109.17 m, dN = +6901.27 m, dZ = 0 (EPSG:4083 / REGCAN95 UTM 27N).
+
+---
+
 ## TubeMove (idx1, dark-green NW passage) -> moved StitchMove
 
 Applied as three sequential transforms (2 manual + 1 ICP). First ICP attempt diverged

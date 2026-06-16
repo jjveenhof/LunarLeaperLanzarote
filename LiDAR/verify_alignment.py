@@ -37,8 +37,8 @@ ASC_FILES = [  # (label, filename, colour)
 ASC_PAIRS = [("stitch", "ref"), ("tube", "stitch")]   # (mover, reference) for residuals
 
 # --- LAS mode: subsets by Original_cloud_index -------------------------------
-LAS_NAMES = {0: "blue idx0", 1: "dark green idx1", 2: "light green idx2", 5: "idx5"}
-LAS_COLS  = {0: "tab:blue", 1: "darkgreen", 2: "limegreen", 5: "tab:gray"}
+LAS_NAMES = {0: "blue idx0", 1: "dark green idx1", 2: "light green idx2"}
+LAS_COLS  = {0: "tab:blue", 1: "darkgreen", 2: "limegreen"}
 LAS_PAIRS = [("light green idx2", "blue idx0"), ("dark green idx1", "light green idx2")]
 
 # --- cross-section cut locations (EPSG:4083) ---------------------------------
@@ -75,7 +75,7 @@ def load_asc():
     return layers, ASC_PAIRS
 
 
-def load_las(path, indices=(0, 1, 2, 5), step=1):
+def load_las(path, indices=(0, 1, 2), step=1):
     from las_tools import read_las_xyz_oci
     x, y, z, oci = read_las_xyz_oci(path, step=step)
     layers = []

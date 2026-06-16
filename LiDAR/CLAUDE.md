@@ -47,9 +47,13 @@ angle, not just the junction patch.
 ## Python verification tooling
 - `las_tools.py`: reads X/Y/Z + `Original cloud index` straight from LAS byte offsets
   (laspy cannot parse these clouds' points -- duplicate "C2C absolute distances" field).
-- `verify_alignment.py`: top-view + cross-section plots and nearest-neighbour overlap
-  residual between subsets in the junction window. Baseline (pre-alignment) idx2->idx0
-  residual ~ mean 8.7 m / median 5.6 m.
+- `verify_alignment.py`: residuals + a 2x2 figure (TOP XY, projected SIDE, two thin-slice
+  cross-sections with compass labels and the cut lines drawn on the TOP plan). Two modes:
+  default reads the three aligned ASCII exports; `--las CLOUD.las` reads a single LAS with
+  all subsets (baseline). Residuals reported by distance threshold (isolates the genuine
+  overlap). Baseline (pre-alignment) idx2->idx0 residual ~ mean 8.7 m / median 5.6 m.
+- `alignment_transforms.md`: the reproducible record of the final transforms (net 4x4 per
+  mover, component transforms, RMS, verification results).
 - Run with the env python (see root CLAUDE.md). Pass Windows-form paths.
 
 ## Export Convention
@@ -57,6 +61,15 @@ Export aligned point cloud as ASCII XYZ from CloudCompare (File > Save As > ASCI
 Target CRS: EPSG:4083 (REGCAN95 / UTM zone 27N) -- already shifted to match GPR/GNSS.
 
 ## Current Focus
-User is cutting a fresh crop from the full data (cloud 1/2) that includes BLUE + both
-greens, then will do the manual Z-locked alignment in CloudCompare and export the
-movers for residual/plot verification.
+Junction alignment DONE and verified (2026-06-16). Crop "Cave around Puerta Falsa" split
+by index into ReferenceCloud (idx0 blue), StitchMove (idx2), TubeMove (idx1). Aligned by
+eye (coarse) + Z-locked ICP (fine): stitch RMS 0.54 m (at blue's sparsity floor ~0.46 m),
+tube RMS 1.6 cm (mm fit in the 20% overlap). Tube ICP first diverged at 50% overlap --
+fix was setting the overlap parameter to the true ~20%. Net 4x4 transforms + verification
+recorded in `alignment_transforms.md`. Aligned ASCII exports in
+`LiDAR La Corona/Reregistered clouds/` (true EPSG:4083). Both greens needed an identical
+-1.07 m Z shift -> likely a real elevation offset of the green scans vs blue.
+
+Next: user wants to do further CloudCompare steps before assembling a deliverable. Final
+deliverable (merge of moved idx1+idx2 + untouched idx0, export ASCII XYZ EPSG:4083) is
+PARKED.
