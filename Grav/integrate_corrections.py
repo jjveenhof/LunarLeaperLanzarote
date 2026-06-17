@@ -44,6 +44,12 @@ def main(rho=RHO_DEFAULT):
     lsq = pd.read_csv(LSQ_FILE)
     sba = pd.read_csv(sba_file(rho))
 
+    # Normalise column names from colleague's file (format changed; treat as equivalent)
+    tc = tc.rename(columns={
+        "FA_LAT_correction":    "FA_correction",
+        "BAS_correction_Bullard": "BA_correction",
+    })
+
     # Merge colleague corrections onto LSQ data by (Line, Station)
     df = lsq.merge(
         tc[["Line", "Station", "FA_correction", "BA_correction", "Terrain_correction"]],
