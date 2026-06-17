@@ -51,6 +51,7 @@ PROC_DIR   = HERE / '../../Data/GPR/Processed'
 GNSS_FP    = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv'
 GNSS_LINES = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_Lines.csv'
 OUT_DIR    = HERE / '../../Results/GPR/FlowerPetals3D'
+LIDAR_XYZ  = HERE / '../../LiDAR La Corona/Reregistered clouds/PuertaFalsaClean_ExportCropSubsampled.xyz'
 
 # Back-antenna to rig midpoint offsets (metres), matching topo_correction.py.
 OFFSET_50MHZ  = 1.10    # 2.2 m rig
@@ -118,6 +119,18 @@ def load_plumb(csv_path):
 def load_gnss_lines(csv_path):
     df = pd.read_csv(csv_path)
     return df[df['Line'].notna()].copy()
+
+
+def load_lidar(path):
+    """
+    Load a LiDAR XYZ export: first three columns are E, N, Z (EPSG:4083,
+    elevation asl).  Trailing RGB / scalar-field columns are ignored.  Already
+    georeferenced to the RTK frame, so no transform is applied here.
+    """
+    if not path.exists():
+        return None
+    pts = np.loadtxt(str(path), usecols=(0, 1, 2))
+    return {'east': pts[:, 0], 'north': pts[:, 1], 'elev': pts[:, 2]}
 
 
 def build_track_interps(gnss_df, line_key, metre_mode):
@@ -240,7 +253,7 @@ def split_panels(c, idx):
 
 
 def make_figure(curtains, clip_pct, gain_presets, default_gain,
-                vexag=1.0, edge=None, plumb=None, equalize=True):
+                vexag=1.0, edge=None, plumb=None, lidar=None, equalize=True):
     # Geometry panels (split loops into limbs; straight lines stay whole)
     panels = []
     for i, c in enumerate(curtains):
@@ -361,6 +374,23 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
             showlegend=True,
         ))
 
+    # LiDAR cave cloud: clipped to the GPR-driven box (does NOT expand the
+    # extent -- the scene ranges stay locked to the GPR data).
+    if lidar is not None:
+        le, ln, lz = lidar['east'], lidar['north'], lidar['elev']
+        msk = ((le >= x_range[0]) & (le <= x_range[1]) &
+               (ln >= y_range[0]) & (ln <= y_range[1]) &
+               (lz >= z_range[0]) & (lz <= z_range[1]))
+        print('  lidar: {} of {} points within box'.format(int(msk.sum()), len(le)))
+        fig.add_trace(go.Scatter3d(
+            x=le[msk], y=ln[msk], z=lz[msk],
+            mode='markers',
+            marker=dict(color='black', size=2, opacity=1.0),
+            name='LiDAR cave',
+            legendgroup='lidar',
+            showlegend=True,
+        ))
+
     surf_idx = list(range(n_surfs))
 
     # Gain buttons: swap the precomputed surfacecolor arrays for all surfaces
@@ -438,7 +468,9 @@ def main():
                         help='Do not draw the surveyed pit edge')
     parser.add_argument('--no-plumb', dest='plumb', action='store_false',
                         help='Do not draw the plumb transfer point')
-    parser.set_defaults(equalize=True, edge=True, plumb=True)
+    parser.add_argument('--no-lidar', dest='lidar', action='store_false',
+                        help='Do not draw the LiDAR cave cloud')
+    parser.set_defaults(equalize=True, edge=True, plumb=True, lidar=True)
     parser.add_argument('--out', type=str, default=None,
                         help='Output HTML path (default: auto)')
     args = parser.parse_args()
@@ -480,9 +512,14 @@ def main():
     plumb = load_plumb(GNSS_FP) if args.plumb else None
     if plumb is not None:
         print('  plumb point -- {} point(s)'.format(len(plumb['east'])))
+    lidar = load_lidar(LIDAR_XYZ) if args.lidar else None
+    if lidar is not None:
+        print('  lidar cloud -- {} points loaded'.format(len(lidar['east'])))
+    elif args.lidar:
+        print('  [skip] lidar -- XYZ not found at {}'.format(LIDAR_XYZ))
 
     fig = make_figure(curtains, args.clip, GAIN_PRESETS, default_gain,
-                      vexag=args.vexag, edge=edge, plumb=plumb,
+                      vexag=args.vexag, edge=edge, plumb=plumb, lidar=lidar,
                       equalize=args.equalize)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
