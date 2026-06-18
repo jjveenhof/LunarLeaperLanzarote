@@ -6,7 +6,7 @@ Done by eye (coarse) then Z-locked ICP (fine) in CloudCompare, working on a copy
 in sequence: StitchMove (idx2) -> ReferenceCloud, then TubeMove (idx1) -> moved StitchMove.
 
 Coordinate note: matrices are in CloudCompare's **shifted local frame**
-(global shift = -651100, -3227000, 0). Target CRS EPSG:4083 (REGCAN95 / UTM 27N).
+(global shift = -651100, -3227000, 0). Target CRS EPSG:4083 (REGCAN95 / UTM 28N).
 Crop used: "Cave around Puerta Falsa", split by `Original cloud index` via Filter By Value.
 
 Date: 2026-06-15.
@@ -113,7 +113,7 @@ and RTK-validated at Puerta Falsa.
 0 0 0      1.00
 ```
 
-- dE = -1109.17 m, dN = +6901.27 m, dZ = 0 (EPSG:4083 / REGCAN95 UTM 27N).
+- dE = -1109.17 m, dN = +6901.27 m, dZ = 0 (EPSG:4083 / REGCAN95 UTM 28N).
 
 ---
 

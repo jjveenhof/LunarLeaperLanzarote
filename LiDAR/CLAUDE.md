@@ -58,7 +58,7 @@ angle, not just the junction patch.
 
 ## Export Convention
 Export aligned point cloud as ASCII XYZ from CloudCompare (File > Save As > ASCII cloud).
-Target CRS: EPSG:4083 (REGCAN95 / UTM zone 27N) -- already shifted to match GPR/GNSS.
+Target CRS: EPSG:4083 (REGCAN95 / UTM zone 28N) -- already shifted to match GPR/GNSS.
 
 ## Current Focus
 Junction alignment DONE and verified (2026-06-16). Crop "Cave around Puerta Falsa" split

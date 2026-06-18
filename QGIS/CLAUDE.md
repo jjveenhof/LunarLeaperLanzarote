@@ -15,7 +15,7 @@ rasters) can be processed via Python with geopandas/rasterio.
 
 ## Overview
 QGIS is used for geospatial visualisation: overview plots of data collection
-locations, CRS EPSG:4083 (REGCAN95 / UTM zone 27N) visualisation, and
+locations, CRS EPSG:4083 (REGCAN95 / UTM zone 28N) visualisation, and
 cross-method spatial context.
 
 ## Key Layers / Project Files
@@ -69,7 +69,7 @@ Loaded from gravimetry pipeline CSV outputs (Data/Gravimetry/Processed/). Statio
 ## Conventions
 
 ### CRS
-EPSG:4083 (REGCAN95 / UTM zone 27N) -- project CRS for all layers and exports.
+EPSG:4083 (REGCAN95 / UTM zone 28N) -- project CRS for all layers and exports.
 Note: IGN DTM tiles are in HU28 (UTM zone 28N) but QGIS reprojects on the fly.
 
 ### Color Palette (colorblind-friendly, Okabe-Ito inspired)

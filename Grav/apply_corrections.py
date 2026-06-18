@@ -11,7 +11,7 @@ remains a relative anomaly (consistent with g_base = 0 datum).
   Simple Bouguer anomaly  : SBA = Grav_lsq + FAC + LAT + BC
 
 Normal gravity uses the WGS84 Somigliani formula. Latitude is converted
-from UTM Easting/Northing (EPSG:4083, REGCAN95 / UTM zone 27N) using pyproj.
+from UTM Easting/Northing (EPSG:4083, REGCAN95 / UTM zone 28N) using pyproj.
 The latitude reference per line is the per-day mean of base station latitudes,
 consistent with the elevation reference.
 
@@ -42,7 +42,7 @@ from pyproj import Transformer
 from grav_utils import (PROC_DIR, FAC_GRAD, BOUGUER_K, RHO_DEFAULT,
                         normal_gravity, sba_file)
 
-# UTM zone 27N (REGCAN95) to geographic
+# UTM zone 28N (REGCAN95) to geographic
 UTM_TO_GEO = Transformer.from_crs("EPSG:4083", "EPSG:4258", always_xy=True)
 
 

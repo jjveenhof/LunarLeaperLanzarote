@@ -9,7 +9,7 @@ Outputs:
     Data/GNSS/Cleaned/GPR_Lines.geojson
     Data/GNSS/Cleaned/GPR_FlowerPetals.geojson
 
-CRS: REGCAN95 / UTM zone 27N (EPSG:4083)
+CRS: REGCAN95 / UTM zone 28N (EPSG:4083)
 """
 
 import json

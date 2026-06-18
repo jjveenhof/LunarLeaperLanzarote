@@ -16,7 +16,7 @@ Outputs, for whichever subsets are present:
   * a 2x2 figure: TOP (XY) plan, projected SIDE (E-Z), and two THIN-SLICE
     cross-sections (E-Z at a fixed Northing, N-Z at a fixed Easting) that reveal tilt.
 
-CRS: EPSG:4083 (REGCAN95 / UTM zone 27N).
+CRS: EPSG:4083 (REGCAN95 / UTM zone 28N).
 Baseline (pre-alignment) idx2->idx0 residual was ~ mean 8.7 m / median 5.6 m.
 """
 import os

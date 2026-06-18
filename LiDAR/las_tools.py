@@ -6,7 +6,7 @@ Why raw byte reading: the site clouds (cloud 1..4 in LaCorona.bin) carry duplica
 need X/Y/Z and the "Original cloud index" scalar field, so we read those directly from
 the LAS point records by byte offset and apply the header scale/offset.
 
-CRS of the data: EPSG:4083 (REGCAN95 / UTM zone 27N).
+CRS of the data: EPSG:4083 (REGCAN95 / UTM zone 28N).
 
 Usage:
     from las_tools import read_las_xyz_oci
