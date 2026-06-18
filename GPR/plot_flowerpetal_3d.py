@@ -60,6 +60,10 @@ OFFSET_100MHZ = 0.425   # 0.85 m rig
 # Display-gain exponents offered as interactive buttons in the HTML.
 GAIN_PRESETS = [0.0, 1.0, 2.0, 2.5, 3.0, 3.5, 4.0]
 
+# Keep every Nth LiDAR point (1 = all). Thinning the cloud makes it less dense
+# / less overwhelming when zoomed out; raise for sparser, set 1 for the full set.
+LIDAR_SUBSAMPLE = 2
+
 # Profile catalogue.  'offset' maps dist_axis (m from profile start) to the
 # GNSS metre coordinate.  'metre' selects how each GNSS row's metre position is
 # read.  Loops carry a (out, back) colour pair; straight lines a single colour.
@@ -130,6 +134,7 @@ def load_lidar(path):
     if not path.exists():
         return None
     pts = np.loadtxt(str(path), usecols=(0, 1, 2))
+    pts = pts[::max(1, int(LIDAR_SUBSAMPLE))]
     return {'east': pts[:, 0], 'north': pts[:, 1], 'elev': pts[:, 2]}
 
 
@@ -369,7 +374,7 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
             x=plumb['east'], y=plumb['north'], z=plumb['elev'],
             mode='markers',
             marker=dict(color='magenta', size=6, symbol='diamond'),
-            name='Plumb point',
+            name='Plumb line location',
             legendgroup='plumb',
             showlegend=True,
         ))
@@ -385,7 +390,7 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
         fig.add_trace(go.Scatter3d(
             x=le[msk], y=ln[msk], z=lz[msk],
             mode='markers',
-            marker=dict(color='black', size=2, opacity=1.0),
+            marker=dict(color="#4D2209", size=2, opacity=0.8),
             name='LiDAR cave',
             legendgroup='lidar',
             showlegend=True,
@@ -393,19 +398,19 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
 
     surf_idx = list(range(n_surfs))
 
-    # Gain buttons: swap the precomputed surfacecolor arrays for all surfaces
-    gain_buttons = [
+    # Gain slider steps: swap the precomputed surfacecolor arrays for all surfaces
+    gain_steps = [
         dict(label='{:.1f}'.format(g), method='restyle',
              args=[{'surfacecolor': panel_surf(g)}, surf_idx])
         for g in gain_presets
     ]
 
-    # Clip buttons: restyle the colour range (computed at the default gain)
+    # Clip slider steps: restyle the colour range (computed at the default gain)
     clip_presets = [90, 95, 98, 99, 99.5]
-    clip_buttons = []
+    clip_steps = []
     for cp in clip_presets:
         vmax_cp = float(np.percentile(np.abs(all_amp), cp))
-        clip_buttons.append(dict(
+        clip_steps.append(dict(
             label='{}%'.format(int(cp) if cp == int(cp) else cp),
             method='restyle',
             args=[{'cmin': [-vmax_cp] * n_surfs,
@@ -422,26 +427,18 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
             aspectmode='manual',
             aspectratio=aspect,
         ),
-        updatemenus=[
-            dict(type='buttons', direction='left', buttons=gain_buttons,
-                 x=0.0, xanchor='left', y=-0.04, yanchor='top',
-                 active=gain_presets.index(default_gain),
-                 showactive=True, bgcolor='white', bordercolor='lightgray'),
-            dict(type='buttons', direction='left', buttons=clip_buttons,
-                 x=0.0, xanchor='left', y=-0.13, yanchor='top',
-                 active=clip_presets.index(99) if 99 in clip_presets else 0,
-                 showactive=True, bgcolor='white', bordercolor='lightgray'),
-        ],
-        annotations=[
-            dict(text='Gain:', showarrow=False,
-                 x=0.0, xref='paper', xanchor='right',
-                 y=-0.04, yref='paper', yanchor='top', font=dict(size=12)),
-            dict(text='Clip:', showarrow=False,
-                 x=0.0, xref='paper', xanchor='right',
-                 y=-0.13, yref='paper', yanchor='top', font=dict(size=12)),
+        sliders=[
+            dict(active=gain_presets.index(default_gain),
+                 currentvalue=dict(prefix='Gain exp: ', font=dict(size=13)),
+                 pad=dict(t=20, b=10), x=0.0, xanchor='left', len=0.42,
+                 y=-0.06, yanchor='top', steps=gain_steps),
+            dict(active=clip_presets.index(99) if 99 in clip_presets else 0,
+                 currentvalue=dict(prefix='Clip pct: ', font=dict(size=13)),
+                 pad=dict(t=20, b=10), x=0.55, xanchor='left', len=0.42,
+                 y=-0.06, yanchor='top', steps=clip_steps),
         ],
         legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.7)'),
-        margin=dict(l=0, r=80, t=60, b=95),
+        margin=dict(l=30, r=80, t=60, b=120),
         height=750,
         scene_camera=dict(
             eye=dict(x=1.4, y=1.4, z=0.6),
@@ -511,7 +508,7 @@ def main():
         print('  pit edge -- {} points'.format(len(edge['east'])))
     plumb = load_plumb(GNSS_FP) if args.plumb else None
     if plumb is not None:
-        print('  plumb point -- {} point(s)'.format(len(plumb['east'])))
+        print('  plumb line location -- {} point(s)'.format(len(plumb['east'])))
     lidar = load_lidar(LIDAR_XYZ) if args.lidar else None
     if lidar is not None:
         print('  lidar cloud -- {} points loaded'.format(len(lidar['east'])))
