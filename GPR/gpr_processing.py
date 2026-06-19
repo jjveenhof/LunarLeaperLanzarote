@@ -15,6 +15,8 @@ time_axis     : ndarray (n_samples,)  in ns
 sfreq         : float  sampling frequency in MHz
 params        : dict -- keys and defaults below:
 
+    polarity       int       default +1     acquisition convention (Tx/Rx swap);
+                                            -1 flips the global sign
     dewow_window   int       required
     tzero_shift    float     default 0.0
     bandpass_low   float     required (MHz)
@@ -28,8 +30,13 @@ params        : dict -- keys and defaults below:
 
 Processing order
 ----------------
-normalize -> dewow -> time-zero shift + trim -> max-time crop ->
+polarity -> normalize -> dewow -> time-zero shift + trim -> max-time crop ->
 whitening -> bandpass -> SVD removal
+
+Polarity is a global sign correcting the acquisition convention (the antenna
+Tx/Rx were sometimes swapped, flipping recorded polarity).  It is baked into the
+saved NPZ so every downstream consumer shares one convention; the chosen value
+is recorded per profile in the params JSON.
 
 Gain is NOT part of processing -- it is a display-only enhancement applied at
 render time (see display_gain).  Saved NPZs therefore hold raw, un-gained
@@ -63,6 +70,10 @@ def apply_processing(data, time_axis, sfreq, params):
     processed     = data.copy()
     n_orig        = processed.shape[0]
     time_axis_out = time_axis.copy()
+
+    # 0. polarity convention (Tx/Rx swap): global sign, recorded per profile
+    if float(params.get('polarity', 1.0)) < 0:
+        processed = -processed
 
     # 1. tracewise-RMS normalisation
     if params.get('normalize', False):

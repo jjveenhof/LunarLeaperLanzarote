@@ -13,6 +13,8 @@ QandA.md entries directed here are tagged `From: [session] -> GPR`.
 
 Processing order inside `apply_processing` (gpr_processing.py):
 
+0. **Polarity** -- global sign correcting the acquisition convention (the antenna
+   Tx/Rx were sometimes swapped). `polarity` (+1/-1); baked into the saved NPZ.
 1. **Normalisation** (tracewise-rms-window) -- equalises trace amplitudes using RMS
    computed within a user-defined time window (in ns), then scales the full trace.
    Controlled by `normalize`, `norm_start_ns`, `norm_end_ns`.
@@ -46,7 +48,9 @@ apply_processing, saves `_processed.npz`, then calls topo_correction.py.
 | `run_pipeline.py` | Batch re-process all profiles using saved `_params.json` |
 | `topo_correction.py` | Static topo correction using GNSS; reads `_processed.npz` |
 | `plot_dual_freq.py` | Side-by-side comparison of 50 MHz vs 100 MHz for the same line |
-| `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 draped on GNSS surface (reads `_processed.npz`, NOT topo) |
+| `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo) |
+| `check_polarity.py` | Per-profile polarity convention check (mean-trace first break) |
+| `compare_intersections.py` | Polarity cross-check at Line/petal crossings (trace overlay + xcorr) |
 | `gpr_constants.py` | Shared constants (`V_DEFAULT` wave velocity) |
 | `GPRFieldVisual.ipynb` | Field visualisation notebook (separate from processing) |
 | `tests/test_normalisation.py` | Verifies tracewise-rms-window window behaviour with synthetic data |
@@ -73,7 +77,12 @@ Scripts add this to sys.path at runtime; do not move it.
 - Gain is display-only: NPZs store raw, un-gained amplitudes; `gain_exponent` in
   params records the intended display gain. Applied at render via `display_gain()`:
   notebook view slider, `plot_dual_freq.py --gain`, topo PNG (auto from params),
-  and `plot_flowerpetal_3d.py` interactive gain buttons (`--gain` sets the initial one).
+  and `plot_flowerpetal_3d.py` interactive gain slider (`--gain` sets the initial one).
+- Polarity is harmonised to the FlowerPetals (an arbitrary reference -- Tx/Rx
+  swaps flip the sign, so there is no physically-correct one). `polarity: -1` in
+  params negates a profile and is BAKED into the NPZ (unlike gain). Currently -1 on
+  Line2_50MHz, Line3_50/100MHz, Line5_50/100MHz; +1 on the petals + Line2_100MHz.
+  check_polarity.py verifies; re-run it after any reprocessing.
 - Normalisation uses `tracewise-rms-window` (not `tracewise-rms`). The plain
   `tracewise-rms` type ignores the window parameter entirely -- confirmed by
   reading gdp source and a passing unit test.
@@ -91,9 +100,11 @@ Scripts add this to sys.path at runtime; do not move it.
 
 ## Current Focus
 
-Processing pipeline and the draped 3D viz (`plot_flowerpetal_3d.py`) are stable and
-on consistent conventions. Active work: preparing the La Corona LiDAR cave geometry
-to import into the 3D plot alongside the GPR curtains.
+Processing pipeline and the draped 3D viz (`plot_flowerpetal_3d.py`, now with the
+LiDAR cave cloud) are stable; polarity is harmonised across all profiles. Active
+work: determining the GPR velocity from the data itself (diffraction / migration
+velocity analysis), validated blind against the LiDAR -- avoid calibrating
+velocity on the LiDAR (inverse crime for the lunar-analog argument).
 
 - Line 2 100 MHz has spectral notches at ~75 and ~160 MHz (hardware artifact from
   pulsEKKO antenna housing geometry, not geology). No processing fix available --
