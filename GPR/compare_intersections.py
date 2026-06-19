@@ -7,18 +7,25 @@ twice, so a shared reflector should look the same.  A clean sign reversal at the
 crossing points to a polarity *convention* difference (wiring / instrument /
 processing), not geology -- in which case flipping one dataset's sign is valid.
 
-For each crossing this plots, side by side:
-  - a small map of the two tracks with the crossing marked,
-  - the nearest trace from each line, normalised and overlaid, so you can read
-    the polarity of the strong shallow events directly.
+The petals are loops, so Line 3 generally crosses each one TWICE (in and out);
+all crossings are found via segment intersection, not just the closest approach.
+
+For each crossing this plots, in three panels:
+  - a map of the two tracks with the crossing marked,
+  - the nearest trace from each line, display-gained and normalised, overlaid,
+  - the normalised cross-correlation of the two traces, computed on the
+    UN-GAINED traces (so the strong shallow events that set the convention
+    dominate): the peak SIGN is the polarity (negative = reversed) and the peak
+    LAG absorbs any residual time-zero shift.
 
 Track geometry (offsets, metre mapping) is imported from plot_flowerpetal_3d so
-it stays identical to the 3D view.  Both profiles are time-zero corrected in
-processing, so their time axes are directly comparable.
+it stays identical to the 3D view.  Gain is display-only (matches the rest of
+the pipeline); the saved NPZs are untouched.
 
 Usage:
     python compare_intersections.py
-    python compare_intersections.py --line Line3_50MHz --tmax 200
+    python compare_intersections.py --gain 2.5
+    python compare_intersections.py --line Line3_50MHz --tmax 250
 """
 
 import sys
@@ -28,12 +35,12 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
-from scipy.spatial.distance import cdist
+from scipy.signal import hilbert
 
 sys.path.insert(0, str(Path(__file__).parent))
-import plot_flowerpetal_3d as p3d
 from plot_flowerpetal_3d import (PROFILES, PROC_DIR, GNSS_FP, GNSS_LINES,
                                  load_gnss_fp, load_gnss_lines, build_track_interps)
+from gpr_processing import display_gain
 
 OUT_DIR = Path(__file__).parent / '../../Results/GPR/PolarityCheck'
 
@@ -41,7 +48,8 @@ OUT_DIR = Path(__file__).parent / '../../Results/GPR/PolarityCheck'
 DEFAULT_LINE = 'Line3_50MHz'
 PETALS       = ['FlowerPetal1_50MHz', 'FlowerPetal2_50MHz', 'FlowerPetal3_50MHz']
 
-AVG_HALFWIN = 2     # average +/- this many traces at the crossing to cut noise
+AVG_HALFWIN = 2      # average +/- this many traces at the crossing to cut noise
+LAG_WIN_NS  = 25.0   # only search for the xcorr peak within this lag (ns)
 
 
 def get_profile(key, gnss):
@@ -61,17 +69,50 @@ def get_profile(key, gnss):
     }
 
 
-def nearest_crossing(a, b):
-    """Closest approach between two tracks: returns (idx_a, idx_b, dist_m)."""
-    D = cdist(np.c_[a['E'], a['N']], np.c_[b['E'], b['N']])
-    ia, ib = np.unravel_index(np.argmin(D), D.shape)
-    return int(ia), int(ib), float(D[ia, ib])
+def find_crossings(a, b, min_sep_m=0.5):
+    """
+    All geometric crossings of track a with track b, via segment intersection.
+    Returns a list of dicts {il, ip, pt} (nearest trace on each, crossing point),
+    de-duplicated so a single crossing split across adjacent segments counts once.
+    """
+    A = np.c_[a['E'], a['N']]
+    B = np.c_[b['E'], b['N']]
+    hits = []
+    for i in range(len(A) - 1):
+        p1, r = A[i], A[i + 1] - A[i]
+        for j in range(len(B) - 1):
+            p3, s = B[j], B[j + 1] - B[j]
+            denom = r[0] * s[1] - r[1] * s[0]
+            if abs(denom) < 1e-12:
+                continue
+            qp = p3 - p1
+            t = (qp[0] * s[1] - qp[1] * s[0]) / denom
+            u = (qp[0] * r[1] - qp[1] * r[0]) / denom
+            if 0.0 <= t <= 1.0 and 0.0 <= u <= 1.0:
+                pt = p1 + t * r
+                il = int(np.argmin(np.hypot(A[:, 0] - pt[0], A[:, 1] - pt[1])))
+                ip = int(np.argmin(np.hypot(B[:, 0] - pt[0], B[:, 1] - pt[1])))
+                hits.append({'il': il, 'ip': ip, 'pt': pt})
+
+    # de-duplicate crossings that map to the same physical point
+    out = []
+    for h in hits:
+        if any(np.hypot(*(h['pt'] - o['pt'])) < min_sep_m for o in out):
+            continue
+        out.append(h)
+    return out
 
 
 def avg_trace(data, idx, w=AVG_HALFWIN):
     lo = max(0, idx - w)
     hi = min(data.shape[1], idx + w + 1)
     return data[:, lo:hi].mean(axis=1)
+
+
+def gain_trace(tr, time, exponent):
+    """Display-only gdp linear gain on a single trace."""
+    sfreq = 1000.0 / float(time[1] - time[0])
+    return display_gain(tr[:, np.newaxis], sfreq, exponent)[:, 0]
 
 
 def norm(tr):
@@ -82,6 +123,8 @@ def norm(tr):
 def main():
     ap = argparse.ArgumentParser(description='Polarity check at Line/petal crossings.')
     ap.add_argument('--line', default=DEFAULT_LINE, help='straight line profile key')
+    ap.add_argument('--gain', type=float, default=3.0,
+                    help='display gain exponent applied to the traces (default: 3.0)')
     ap.add_argument('--tmax', type=float, default=None,
                     help='max two-way time to show in ns (default: full)')
     args = ap.parse_args()
@@ -93,18 +136,58 @@ def main():
     if not petals:
         sys.exit('No petal processed NPZs found.')
 
-    nrow = len(petals)
-    fig, axes = plt.subplots(nrow, 2, figsize=(11, 3.6 * nrow),
-                             gridspec_kw={'width_ratios': [1.0, 1.3]})
+    # collect every crossing of the line with every petal
+    crossings = []
+    for pet in petals:
+        cl = find_crossings(line, pet)
+        for n, c in enumerate(sorted(cl, key=lambda h: h['il']), 1):
+            c['pet'] = pet
+            c['name'] = '{} #{}'.format(pet['label'], n)
+            crossings.append(c)
+    if not crossings:
+        sys.exit('No crossings found between {} and the petals.'.format(line['label']))
+
+    nrow = len(crossings)
+    fig, axes = plt.subplots(nrow, 3, figsize=(15, 3.4 * nrow),
+                             gridspec_kw={'width_ratios': [1.0, 1.2, 1.0]})
     axes = np.atleast_2d(axes)
 
-    print('Crossings with {} ({}):'.format(line['key'], line['label']))
-    for r, pet in enumerate(petals):
-        il, ip, dist = nearest_crossing(line, pet)
+    print('Crossings with {} ({}), display gain {}:'.format(
+        line['key'], line['label'], args.gain))
+    for r, c in enumerate(crossings):
+        pet, il, ip = c['pet'], c['il'], c['ip']
         cx, cy = line['E'][il], line['N'][il]
-        flag = '' if dist < 2.0 else '   [!] far -- may not be a true crossing'
-        print('  {:<18} dist {:.2f} m  (line trace {}, petal trace {}){}'.format(
-            pet['label'], dist, il, ip, flag))
+        dist = float(np.hypot(line['E'][il] - pet['E'][ip],
+                              line['N'][il] - pet['N'][ip]))
+
+        # display traces (gained) and metric traces (un-gained)
+        tl = norm(gain_trace(avg_trace(line['data'], il), line['time'], args.gain))
+        tp = norm(gain_trace(avg_trace(pet['data'],  ip), pet['time'],  args.gain))
+        rl = norm(avg_trace(line['data'], il))
+        rp = norm(avg_trace(pet['data'],  ip))
+        tmax = args.tmax if args.tmax else max(line['time'][-1], pet['time'][-1])
+
+        # cross-correlation on UN-GAINED traces (petal resampled onto line grid)
+        dt = float(line['time'][1] - line['time'][0])
+        mask = line['time'] <= tmax
+        a = rl[mask] - rl[mask].mean()
+        b = np.interp(line['time'][mask], pet['time'], rp)
+        b = b - b.mean()
+        cc = np.correlate(a, b, 'full') / (np.sqrt((a**2).sum() * (b**2).sum()) + 1e-12)
+        lags = np.arange(-len(a) + 1, len(b)) * dt
+        # The wavelet rings, so cc oscillates -- pick the lag where the cc
+        # ENVELOPE peaks (true alignment, immune to cycle-skip), then read the
+        # signed cc there for polarity.
+        env = np.abs(hilbert(cc))
+        win = np.abs(lags) <= LAG_WIN_NS
+        k = np.where(win)[0][np.argmax(env[win])]
+        cc_peak, cc_lag = float(cc[k]), float(lags[k])
+        verdict = ('REVERSED' if cc_peak < -0.3 else
+                   'same' if cc_peak > 0.3 else 'unclear')
+        vcol = ('tab:red' if cc_peak < -0.3 else
+                'tab:green' if cc_peak > 0.3 else 'gray')
+        print('  {:<10} dist {:.2f} m   xcorr {:+.2f} @ {:+.0f} ns -> {}'.format(
+            c['name'], dist, cc_peak, cc_lag, verdict))
 
         # --- map ---
         axm = axes[r, 0]
@@ -112,50 +195,43 @@ def main():
         axm.plot(pet['E'], pet['N'], '-', color=pet['colour'], lw=1.2, label=pet['label'])
         axm.plot(cx, cy, 'kx', ms=9, mew=2, label='crossing')
         axm.set_aspect('equal', 'datalim')
-        axm.set_title('{} x {}   ({:.2f} m apart)'.format(
-            line['label'], pet['label'], dist), fontsize=9)
+        axm.set_title('{}   ({:.2f} m apart)'.format(c['name'], dist), fontsize=9)
         axm.set_xlabel('Easting (m)'); axm.set_ylabel('Northing (m)')
         axm.legend(fontsize=7, loc='best')
         axm.ticklabel_format(useOffset=False, style='plain')
         axm.tick_params(labelsize=7)
 
-        # --- overlaid traces ---
+        # --- overlaid traces (time on x) ---
         axt = axes[r, 1]
-        tl = norm(avg_trace(line['data'], il))
-        tp = norm(avg_trace(pet['data'], ip))
-        tmax = args.tmax if args.tmax else max(line['time'][-1], pet['time'][-1])
-
-        # objective polarity: cross-correlate over the shown window (petal
-        # resampled onto the line time grid).  The peak SIGN is the polarity
-        # (negative => reversed); the peak LAG absorbs residual time-zero shift.
-        dt = float(line['time'][1] - line['time'][0])
-        mask = line['time'] <= tmax
-        a = tl[mask] - tl[mask].mean()
-        b = np.interp(line['time'][mask], pet['time'], tp)
-        b = b - b.mean()
-        cc = np.correlate(a, b, 'full') / (np.sqrt((a**2).sum() * (b**2).sum()) + 1e-12)
-        lags = np.arange(-len(a) + 1, len(b)) * dt
-        win = np.abs(lags) <= 25.0          # only near-zero lags
-        k = np.where(win)[0][np.argmax(np.abs(cc[win]))]
-        cc_peak, cc_lag = float(cc[k]), float(lags[k])
-        verdict = ('REVERSED' if cc_peak < -0.3 else
-                   'same' if cc_peak > 0.3 else 'unclear')
-
-        axt.plot(tl, line['time'], color='k', lw=1.3, label=line['label'])
-        axt.plot(tp, pet['time'], color=pet['colour'], lw=1.3, label=pet['label'])
-        axt.axvline(0, color='0.8', lw=0.8)
-        axt.set_ylim(tmax, 0)
-        axt.set_xlim(-1.1, 1.1)
-        axt.set_xlabel('normalised amplitude'); axt.set_ylabel('two-way time (ns)')
-        axt.set_title('xcorr {:+.2f} at {:+.0f} ns  ->  {}'.format(
-            cc_peak, cc_lag, verdict), fontsize=9)
-        axt.legend(fontsize=8, loc='lower right')
+        axt.plot(line['time'], tl, color='k', lw=1.2, label=line['label'])
+        axt.plot(pet['time'], tp, color=pet['colour'], lw=1.2, label=pet['label'])
+        axt.axhline(0, color='0.8', lw=0.8)
+        axt.set_xlim(0, tmax)
+        axt.set_ylim(-1.1, 1.1)
+        axt.set_xlabel('two-way time (ns)')
+        axt.set_ylabel('norm. amplitude  (gain {:.1f})'.format(args.gain))
+        axt.set_title('overlaid traces', fontsize=9)
+        axt.legend(fontsize=8, loc='upper right')
         axt.grid(True, alpha=0.3)
-        print('    {} xcorr peak {:+.2f} at lag {:+.0f} ns -> {}'.format(
-            pet['label'], cc_peak, cc_lag, verdict))
 
-    fig.suptitle('Line 3 vs FlowerPetals -- polarity check at crossings', fontsize=12)
-    fig.tight_layout(rect=[0, 0, 1, 0.97])
+        # --- cross-correlation curve ---
+        axc = axes[r, 2]
+        axc.axvspan(-LAG_WIN_NS, LAG_WIN_NS, color='0.92')
+        axc.plot(lags, cc, color=pet['colour'], lw=1.2)
+        axc.plot(lags, env, color='0.5', lw=0.9, ls='--', label='envelope')
+        axc.plot(lags, -env, color='0.5', lw=0.9, ls='--')
+        axc.axhline(0, color='0.7', lw=0.8)
+        axc.plot([cc_lag], [cc_peak], 'o', color=vcol, ms=7)
+        axc.set_xlim(-50, 50)
+        axc.set_ylim(-1.05, 1.05)
+        axc.set_xlabel('lag (ns)')
+        axc.set_ylabel('norm. cross-corr')
+        axc.set_title('peak {:+.2f} @ {:+.0f} ns  ->  {}'.format(cc_peak, cc_lag, verdict),
+                      fontsize=9, color=vcol)
+        axc.grid(True, alpha=0.3)
+
+    fig.suptitle('Line 3 vs FlowerPetals -- polarity check at all crossings', fontsize=12)
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / 'intersection_traces.png'
