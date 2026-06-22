@@ -14,9 +14,11 @@ The FlowerPetal lines are loops (walked out and back), so each is split at its
 apex into two independently-toggleable limbs.  Line 3 is a straight profile and
 is shown whole; its 50 and 100 MHz versions are both included.
 
-Gain and clip are interactive button rows in the HTML.  Gain is display-only,
-precomputed for a fixed set of exponents (saved NPZs stay un-gained); clip just
-restyles the colour range.
+Gain and clip are interactive sliders in the HTML.  Gain is display-only and
+rebuilt in the browser from the raw amplitude (embedded ONCE, as each surface's
+initial surfacecolor) -- the saved NPZs stay un-gained; clip restyles the colour
+range.  Doing the gain in JS keeps the HTML small: one amplitude copy instead of
+one per gain preset (was ~67 MB with the presets baked in).
 
 Inputs (no topo step required):
     Data/GPR/Processed/{stem}_processed.npz   (un-shifted processed amplitudes)
@@ -265,27 +267,45 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
         panels.extend(split_panels(c, i))
     n_surfs = len(panels)
 
-    # Per-gain equalised amplitudes: eq[g] is a list (one 2D array per curtain).
-    # Each profile is scaled to a common 99th percentile so different max-time
-    # crops / frequencies render at comparable brightness on the shared scale.
-    eq = {}
-    for g in gain_presets:
-        arrs = []
-        for c in curtains:
+    # The gained, equalised surfacecolor is rebuilt in the BROWSER (see
+    # write_html) from the raw amplitude embedded once per panel.  The browser
+    # computes  colour = raw * (sample/sfreq)^gain / eqfac, exactly replicating
+    # gdp's linear gain + the per-curtain 99th-percentile equalisation here.
+    #
+    # Raw is pre-scaled per curtain by kfac (its 99th percentile) so the embedded
+    # numbers are ~order 1 (smaller JSON); kfac is folded back into eqfac so the
+    # final colour is identical:  (raw/kfac) * w / (eqfac/kfac) = raw * w / eqfac.
+    kfac = [float(np.percentile(np.abs(c['amp']), 99)) or 1.0 for c in curtains]
+
+    eqfac = []   # eqfac[curtain_idx][gain_idx], already divided by kfac
+    for ci, c in enumerate(curtains):
+        row = []
+        for g in gain_presets:
             gained = display_gain(c['amp'], c['sfreq'], g)
-            if equalize:
-                fac = float(np.percentile(np.abs(gained), 99)) or 1.0
-                gained = gained / fac
-            arrs.append(gained)
-        eq[g] = arrs
+            fac = (float(np.percentile(np.abs(gained), 99)) or 1.0) if equalize else 1.0
+            row.append(fac / kfac[ci])
+        eqfac.append(row)
+
+    # Raw per-panel amplitude (pre-scaled), embedded once for the JS rebuild.
+    panels_raw = [(curtains[p['curtain_idx']]['amp'][:, p['sl']]
+                   / kfac[p['curtain_idx']]) for p in panels]
+    raw_vmax = 1.0   # transient colour range before JS runs (pre-scaled ~order 1)
 
     def panel_surf(g):
-        """Surfacecolor arrays for every panel at gain exponent g (trace order)."""
-        return [eq[g][p['curtain_idx']][:, p['sl']] for p in panels]
+        """Equalised surfacecolor per panel at gain g -- the SAME result the JS
+        rebuild produces, used here only to derive the clip thresholds."""
+        gi = gain_presets.index(g)
+        out = []
+        for p in panels:
+            ci = p['curtain_idx']
+            fac = eqfac[ci][gi] * kfac[ci]            # original 99th-pct factor
+            gained = display_gain(curtains[ci]['amp'], curtains[ci]['sfreq'], g) / fac
+            out.append(gained[:, p['sl']])
+        return out
 
+    # Equalised amplitudes at the default gain -> source for the clip presets.
     surf0   = panel_surf(default_gain)
     all_amp = np.concatenate([a.ravel() for a in surf0])
-    vmax    = float(np.percentile(np.abs(all_amp), clip_pct))
 
     # Data extents (include the edge/plumb so they stay in view)
     east_parts  = [c['east']  for c in curtains]
@@ -328,9 +348,10 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
         show_cb = (i == 0)
         fig.add_trace(go.Surface(
             x=p['X'], y=p['Y'], z=p['Z'],
-            surfacecolor=surf0[i],
+            # surfacecolor is injected by JS on load (kept out of the figure so
+            # the raw amplitude is embedded only once, in the JS state).
             colorscale='RdBu_r',
-            cmin=-vmax, cmax=vmax,
+            cmin=-raw_vmax, cmax=raw_vmax,
             showscale=show_cb,
             colorbar=dict(
                 title='Amplitude', thickness=15, len=0.55,
@@ -398,24 +419,13 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
 
     surf_idx = list(range(n_surfs))
 
-    # Gain slider steps: swap the precomputed surfacecolor arrays for all surfaces
-    gain_steps = [
-        dict(label='{:.1f}'.format(g), method='restyle',
-             args=[{'surfacecolor': panel_surf(g)}, surf_idx])
-        for g in gain_presets
-    ]
-
-    # Clip slider steps: restyle the colour range (computed at the default gain)
+    # Clip presets: colour-range thresholds from the default-gain equalised data.
+    # Equalisation pins every gain's 99th percentile to ~1, so one threshold set
+    # works across gains -- the browser just restyles cmin/cmax.
     clip_presets = [90, 95, 98, 99, 99.5]
-    clip_steps = []
-    for cp in clip_presets:
-        vmax_cp = float(np.percentile(np.abs(all_amp), cp))
-        clip_steps.append(dict(
-            label='{}%'.format(int(cp) if cp == int(cp) else cp),
-            method='restyle',
-            args=[{'cmin': [-vmax_cp] * n_surfs,
-                   'cmax': [ vmax_cp] * n_surfs}, surf_idx],
-        ))
+    clip_vmax = [float(np.percentile(np.abs(all_amp), cp)) for cp in clip_presets]
+    clip_default_idx = min(range(len(clip_presets)),
+                           key=lambda i: abs(clip_presets[i] - clip_pct))
 
     fig.update_layout(
         title=dict(text='GPR profiles -- draped on GNSS surface',
@@ -427,24 +437,129 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
             aspectmode='manual',
             aspectratio=aspect,
         ),
-        sliders=[
-            dict(active=gain_presets.index(default_gain),
-                 currentvalue=dict(prefix='Gain exp: ', font=dict(size=13)),
-                 pad=dict(t=20, b=10), x=0.0, xanchor='left', len=0.42,
-                 y=-0.06, yanchor='top', steps=gain_steps),
-            dict(active=clip_presets.index(99) if 99 in clip_presets else 0,
-                 currentvalue=dict(prefix='Clip pct: ', font=dict(size=13)),
-                 pad=dict(t=20, b=10), x=0.55, xanchor='left', len=0.42,
-                 y=-0.06, yanchor='top', steps=clip_steps),
-        ],
         legend=dict(x=0.01, y=0.99, bgcolor='rgba(255,255,255,0.7)'),
-        margin=dict(l=30, r=80, t=60, b=120),
-        height=750,
+        margin=dict(l=30, r=80, t=60, b=30),
+        height=780,
         scene_camera=dict(
             eye=dict(x=1.4, y=1.4, z=0.6),
         ),
     )
-    return fig
+
+    # State the browser needs to rebuild gained colour live (see write_html).
+    # 'raw' is the pre-scaled amplitude per panel (one copy of the data).
+    state = {
+        'surf_idx': surf_idx,
+        'curtain_of_surf': [p['curtain_idx'] for p in panels],
+        'sfreq': [float(c['sfreq']) for c in curtains],
+        'gains': [float(g) for g in gain_presets],
+        'eqfac': [[float(v) for v in row] for row in eqfac],
+        'default_gain_idx': gain_presets.index(default_gain),
+        'clips': [float(c) for c in clip_presets],
+        'clip_vmax': [float(v) for v in clip_vmax],
+        'default_clip_idx': clip_default_idx,
+        'raw': [np.round(a, 5).tolist() for a in panels_raw],
+    }
+    return fig, state
+
+
+def write_html(fig, state, out_path):
+    """Write a self-contained (offline) HTML: the Plotly figure plus left-side
+    gain/clip sliders whose handlers rebuild the gained, equalised surfacecolor
+    in the browser from the raw amplitude embedded once in each surface."""
+    fig_html = fig.to_html(include_plotlyjs='inline', full_html=False,
+                           div_id='gpr3d_fig')
+
+    page = """<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>FlowerPetals 3D</title>
+  <style>
+    body {{ margin: 0; font-family: Segoe UI, Arial, sans-serif; }}
+    .wrap {{ display: grid; grid-template-columns: 230px 1fr; gap: 12px; padding: 10px; }}
+    .controls {{ border: 1px solid #d0d0d0; border-radius: 8px; padding: 12px;
+                 height: fit-content; position: sticky; top: 10px; }}
+    .ctrl {{ margin-bottom: 16px; }}
+    .ctrl label {{ display: block; font-weight: 600; margin-bottom: 4px; }}
+    .ctrl input[type=range] {{ width: 100%; }}
+    .value {{ font-size: 13px; color: #222; margin-top: 3px; }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="controls">
+      <div class="ctrl">
+        <label>Gain exponent</label>
+        <input id="gain_slider" type="range" min="0" max="{gmax}" step="1" value="{g0}" />
+        <div id="gain_value" class="value"></div>
+      </div>
+      <div class="ctrl">
+        <label>Clip percentile</label>
+        <input id="clip_slider" type="range" min="0" max="{cmax}" step="1" value="{c0}" />
+        <div id="clip_value" class="value"></div>
+      </div>
+    </div>
+    <div>{fig_html}</div>
+  </div>
+  <script>
+    const S = {state_json};
+    const gd = document.getElementById('gpr3d_fig');
+    const gainSlider = document.getElementById('gain_slider');
+    const clipSlider = document.getElementById('clip_slider');
+    const RAW = S.raw;   // pre-scaled amplitude per panel (the single data copy)
+
+    function applyAll() {{
+      const gi = parseInt(gainSlider.value, 10);
+      const ci = parseInt(clipSlider.value, 10);
+      const g  = S.gains[gi];
+      const colors = [];
+      for (let s = 0; s < S.surf_idx.length; s++) {{
+        const c  = S.curtain_of_surf[s];
+        const sf = S.sfreq[c];
+        const eq = S.eqfac[c][gi];
+        const raw = RAW[s];
+        const out = new Array(raw.length);
+        for (let k = 0; k < raw.length; k++) {{
+          const w = (g > 0) ? Math.pow((k + 1) / sf, g) : 1.0;
+          const scale = w / eq;
+          const row = raw[k];
+          const orow = new Array(row.length);
+          for (let j = 0; j < row.length; j++) orow[j] = row[j] * scale;
+          out[k] = orow;
+        }}
+        colors.push(out);
+      }}
+      const vm = S.clip_vmax[ci];
+      const n  = S.surf_idx.length;
+      Plotly.restyle(gd, {{
+        surfacecolor: colors,
+        cmin: Array(n).fill(-vm),
+        cmax: Array(n).fill(vm)
+      }}, S.surf_idx);
+      document.getElementById('gain_value').textContent = g.toFixed(1);
+      document.getElementById('clip_value').textContent = S.clips[ci].toFixed(1) + '%';
+    }}
+
+    gainSlider.addEventListener('input', applyAll);
+    clipSlider.addEventListener('input', applyAll);
+
+    // Wait until Plotly has built the plot, then inject the initial colours.
+    (function init() {{
+      if (gd && gd.data && gd.data.length) {{ applyAll(); }}
+      else {{ setTimeout(init, 50); }}
+    }})();
+  </script>
+</body>
+</html>
+""".format(
+        gmax=len(state['gains']) - 1,
+        cmax=len(state['clips']) - 1,
+        g0=state['default_gain_idx'],
+        c0=state['default_clip_idx'],
+        fig_html=fig_html,
+        state_json=json.dumps(state, separators=(',', ':')),
+    )
+    Path(out_path).write_text(page, encoding='utf-8')
 
 
 def main():
@@ -515,14 +630,14 @@ def main():
     elif args.lidar:
         print('  [skip] lidar -- XYZ not found at {}'.format(LIDAR_XYZ))
 
-    fig = make_figure(curtains, args.clip, GAIN_PRESETS, default_gain,
-                      vexag=args.vexag, edge=edge, plumb=plumb, lidar=lidar,
-                      equalize=args.equalize)
+    fig, state = make_figure(curtains, args.clip, GAIN_PRESETS, default_gain,
+                             vexag=args.vexag, edge=edge, plumb=plumb, lidar=lidar,
+                             equalize=args.equalize)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out_path = Path(args.out) if args.out else OUT_DIR / 'flowerpetal_3d.html'
-    fig.write_html(str(out_path))
-    print('Saved: {}  (gain buttons {}, active {})'.format(
+    write_html(fig, state, out_path)
+    print('Saved: {}  (gain presets {}, active {})'.format(
         out_path.resolve(), GAIN_PRESETS, default_gain))
 
 
