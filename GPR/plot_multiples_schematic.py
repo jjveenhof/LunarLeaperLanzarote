@@ -26,9 +26,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 # ---- PARAMETERS (edit to taste) ----------------------------------------------
-D_CEIL = 5.0     # rock thickness, surface to cave ceiling (m)
-H_CAVE = 10.0    # true cave height, ceiling to floor (m)
-V_ROCK = 0.13    # m/ns -- rock velocity (also the plotting velocity)
+D_CEIL = 5    # rock thickness, surface to cave ceiling (m)
+H_CAVE = 10    # true cave height, ceiling to floor (m)
+V_ROCK = 0.125    # m/ns -- rock velocity (also the plotting velocity)
 V_AIR  = 0.30    # m/ns -- air velocity (~speed of light)
 
 HERE    = Path(__file__).parent
