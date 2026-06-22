@@ -22,15 +22,38 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.lines as mlines
+import matplotlib.patches as mpatches
 import matplotlib.ticker as mticker
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from grav_utils import BASE, PROC_DIR, rho_str as rho_fmt, sba_file
+from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, rho_str as rho_fmt, sba_file
 
-# If a rho value is passed (e.g. --rho 2.5), use Bouguer file; otherwise use LSQ
-rho_arg = next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "--rho"), None)
-if rho_arg is not None:
+# Marker colours matching the QGIS map styling (Code/QGIS/CLAUDE.md)
+L4_COLOR   = "#FF4DB8"   # pink   -- Line 4 points
+L3_COLOR   = "#FF5C00"   # orange -- Line 3 points
+PATH_COLOR = "0.6"       # neutral grey for the connecting profile paths
+
+# Mode selection:
+#   --cba          Complete Bouguer Anomaly (terrain-corrected) file
+#   --rho X        Simple Bouguer Anomaly file for density X
+#   (neither)      raw LSQ gravity anomaly
+# --se-sba: in CBA mode, draw error bars from SE_SBA instead of SE_CBA
+#   (presentation only -- excludes terrain-correction uncertainty).
+rho_arg    = next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "--rho"), None)
+USE_CBA    = "--cba" in sys.argv
+USE_SBA_SE = "--se-sba" in sys.argv
+
+if USE_CBA:
+    rho      = float(rho_arg) if rho_arg is not None else RHO_DEFAULT
+    IN_FILE  = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_fmt(rho)}_with_TC.csv"
+    G_COL    = "CBA"
+    SE_COL   = "SE_CBA"   # may be overridden to SE_SBA after the file is loaded
+    YLABEL   = f"Complete Bouguer Anomaly (mGal)  [rho = {rho} g/cm3]"
+    SAVE_DIR = BASE / "Results/Grav/Bouguer"
+    FILESTEM = f"line4_combined_CBA_rho{rho_fmt(rho)}"
+elif rho_arg is not None:
     rho      = float(rho_arg)
     IN_FILE  = sba_file(rho)
     G_COL    = "SBA"
@@ -56,6 +79,18 @@ L3_SUB = list(range(15, 26)) # Line 3 subset loc_ids (P15 to end)
 
 # -- Load data -----------------------------------------------------------------
 df = pd.read_csv(IN_FILE, dtype={"Date": str})
+
+# Resolve the SE column now that we know which columns exist.
+if SE_COL not in df.columns:
+    SE_COL = None
+if USE_CBA and USE_SBA_SE:
+    if "SE_SBA" not in df.columns:
+        sys.exit(f"ERROR: --se-sba requested but {IN_FILE.name} has no SE_SBA column.")
+    SE_COL = "SE_SBA"
+    FILESTEM += "_seSBA"
+    print("  !! --se-sba: drawing CBA error bars from SE_SBA.")
+    print("  !! These bars EXCLUDE terrain-correction uncertainty and")
+    print("  !! understate the true CBA error. Presentation use only.")
 
 def get_locs(line, loc_ids):
     """Return one row per loc_id (sorted by loc_ids order) for a given line."""
@@ -103,10 +138,13 @@ nw_g   = np.array([
     (l3_p15 if src == "l3" else l4_nw).loc[loc, G_COL]
     for loc, src in zip(nw_seq_locs, nw_seq_src)
 ])
-nw_se  = np.array([
+nw_se  = (np.array([
     (l3_p15 if src == "l3" else l4_nw).loc[loc, SE_COL]
     for loc, src in zip(nw_seq_locs, nw_seq_src)
-])
+]) if SE_COL else None)
+
+# Source line number per NW-arm point (3 for the inserted P15, else 4)
+nw_lines = [3 if src == "l3" else 4 for src in nw_seq_src]
 
 # L3 subset: starts at P15, offset by P4->P15 distance
 p15_dist = np.hypot(
@@ -138,17 +176,27 @@ print(f"  Residual (P15 - interpolated) = {delta*1000:+.1f} uGal")
 # -- Plot ----------------------------------------------------------------------
 fig, ax = plt.subplots(figsize=(13, 5))
 
-ax.errorbar(ne_dists, l4_ne[G_COL], yerr=l4_ne[SE_COL],
-            fmt="o-", color="steelblue", capsize=3, linewidth=1.5, markersize=6,
-            label="L4 NE arm  (perp. to cave)")
 
-ax.errorbar(nw_dists, nw_g, yerr=nw_se,
-            fmt="o-", color="darkorange", capsize=3, linewidth=1.5, markersize=6,
-            label="L4 NW arm  (along cave)  -- P15 from L3 inserted")
+# Marker shape per arm; colour still encodes line membership (pink L4 / orange L3)
+NE_MARKER, NW_MARKER, L3_MARKER = "o", "s", "^"
 
-ax.errorbar(l3_dists, l3_sub[G_COL], yerr=l3_sub[SE_COL],
-            fmt="o-", color="seagreen", capsize=3, linewidth=1.5, markersize=6,
-            label="L3 subset  (N, ~45 deg from cave)")
+
+def plot_arm(dists, gvals, sevals, src_lines, marker):
+    """Grey connecting path, then per-point error bars: colour=line, shape=arm."""
+    ax.plot(dists, gvals, "-", color=PATH_COLOR, linewidth=1.4, zorder=2)
+    for i, (d, g) in enumerate(zip(dists, gvals)):
+        se = sevals[i] if sevals is not None else None
+        color = L4_COLOR if src_lines[i] == 4 else L3_COLOR
+        ax.errorbar(d, g, yerr=se, fmt=marker, color=color,
+                    capsize=3, markersize=6, elinewidth=1.4, zorder=3)
+
+
+ne_se = l4_ne[SE_COL].values if SE_COL else None
+l3_se = l3_sub[SE_COL].values if SE_COL else None
+
+plot_arm(ne_dists, l4_ne[G_COL].values, ne_se, [4] * len(ne_dists), NE_MARKER)
+plot_arm(nw_dists, nw_g,                nw_se, nw_lines,            NW_MARKER)
+plot_arm(l3_dists, l3_sub[G_COL].values, l3_se, [3] * len(l3_dists), L3_MARKER)
 
 # Mark P4 and P15
 ax.axvline(0,         color="k",    linewidth=0.9, linestyle="--", alpha=0.6)
@@ -163,7 +211,19 @@ ax.set_ylabel(YLABEL)
 ax.set_title("Cave signature comparison -- Lines 3 and 4", fontweight="bold", fontsize=12)
 ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
 ax.grid(True, alpha=0.25, linestyle="--")
-ax.legend(fontsize=9)
+def shape_handle(marker, label):
+    return mlines.Line2D([], [], marker=marker, color="black", linestyle="None",
+                         markerfacecolor="none", markersize=7, label=label)
+
+ax.legend(handles=[
+    # Colour -> survey line
+    mpatches.Patch(color=L4_COLOR, label="Line 4"),
+    mpatches.Patch(color=L3_COLOR, label="Line 3"),
+    # Shape -> arm / map orientation
+    shape_handle(NE_MARKER, "NE arm  (perp. to cave)"),
+    shape_handle(L3_MARKER, "N arm (~45 deg from cave)"),
+    shape_handle(NW_MARKER, "NW arm  (along cave)"),
+], fontsize=8, loc="best")
 
 plt.tight_layout()
 save_path = SAVE_DIR / f"{FILESTEM}.png"
