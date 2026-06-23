@@ -16,8 +16,10 @@ flat-surface geometry Stolt assumes; the per-trace zero-pad at the trace tops
 (from the static shift) is handled by the dead-trace blanking + live-sample
 taper, mirroring Dr. Cedric Schmelzbach's notebook.
 
-Migration is run ON UN-GAINED data.  A display-only depth gain (--gain, default
-0 = off) may be applied to the migrated section purely for viewing.
+Migration is run ON UN-GAINED data.  A display-only gain (--gain, default 0 =
+off) may be applied for viewing -- the gdp 'linear' travel-time gain, identical
+to GPRProcessing.ipynb and plot_flowerpetal_3d.py so the gain means the same
+thing everywhere.
 
 Usage:
     python migrate_velocity_scan.py
@@ -37,6 +39,7 @@ from scipy.signal.windows import hann as _hann_win
 
 sys.path.insert(0, str(Path(__file__).parent))
 from stolt_migration import stolt_migration_2d
+from gpr_processing import display_gain
 
 HERE     = Path(__file__).parent
 TOPO_DIR = HERE / '../../Data/GPR/Topo'
@@ -72,13 +75,14 @@ def live_sample_taper(section):
     return section * taper, trace_is_dead
 
 
-def axis_gain(section, axis, exponent):
-    """Display-only gain: multiply each sample by axis**exponent.
-    exponent <= 0 returns the section unchanged (ungained)."""
-    if exponent is None or exponent <= 0:
-        return section
-    w = np.abs(axis) ** float(exponent)
-    return section * w[:, None]
+def tgain_weights(t):
+    """Per-sample weight basis for the gdp 'linear' display gain:
+    travel_time = (k+1)/sfreq, sfreq = 1000/dt MHz, so travel_time = (k+1)*dt/1000.
+    The browser raises this vector to the gain exponent (matches display_gain /
+    the notebook / the 3D plot)."""
+    dt = float(t[1] - t[0])
+    sfreq = 1000.0 / dt
+    return (np.arange(len(t)) + 1) / sfreq
 
 
 def norm99(a):
@@ -93,7 +97,7 @@ def main():
     ap.add_argument('--vmax', type=float, default=0.16, help='max velocity m/ns')
     ap.add_argument('--dv',   type=float, default=0.005, help='velocity step m/ns')
     ap.add_argument('--gain', type=float, default=0.0,
-                    help='display-only depth gain exponent (0 = off, ungained)')
+                    help='display-only gdp linear gain exponent (0 = off, ungained)')
     ap.add_argument('--clip', type=float, default=99.0,
                     help='initial percentile clip (0..100), applied to current view')
     ap.add_argument('--no-live-taper', action='store_true',
@@ -165,8 +169,10 @@ def main():
     mig_norm_by_v = [norm99(fr).astype(np.float32) for fr in frames]
 
     depth0 = depth_axes[i0]
-    z_top0 = axis_gain(section_norm, depth0, gain_vals[g0])
-    z_bot0 = axis_gain(mig_norm_by_v[i0], depth0, gain_vals[g0])
+    sfreq  = 1000.0 / dt
+    tgain  = tgain_weights(t)                      # (k+1)/sfreq, gdp-linear basis
+    z_top0 = display_gain(section_norm, sfreq, gain_vals[g0])
+    z_bot0 = display_gain(mig_norm_by_v[i0], sfreq, gain_vals[g0])
 
     # Python-side init clip threshold for first render.
     abs_vals0 = np.concatenate([np.abs(z_top0).ravel(), np.abs(z_bot0).ravel()])
@@ -221,6 +227,7 @@ def main():
         'gains': [float(g) for g in gain_vals],
         'clip_pcts': [float(c) for c in clip_vals],
         'depth_axes': [d.tolist() for d in depth_axes],
+        'tgain': [float(w) for w in tgain],
         'section_norm': np.round(section_norm, 6).tolist(),
         'mig_norm_by_v': [np.round(m, 6).tolist() for m in mig_norm_by_v],
     }
@@ -265,11 +272,13 @@ def main():
     const S = {state_json};
     const gd = document.getElementById('vel_scan_fig');
 
-    function gain2D(a2d, axis, g) {{
+    function gain2D(a2d, tgain, g) {{
+      // gdp 'linear' display gain: weight_k = travel_time_k ** g (same as the
+      // notebook + 3D plot).  g <= 0 -> unchanged.
       if (!(g > 0)) return a2d;
       const out = new Array(a2d.length);
       for (let i = 0; i < a2d.length; i++) {{
-        const w = Math.pow(Math.abs(axis[i]), g);
+        const w = Math.pow(tgain[i], g);
         const row = a2d[i];
         const outRow = new Array(row.length);
         for (let j = 0; j < row.length; j++) outRow[j] = row[j] * w;
@@ -305,8 +314,8 @@ def main():
       const gain = S.gains[gi];
       const clipPct = S.clip_pcts[ci];
 
-      const zTop = gain2D(S.section_norm, depth, gain);
-      const zBot = gain2D(S.mig_norm_by_v[vi], depth, gain);
+      const zTop = gain2D(S.section_norm, S.tgain, gain);
+      const zBot = gain2D(S.mig_norm_by_v[vi], S.tgain, gain);
       const clip = percentileAbsFromTwo(zTop, zBot, clipPct);
 
       Plotly.restyle(gd, {{ z: [zTop], y: [depth], zmin: [-clip], zmax: [clip] }}, [0]);
