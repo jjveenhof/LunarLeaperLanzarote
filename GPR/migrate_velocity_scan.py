@@ -113,9 +113,11 @@ def main():
     if not npz_path.exists():
         sys.exit('Not found: ' + str(npz_path.resolve()))
     with np.load(str(npz_path)) as f:
-        data = f['data'].astype(np.float64)
-        x    = f['dist_axis'].astype(np.float64)
-        t    = f['time_axis'].astype(np.float64)
+        data       = f['data'].astype(np.float64)
+        x          = f['dist_axis'].astype(np.float64)
+        t          = f['time_axis'].astype(np.float64)
+        ref_elev   = float(f['ref_elev'])
+        elevations = f['elevations'].astype(np.float64)
     dt = float(t[1] - t[0])
     dx = float(x[1] - x[0])
     nt, nx = data.shape
@@ -188,7 +190,7 @@ def main():
         go.Heatmap(
             z=z_top0, x=x, y=depth0, colorscale='RdBu_r',
             zmin=-cthr0, zmax=cthr0,
-            colorbar=dict(title='amp', thickness=12, y=0.79, len=0.38),
+            colorbar=dict(title='amp', thickness=12, y=0.79, len=0.38, x=1.05, xanchor='left'),
             hovertemplate='x %{x:.1f} m<br>z %{y:.2f} m<extra></extra>',
         ),
         row=1, col=1
@@ -197,25 +199,47 @@ def main():
         go.Heatmap(
             z=z_bot0, x=x, y=depth0, colorscale='RdBu_r',
             zmin=-cthr0, zmax=cthr0,
-            colorbar=dict(title='amp', thickness=12, y=0.21, len=0.38),
+            colorbar=dict(title='amp', thickness=12, y=0.21, len=0.38, x=1.05, xanchor='left'),
             hovertemplate='x %{x:.1f} m<br>z %{y:.2f} m<extra></extra>',
         ),
         row=2, col=1
     )
+
+    elev_range0 = [ref_elev - float(depth0[-1]), ref_elev - float(depth0[0])]
+    surf_line   = dict(color='black', width=1.4)
+    surf_hover  = 'x %{x:.1f} m<br>elev %{y:.1f} m<extra>surface</extra>'
+    fig.add_trace(go.Scatter(
+        x=x, y=elevations, mode='lines', name='surface',
+        line=surf_line, xaxis='x', yaxis='y3',
+        showlegend=False, hovertemplate=surf_hover,
+    ))
+    fig.add_trace(go.Scatter(
+        x=x, y=elevations, mode='lines', name='surface',
+        line=surf_line, xaxis='x2', yaxis='y4',
+        showlegend=False, hovertemplate=surf_hover,
+    ))
 
     fig.update_layout(
         title='{} -- Velocity scan with unmigrated reference'.format(args.line),
         xaxis=dict(title=''),
         xaxis2=dict(title='distance (m)'),
         yaxis=dict(
-            title='depth below datum (m)', autorange='reversed',
+            title='Depth below highest point (m)', autorange='reversed',
             range=[float(depth0[-1]), float(depth0[0])]
         ),
         yaxis2=dict(
-            title='depth below datum (m)', autorange='reversed',
+            title='Depth below highest point (m)', autorange='reversed',
             range=[float(depth0[-1]), float(depth0[0])]
         ),
-        margin=dict(l=70, r=20, t=90, b=70), height=920,
+        yaxis3=dict(
+            title='Elevation (m)', overlaying='y', side='right', anchor='x',
+            range=elev_range0, showgrid=False,
+        ),
+        yaxis4=dict(
+            title='Elevation (m)', overlaying='y2', side='right', anchor='x2',
+            range=elev_range0, showgrid=False,
+        ),
+        margin=dict(l=70, r=150, t=90, b=70), height=920,
     )
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -228,6 +252,7 @@ def main():
         'clip_pcts': [float(c) for c in clip_vals],
         'depth_axes': [d.tolist() for d in depth_axes],
         'tgain': [float(w) for w in tgain],
+        'ref_elev': float(ref_elev),
         'section_norm': np.round(section_norm, 6).tolist(),
         'mig_norm_by_v': [np.round(m, 6).tolist() for m in mig_norm_by_v],
     }
@@ -320,9 +345,13 @@ def main():
 
       Plotly.restyle(gd, {{ z: [zTop], y: [depth], zmin: [-clip], zmax: [clip] }}, [0]);
       Plotly.restyle(gd, {{ z: [zBot], y: [depth], zmin: [-clip], zmax: [clip] }}, [1]);
+      const dBot = depth[depth.length - 1];
+      const dTop = depth[0];
       Plotly.relayout(gd, {{
-        'yaxis.range': [depth[depth.length - 1], depth[0]],
-        'yaxis2.range': [depth[depth.length - 1], depth[0]]
+        'yaxis.range':  [dBot, dTop],
+        'yaxis2.range': [dBot, dTop],
+        'yaxis3.range': [S.ref_elev - dBot, S.ref_elev - dTop],
+        'yaxis4.range': [S.ref_elev - dBot, S.ref_elev - dTop],
       }});
 
       document.getElementById('vel_value').textContent = S.vels[vi].toFixed(3) + ' m/ns';
