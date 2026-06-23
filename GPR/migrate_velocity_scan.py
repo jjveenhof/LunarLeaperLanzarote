@@ -219,6 +219,19 @@ def main():
         showlegend=False, hovertemplate=surf_hover,
     ))
 
+    # N/S endpoint annotations -- convention: North on left, South on right
+    for _xval, _text, _xanchor in [
+        (float(x[0]),  '<b>N</b>', 'left'),
+        (float(x[-1]), '<b>S</b>', 'right'),
+    ]:
+        for _yref in ('y domain', 'y2 domain'):
+            fig.add_annotation(
+                x=_xval, xref='x', y=1.0, yref=_yref,
+                text=_text, showarrow=False,
+                xanchor=_xanchor, yanchor='bottom',
+                font=dict(size=14, color='black'),
+            )
+
     fig.update_layout(
         title='{} -- Velocity scan with unmigrated reference'.format(args.line),
         xaxis=dict(title=''),

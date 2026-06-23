@@ -206,7 +206,7 @@ def apply_topo_correction(data, time_axis, elevations, v):
 
 
 def save_figure(out_path, profile_key, dist_axis, time_axis,
-                corrected, elevations, v, ref_elev, gain_exp=0.0):
+                corrected, elevations, v, ref_elev, gain_exp=0.0, flip_x=False):
     fig, axes = plt.subplots(2, 1, figsize=(14, 8),
                              gridspec_kw={'height_ratios': [1, 3]})
 
@@ -227,6 +227,12 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
     axes[0].legend(fontsize=8)
     axes[0].grid(True, alpha=0.3)
     axes[0].set_xlim(dist_axis[0], dist_axis[-1])
+
+    # N/S endpoint labels inside the radargram at top corners
+    axes[1].text(0.01, 0.99, 'N', transform=axes[1].transAxes,
+                 ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
+    axes[1].text(0.99, 0.99, 'S', transform=axes[1].transAxes,
+                 ha='right', va='top', fontsize=11, fontweight='bold', color='black')
 
     clip_val = np.percentile(np.abs(disp), 99)
     axes[1].imshow(disp, aspect='auto', cmap='seismic',
@@ -279,6 +285,9 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
     gnss_m     = dist_to_gnss_metre(profile_key, dist_axis)
     elevations = elev_fn(gnss_m)
 
+    if params.get('flip_x', False):
+        elevations = elevations[::-1]
+
     corrected, shifts, ref_elev = apply_topo_correction(
         data, time_axis, elevations, v
     )
@@ -303,7 +312,8 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
 
     save_figure(out_png, profile_key, dist_axis, time_axis,
                 corrected, elevations, v, ref_elev,
-                gain_exp=float(params.get('gain_exponent', 0.0)))
+                gain_exp=float(params.get('gain_exponent', 0.0)),
+                flip_x=bool(params.get('flip_x', False)))
 
     # --- sidecar JSON: topo info + processing params + raw instrument header ---
     def _serial(v):

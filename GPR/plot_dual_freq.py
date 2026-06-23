@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import sys
+import json
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -81,7 +82,16 @@ def load_npz(path):
     return data, dist_axis, time_axis
 
 
-def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=0.0):
+def load_gain(line, freq):
+    """Read gain_exponent from params JSON; return 0.0 if not found."""
+    p = DATA_GPR / 'Processed' / '{}_{}_params.json'.format(line, freq)
+    if p.exists():
+        with open(str(p), encoding='utf-8') as f:
+            return float(json.load(f).get('gain_exponent', 0.0))
+    return 0.0
+
+
+def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=None):
     # --- find files ---
     if stage_override:
         p50  = find_npz(line, '50MHz',  stage_override)
@@ -105,12 +115,13 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=0.
     d50,  x50,  t50  = load_npz(p50)
     d100, x100, t100 = load_npz(p100)
 
-    # --- display gain (not baked into the NPZ; applied here only) ---
-    if gain_exp and gain_exp > 0:
-        sfreq50  = 1000.0 / float(t50[1]  - t50[0])
-        sfreq100 = 1000.0 / float(t100[1] - t100[0])
-        d50  = display_gain(d50,  sfreq50,  gain_exp)
-        d100 = display_gain(d100, sfreq100, gain_exp)
+    # --- display gain: use per-profile params JSON, CLI --gain overrides both ---
+    gain50  = gain_exp if gain_exp is not None else load_gain(line, '50MHz')
+    gain100 = gain_exp if gain_exp is not None else load_gain(line, '100MHz')
+    if gain50 > 0:
+        d50  = display_gain(d50,  1000.0 / float(t50[1]  - t50[0]),  gain50)
+    if gain100 > 0:
+        d100 = display_gain(d100, 1000.0 / float(t100[1] - t100[0]), gain100)
 
     # --- depth axes ---
     z50  = t50  * velocity / 2.0   # one-way depth (m)
@@ -193,14 +204,23 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=0.
     ax100.set_xlabel('Distance (m)', fontsize=9)
     plt.setp(ax50.get_xticklabels(), visible=False)
 
+    gain50_str  = '  |  gain {:.1f}'.format(gain50)  if gain50  > 0 else ''
+    gain100_str = '  |  gain {:.1f}'.format(gain100) if gain100 > 0 else ''
     ax50.set_title(
-        '{} -- 50 MHz ({})'.format(line, stage50),
+        '{} -- 50 MHz ({}){}'.format(line, stage50, gain50_str),
         fontsize=10, loc='left'
     )
     ax100.set_title(
-        '{} -- 100 MHz ({})  |  offset {:.0f} m'.format(line, stage100, x_offset),
+        '{} -- 100 MHz ({})  |  offset {:.0f} m{}'.format(line, stage100, x_offset, gain100_str),
         fontsize=10, loc='left'
     )
+
+    # N/S endpoint labels inside both panels at top corners
+    for ax in (ax50, ax100):
+        ax.text(0.01, 0.99, 'N', transform=ax.transAxes,
+                ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
+        ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
+                ha='right', va='top', fontsize=11, fontweight='bold', color='black')
 
     # --- colourbars ---
     plt.colorbar(im50,  cax=cax50,  label='Ampl.')
@@ -231,8 +251,8 @@ def main():
                         help='Wave velocity in m/ns (default: {})'.format(V_DEFAULT))
     parser.add_argument('--clip', type=float, default=98.0,
                         help='Amplitude clip percentile (default: 98)')
-    parser.add_argument('--gain', type=float, default=0.0,
-                        help='Display gain exponent, applied at render only (default: 0 = off)')
+    parser.add_argument('--gain', type=float, default=None,
+                        help='Display gain exponent override (default: read from params JSON)')
     parser.add_argument('--out', type=str, default=None,
                         help='Output PNG path (default: auto)')
     args = parser.parse_args()

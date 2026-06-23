@@ -89,6 +89,10 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
     sfreq = info['samples'] / info['Total_time_window'] * 1000   # MHz
     processed, time_axis_out = apply_processing(data, time_axis, sfreq, params)
 
+    if params.get('flip_x', False):
+        processed = processed[:, ::-1]
+        print('    flip_x: profile reversed (North on left)')
+
     PROC_DIR.mkdir(parents=True, exist_ok=True)
     out_proc = PROC_DIR / (stem + '_processed.npz')
     np.savez(str(out_proc), data=processed, dist_axis=dist_axis, time_axis=time_axis_out)
