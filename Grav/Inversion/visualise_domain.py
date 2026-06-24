@@ -17,7 +17,7 @@ import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 import pygimli as pg
 from pathlib import Path
-from forward_lavatube import build_model, RHO_HOST
+from forward_fem import build_model, RHO_HOST
 
 BASE = Path(__file__).resolve().parents[3]
 
@@ -71,6 +71,8 @@ fig.suptitle("Forward-model domain  --  Line 3 GPR constraints: "
 out = BASE / "Results/Grav/Inversion"
 out.mkdir(parents=True, exist_ok=True)
 p = out / "model_domain.png"
-fig.tight_layout()
-fig.savefig(p, dpi=140, bbox_inches="tight")
+# Set spacing AFTER pg.show (which calls tight_layout internally): trims the
+# top whitespace and separates the zoom title from the panel above.
+fig.subplots_adjust(top=0.94, bottom=0.07, hspace=0.33)
+fig.savefig(p, dpi=140)
 print(f"saved -> {p.relative_to(BASE)}")

@@ -13,7 +13,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
-from forward_lavatube import lavatube_response, cylinder_analytic
+from forward_fem import lavatube_response, cylinder_analytic
 
 BASE = Path(__file__).resolve().parents[3]   # Thesis Lunar Leaper/
 
