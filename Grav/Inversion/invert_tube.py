@@ -29,7 +29,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
-from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
+from forward_polygon import polygon_gz, ellipse_vertices, tube_gz, RHO_HOST
 
 BASE = Path(__file__).resolve().parents[3]
 DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended.csv"
@@ -46,8 +46,15 @@ SWEEP = 6.0                    # m, +/- range for the wide one-at-a-time sweep
 N_MC = 3000                    # Monte-Carlo draws
 NVERT = 144                    # polygon vertices (>0.1% accurate, fast)
 
-RADIUS_GRID = np.arange(1.0, 40.0, 0.5)    # circle radius / candidate sizes (m)
-WIDTH_GRID = np.arange(1.0, 60.0, 0.5)     # ellipse half-width (m)
+# Tube length: None = infinite 2D tube (default). Set to a distance (m) to
+# truncate the tube on one side (e.g. a collapse pit ~10-15 m from Line 3),
+# which scales the signal down -> refit returns a larger cross-section.
+TRUNCATE_D = None
+
+# Grids capped at structurally plausible sizes (no 35 m-radius caves on Earth),
+# so the fine 0.1 m step gives smooth sweeps / MC histograms for free.
+RADIUS_GRID = np.arange(1.0, 20.0, 0.1)    # circle radius (m)
+WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 
 
 def load_line(line=LINE):
@@ -58,17 +65,20 @@ def load_line(line=LINE):
     return x[o], resid[o], se[o]
 
 
-def verts_for(mode, size, x0, ceiling, floor):
-    """Polygon vertices for a candidate model."""
+def shape_params(mode, size, ceiling, floor):
+    """(a, b, depth): semi-axes (horizontal, vertical) and centre depth."""
     if mode == "circle":
         R = size
-        return ellipse_vertices(R, R, x0, ceiling + R, n=NVERT)
-    b = (floor - ceiling) / 2.0                 # ellipse vertical semi-axis (fixed)
-    return ellipse_vertices(size, b, x0, ceiling + b, n=NVERT)
+        return R, R, ceiling + R                # circle top pinned at the ceiling
+    b = (floor - ceiling) / 2.0                 # vertical semi-axis fixed by GPR
+    return size, b, ceiling + b                 # size = half-width
 
 
 def forward(mode, size, x0, ceiling, floor, sx):
-    return polygon_gz(sx, verts_for(mode, size, x0, ceiling, floor), -DENSITY)
+    a, b, depth = shape_params(mode, size, ceiling, floor)
+    if TRUNCATE_D is None:                       # exact infinite 2D tube
+        return polygon_gz(sx, ellipse_vertices(a, b, x0, depth, n=NVERT), -DENSITY)
+    return tube_gz(sx, a, b, x0, depth, d_trunc=TRUNCATE_D, rho_contrast=-DENSITY)
 
 
 def chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s):
@@ -106,13 +116,15 @@ def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0):
 def run_mode(mode, sx, d, se):
     sizes = RADIUS_GRID if mode == "circle" else WIDTH_GRID
     size_lbl = "radius R (m)" if mode == "circle" else "half-width a (m)"
+    tag = "" if TRUNCATE_D is None else f"_trunc{int(TRUNCATE_D)}"
+    ttl = "" if TRUNCATE_D is None else f"  [tube truncated at {TRUNCATE_D:.0f} m]"
     xmin = sx[np.argmin(d)]
     x0s = np.arange(xmin - 20, xmin + 20, 0.5)
 
     res = invert(mode, sx, d, se, CEILING0, FLOOR0, sizes, x0s)
     chi2red = res["chi2red"]
-    print(f"\n[{mode}] best {size_lbl.split()[0]}={res['size']:.1f} m "
-          f"(data 1sigma, rescaled: {res['size_lo']:.1f}-{res['size_hi']:.1f}), "
+    print(f"\n[{mode}{tag}] best {size_lbl.split()[0]}={res['size']:.2f} m "
+          f"(data 1sigma, rescaled: {res['size_lo']:.2f}-{res['size_hi']:.2f}), "
           f"x0={res['x0']:.1f} m, chi2_red={chi2red:.1f}")
 
     # ---- Figure 1: chi2 surface + best-fit overlay --------------------------
@@ -141,17 +153,18 @@ def run_mode(mode, sx, d, se):
     a2.legend(fontsize=8)
     a2.grid(True, alpha=0.25, ls="--")
     fig.suptitle(f"Line {LINE} inversion -- {mode} (ceiling {CEILING0:.0f} m"
-                 + (f", floor {FLOOR0:.0f} m" if mode == "ellipse" else "") + ")",
+                 + (f", floor {FLOOR0:.0f} m" if mode == "ellipse" else "") + ")" + ttl,
                  fontweight="bold")
     fig.tight_layout()
-    fig.savefig(FIG / f"invert_line{LINE}_{mode}.png", dpi=140)
-    print(f"      saved -> Results/Grav/Inversion/invert_line{LINE}_{mode}.png")
+    fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
+    print(f"      saved -> Results/Grav/Inversion/invert_line{LINE}_{mode}{tag}.png")
 
     # ---- Figure 2: sensitivity to the GPR picks -----------------------------
     fig, (b1, b2) = plt.subplots(1, 2, figsize=(13, 5))
 
-    # (a) wide one-at-a-time sweep
-    ceilings = np.arange(CEILING0 - SWEEP, CEILING0 + SWEEP + 0.01, 1.0)
+    # (a) wide one-at-a-time sweep (kept physical: ceiling >= MIN_CEILING)
+    ceilings = np.arange(max(CEILING0 - SWEEP, MIN_CEILING),
+                         CEILING0 + SWEEP + 0.01, 1.0)
     best_vs_ceil = [invert(mode, sx, d, se, c,
                            FLOOR0 if mode == "circle" else max(FLOOR0, c + 1),
                            sizes, x0s)["size"] for c in ceilings]
@@ -172,7 +185,7 @@ def run_mode(mode, sx, d, se):
     rng = np.random.default_rng(0)
     mc = np.empty(N_MC)
     for k in range(N_MC):
-        c = rng.normal(CEILING0, SIGMA_PICK)
+        c = max(rng.normal(CEILING0, SIGMA_PICK), MIN_CEILING)
         f = rng.normal(FLOOR0, SIGMA_PICK)
         if mode == "ellipse" and f <= c + 1:
             f = c + 1
@@ -184,13 +197,13 @@ def run_mode(mode, sx, d, se):
     b2.set_xlabel(f"recovered {size_lbl}")
     b2.set_ylabel("count")
     b2.set_title(f"MC over picks (sigma={SIGMA_PICK:.1f} m): "
-                 f"{p50:.1f} [{p16:.1f}, {p84:.1f}] m")
-    fig.suptitle(f"Line {LINE} {mode} -- sensitivity to GPR picks",
+                 f"{p50:.2f} [{p16:.2f}, {p84:.2f}] m")
+    fig.suptitle(f"Line {LINE} {mode} -- sensitivity to GPR picks" + ttl,
                  fontweight="bold")
     fig.tight_layout()
-    fig.savefig(FIG / f"sensitivity_line{LINE}_{mode}.png", dpi=140)
-    print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}.png")
-    print(f"      MC {size_lbl.split()[0]} = {p50:.1f} [{p16:.1f}, {p84:.1f}] m")
+    fig.savefig(FIG / f"sensitivity_line{LINE}_{mode}{tag}.png", dpi=140)
+    print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}{tag}.png")
+    print(f"      MC {size_lbl.split()[0]} = {p50:.2f} [{p16:.2f}, {p84:.2f}] m")
 
 
 def main():

@@ -63,6 +63,34 @@ def ellipse_vertices(a, b, x0, depth, n=180):
     return np.column_stack([x0 + a * np.cos(t), depth + b * np.sin(t)])
 
 
+def tube_gz(sensor_x, a, b, x0, depth, d_trunc=np.inf, cell=0.3,
+            rho_contrast=-RHO_HOST):
+    """
+    g_z (mGal) of an elliptical tube cross-section, allowing a FINITE tube length.
+
+    The cross-section is discretised into cells; each cell is extruded along the
+    tube axis y and the 3D kernel is integrated analytically in y:
+        d_trunc = inf  -> y in (-inf, inf)  = the 2D infinite tube
+        d_trunc = d    -> y in (-d, inf)    = tube ends at distance d on one side
+                                              (e.g. truncated by a collapse pit),
+                                              factor (1 + d/sqrt(D^2+d^2)) / D^2.
+    a, b = semi-axes (horizontal, vertical); centre (x0, depth).
+    """
+    gx, gz = np.meshgrid(np.arange(x0 - a, x0 + a, cell),
+                         np.arange(depth - b, depth + b, cell))
+    inside = ((gx - x0) / a) ** 2 + ((gz - depth) / b) ** 2 <= 1.0
+    xc, zc = gx[inside], gz[inside]
+    dA = cell * cell
+
+    xs = np.asarray(sensor_x, float)[:, None]
+    D2 = (xs - xc[None, :]) ** 2 + zc[None, :] ** 2
+    if np.isinf(d_trunc):
+        Iy = 2.0 / D2
+    else:
+        Iy = (1.0 + d_trunc / np.sqrt(D2 + d_trunc ** 2)) / D2
+    return G * rho_contrast * dA * np.sum(zc[None, :] * Iy, axis=1) * MGAL
+
+
 def _cylinder_analytic(sensor_x, radius, depth, x0=0.0, rho_contrast=-RHO_HOST):
     """Exact g_z (mGal) of a 2D infinite horizontal cylinder (validation)."""
     x = np.asarray(sensor_x, float) - x0
