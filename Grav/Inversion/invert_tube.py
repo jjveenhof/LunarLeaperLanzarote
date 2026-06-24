@@ -191,7 +191,9 @@ def run_mode(mode, sx, d, se):
             f = c + 1
         mc[k] = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
     p16, p50, p84 = np.percentile(mc, [16, 50, 84])
-    b2.hist(mc, bins=40, color="#FF5C00", alpha=0.8)
+    step = sizes[1] - sizes[0]                            # align bins to the grid
+    bins = np.arange(mc.min() - step / 2, mc.max() + step, step)
+    b2.hist(mc, bins=bins, color="#FF5C00", alpha=0.8)
     for p, ls in [(p16, ":"), (p50, "-"), (p84, ":")]:
         b2.axvline(p, color="k", ls=ls)
     b2.set_xlabel(f"recovered {size_lbl}")
