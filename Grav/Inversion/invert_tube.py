@@ -38,9 +38,10 @@ FIG = BASE / "Results/Grav/Inversion"
 FIG.mkdir(parents=True, exist_ok=True)
 
 # ---- configuration (edit here) ----------------------------------------------
-LINE = 3
+LINE = 5
 DENSITY = RHO_HOST              # 1875 kg/m^3, fixed (see module docstring)
-CEILING0, FLOOR0 = 5.0, 16.0   # nominal Line 3 GPR picks (m)
+CEILING0, FLOOR0 = 10.0, 16.0  # Line 5: ceiling 10 m; no floor pick -> circle only
+MODES = ("circle",)            # no floor pick on Line 5, so ellipse is skipped
 MIN_CEILING = 1.0              # m, shallowest physical void top (rock cover above)
 SIGMA_PICK = 1.0               # m, ~50 MHz vertical resolution (100 MHz ~0.5)
 SWEEP = 6.0                    # m, +/- range for the wide one-at-a-time sweep
@@ -244,7 +245,7 @@ def run_mode(mode, sx, d, se):
 def main():
     sx, d, se = load_line()
     print(f"Line {LINE}: {len(sx)} stations, residual min {d.min()*1000:.0f} uGal")
-    for mode in ("circle", "ellipse"):
+    for mode in MODES:
         run_mode(mode, sx, d, se)
 
 
