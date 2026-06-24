@@ -35,6 +35,16 @@ Diagnostics in `Inspect/` (LSQ stats, base stations, decay residuals, correction
 One-offs and legacy plots in `Adhoc/` (incl. `visualise_lines.py` for the simple-drift output).
 Plots are saved under `Results/Grav/`.
 
+Regional de-trend: `detrend_regional.py` fits a robust, uncertainty-weighted per-line trend
+to the CBA (Huber IRLS, weights 1/SE^2; gravity only -- no GPR/LiDAR, to avoid an inverse
+crime), reports chi2_red per line, writes residuals to
+`bouguer_anomaly_decay_rho{X}_detrended.csv`, and projects the island-scale regional map
+gradient (Camacho et al. 2001; set MAP_GRAD_MAG/AZ in the script) onto each line to check
+the fit. Plots in `Results/Grav/Detrend/`. Line 4 skipped (bent geometry, not for inversion).
+Note: Line 2's cave low is off-centre, so its self-fit is contaminated -- adopt the
+map/Line-5 gradient there. Lines on different bases are NOT on a common datum (Lines 3&4
+share one; Lines 2 and 5 do not), so trends are fit per line, never as one cross-line plane.
+
 ### Conventions
 - All anomalies are relative to the base station (g_base = 0). Corrections (FAC, LAT, BC, TC)
   are applied relative to the per-line per-day base mean: RTK day-to-day bias cancels within a day.
