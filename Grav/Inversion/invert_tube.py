@@ -29,6 +29,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
+from scipy.optimize import minimize_scalar
 from forward_polygon import polygon_gz, ellipse_vertices, tube_gz, RHO_HOST
 
 BASE = Path(__file__).resolve().parents[3]
@@ -74,6 +75,12 @@ def shape_params(mode, size, ceiling, floor):
     return size, b, ceiling + b                 # size = half-width
 
 
+def area_of(mode, size, ceiling, floor):
+    """Cross-sectional area (m^2) = volume per unit tube length."""
+    a, b, _ = shape_params(mode, size, ceiling, floor)
+    return np.pi * a * b
+
+
 def forward(mode, size, x0, ceiling, floor, sx):
     a, b, depth = shape_params(mode, size, ceiling, floor)
     if TRUNCATE_D is None:                       # exact infinite 2D tube
@@ -82,10 +89,14 @@ def forward(mode, size, x0, ceiling, floor, sx):
 
 
 def chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s):
+    # x0-shift trick: forward(x0) == forward(0) evaluated at (sensors - x0).
+    # Compute one dense forward per size, then interpolate for every x0.
+    xq = np.arange(sx.min() - x0s.max() - 2, sx.max() - x0s.min() + 2, 0.5)
     chi2 = np.empty((len(sizes), len(x0s)))
     for i, s in enumerate(sizes):
+        g0 = forward(mode, s, 0.0, ceiling, floor, xq)
         for j, x0 in enumerate(x0s):
-            g = forward(mode, s, x0, ceiling, floor, sx)
+            g = np.interp(sx - x0, xq, g0)
             chi2[i, j] = np.sum(((g - d) / se) ** 2)
     return chi2
 
@@ -106,10 +117,17 @@ def invert(mode, sx, d, se, ceiling, floor, sizes, x0s):
 
 
 def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0):
-    """1D size search at a fixed x0 (fast inner loop for MC)."""
-    chi = [np.sum(((forward(mode, s, x0, ceiling, floor, sx) - d) / se) ** 2)
-           for s in sizes]
-    return sizes[int(np.argmin(chi))]
+    """Continuous 1D size fit at fixed x0 (fast inner loop for MC).
+
+    chi2(size) is smooth and unimodal, so a bounded minimiser finds the best
+    size in ~15 forwards instead of scanning the whole grid.
+    """
+    def chi(s):
+        g = forward(mode, s, x0, ceiling, floor, sx)
+        return np.sum(((g - d) / se) ** 2)
+    r = minimize_scalar(chi, bounds=(sizes[0], sizes[-1]), method="bounded",
+                        options={"xatol": 0.05})
+    return r.x
 
 
 # ============================== run one mode =================================
@@ -184,13 +202,20 @@ def run_mode(mode, sx, d, se):
     # (b) Monte-Carlo over pick noise (x0 fixed at the data best for speed)
     rng = np.random.default_rng(0)
     mc = np.empty(N_MC)
+    mc_area = np.empty(N_MC)
     for k in range(N_MC):
         c = max(rng.normal(CEILING0, SIGMA_PICK), MIN_CEILING)
         f = rng.normal(FLOOR0, SIGMA_PICK)
         if mode == "ellipse" and f <= c + 1:
             f = c + 1
-        mc[k] = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
+        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
+        mc[k] = s
+        mc_area[k] = area_of(mode, s, c, f)              # per-draw geometry
     p16, p50, p84 = np.percentile(mc, [16, 50, 84])
+    se_pick = float(np.std(mc))                           # pick-propagated 1 SE
+    area_best = area_of(mode, res["size"], CEILING0, FLOOR0)  # volume per metre
+    area_se = float(np.std(mc_area))
+
     step = sizes[1] - sizes[0]                            # align bins to the grid
     bins = np.arange(mc.min() - step / 2, mc.max() + step, step)
     b2.hist(mc, bins=bins, color="#FF5C00", alpha=0.8)
@@ -199,13 +224,16 @@ def run_mode(mode, sx, d, se):
     b2.set_xlabel(f"recovered {size_lbl}")
     b2.set_ylabel("count")
     b2.set_title(f"MC over picks (sigma={SIGMA_PICK:.1f} m): "
-                 f"{p50:.2f} [{p16:.2f}, {p84:.2f}] m")
+                 f"{p50:.2f} +/- {se_pick:.2f} m (1 SE)")
     fig.suptitle(f"Line {LINE} {mode} -- sensitivity to GPR picks" + ttl,
                  fontweight="bold")
     fig.tight_layout()
     fig.savefig(FIG / f"sensitivity_line{LINE}_{mode}{tag}.png", dpi=140)
     print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}{tag}.png")
-    print(f"      MC {size_lbl.split()[0]} = {p50:.2f} [{p16:.2f}, {p84:.2f}] m")
+    print(f"      MC {size_lbl.split()[0]} = {p50:.2f} +/- {se_pick:.2f} m "
+          f"(1 SE, picks only); 68% [{p16:.2f}, {p84:.2f}]")
+    print(f"      area = {area_best:.0f} +/- {area_se:.0f} m^2 "
+          f"(= volume per metre of tube)")
 
 
 def main():
