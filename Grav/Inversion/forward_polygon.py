@@ -42,11 +42,16 @@ def polygon_gz(sensor_x, verts, rho_contrast=-RHO_HOST):
     R = np.where(R == 0.0, np.nan, R)                     # skip degenerate edges
     r1 = np.hypot(x1, z1)
     r2 = np.hypot(x2, z2)
+    # Guard a vertex landing exactly on a sensor (r = 0 -> log/divide blow up);
+    # such edges become nan and drop out of the nansum.
+    r1 = np.where(r1 == 0.0, np.nan, r1)
+    r2 = np.where(r2 == 0.0, np.nan, r2)
     th1 = np.arctan2(z1, x1)
     th2 = np.arctan2(z2, x2)
 
-    P = (x1 * z2 - x2 * z1) / R                           # = (x1 dz - z1 dx)/R
-    Q = dx * (th1 - th2) + dz * np.log(r2 / r1)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        P = (x1 * z2 - x2 * z1) / R                       # = (x1 dz - z1 dx)/R
+        Q = dx * (th1 - th2) + dz * np.log(r2 / r1)
     g = np.nansum(P * Q, axis=1)
     return 2.0 * G * rho_contrast * g * MGAL
 
