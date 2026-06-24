@@ -30,7 +30,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.optimize import minimize_scalar
-from forward_polygon import polygon_gz, ellipse_vertices, tube_gz, RHO_HOST
+from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
 
 BASE = Path(__file__).resolve().parents[3]
 DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended.csv"
@@ -83,9 +83,14 @@ def area_of(mode, size, ceiling, floor):
 
 def forward(mode, size, x0, ceiling, floor, sx):
     a, b, depth = shape_params(mode, size, ceiling, floor)
-    if TRUNCATE_D is None:                       # exact infinite 2D tube
-        return polygon_gz(sx, ellipse_vertices(a, b, x0, depth, n=NVERT), -DENSITY)
-    return tube_gz(sx, a, b, x0, depth, d_trunc=TRUNCATE_D, rho_contrast=-DENSITY)
+    g = polygon_gz(sx, ellipse_vertices(a, b, x0, depth, n=NVERT), -DENSITY)
+    if TRUNCATE_D is None:                       # infinite 2D tube
+        return g
+    # One-sided finite tube (ends at d on the pit side): scale by the truncation
+    # factor at the centroid depth. Fast approximation of the exact per-cell
+    # forward_polygon.tube_gz (error << the truncation correction itself).
+    F = 0.5 * (1.0 + TRUNCATE_D / np.hypot(depth, TRUNCATE_D))
+    return F * g
 
 
 def chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s):
