@@ -36,9 +36,19 @@ import invert_tube as it
 from forward_polygon import ellipse_vertices
 
 CORR = it.BASE / "Data/Gravimetry/Processed/LL_gravity_corrections.csv"
+WITHTC = it.BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_with_TC.csv"
 GPR_GNSS = it.BASE / "Data/GNSS/Cleaned/CleanedGNSS_GPR_Lines.csv"
 HERE = Path(__file__).resolve().parent
-COLORS = {"circle": "#FF5C00", "ellipse": "#0066CC"}
+
+# Match the rest of the gravity plots: per-line QGIS palette + station-type marker
+# (base square, tie triangle, regular circle). Model curves stay black, as in the
+# invert_tube best-fit plots, so they read as "model" not "data".
+LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}
+STN_MARKER = {"base": "s", "tie": "v", "regular": "o"}
+STN_SIZE = {"base": 7, "tie": 8, "regular": 5}
+FIT_LS = {"circle": "-", "ellipse": "--"}
+LIDAR_COLOR = "#9400D3"        # ground truth: violet, distinct from orange/green
+                               # stations, black model curves and grey terrain
 
 
 def gravity_profile(line):
@@ -47,17 +57,24 @@ def gravity_profile(line):
     direction u so other datasets can be projected onto the same dist axis."""
     det = np.genfromtxt(it.DET, delimiter=",", names=True)
     m = det["Line"] == line
-    dist, E, N = det["dist"][m], det["Easting"][m], det["Northing"][m]
+    dist, E, N, loc = (det["dist"][m], det["Easting"][m], det["Northing"][m],
+                       det["loc_id"][m])
     corr = np.genfromtxt(CORR, delimiter=",", names=True)
     elev = np.array([corr["Elevation"][np.argmin((corr["Easting"] - e) ** 2
                                                   + (corr["Northing"] - n) ** 2)]
                      for e, n in zip(E, N)])
+    # Station type (base/tie/regular) by (Line, loc_id) from the corrected file.
+    w = np.genfromtxt(WITHTC, delimiter=",", names=True, dtype=None, encoding="utf-8")
+    wm = w["Line"] == line
+    wloc, wtype = w["loc_id"][wm], np.array([str(x) for x in w["StationType"][wm]])
+    typ = np.array([wtype[np.where(wloc == lid)[0][0]] if lid in wloc else "regular"
+                    for lid in loc])
     o = np.argsort(dist)
-    dist, E, N, elev = dist[o], E[o], N[o], elev[o]
+    dist, E, N, elev, typ = dist[o], E[o], N[o], elev[o], typ[o]
     O = np.array([E[0], N[0]])
     u = np.array([E[-1] - E[0], N[-1] - N[0]])
     u = u / np.hypot(*u)
-    return dist, elev, O, u
+    return dist, elev, typ, O, u
 
 
 def gpr_surface(line, O, u, xs, zs):
@@ -103,8 +120,18 @@ def main():
     sx, d, se = it.load_line(args.line)
     xmin = sx[np.argmin(d)]
     x0s = np.arange(xmin - 20, xmin + 20, 0.5)
-    xs, zs, O, u = gravity_profile(args.line)
+    xs, zs, typ, O, u = gravity_profile(args.line)
     surf = lambda x: np.interp(x, xs, zs)
+    col = LINE_COLORS.get(args.line, "0.1")
+
+    def plot_stations():
+        # base square / tie triangle / regular circle, all in the line colour.
+        for t in ("regular", "tie", "base"):
+            sel = typ == t
+            if sel.any():
+                ax.plot(xs[sel], zs[sel], STN_MARKER[t], color=col,
+                        ms=STN_SIZE[t], mec="0.2", mew=0.5, ls="none", zorder=5,
+                        label=f"{t} station")
 
     # ---- best fit per shape (reusing the inversion) -------------------------
     fits = {}
@@ -121,16 +148,15 @@ def main():
         floor_z = ge.min() - max(floor, 20) - 5
         ax.fill_between(gd, ge, floor_z, color="0.88", zorder=0)
         ax.plot(gd, ge, "-", color="0.25", lw=1.8, zorder=4,
-                label="GPR-line surface (GNSS, dense)")
-        ax.plot(xs, zs, "o", color="0.1", ms=5, zorder=5,
-                label=f"gravity stations (GNSS)  [GPR-vs-stn RMS {rms*100:.0f} cm]")
+                label=f"GPR-line surface (GNSS)  [GPR-vs-stn RMS {rms*100:.0f} cm]")
         print(f"  GPR-line GNSS projected, RMS vs gravity stations = {rms*100:.1f} cm")
     else:
         floor_z = zs.min() - max(floor, 20) - 5
         ax.fill_between(xs, zs, floor_z, color="0.88", zorder=0)
-        ax.plot(xs, zs, "o-", color="0.25", lw=2.0, ms=5, zorder=4,
+        ax.plot(xs, zs, "-", color="0.25", lw=2.0, zorder=4,
                 label="measured surface (gravity stations)")
         print("  (no GPR topo file; using gravity station elevations only)")
+    plot_stations()
 
     for mode in modes:
         res = fits[mode]
@@ -140,7 +166,7 @@ def main():
         vx, vz = v[:, 0], surf(x0) - v[:, 1]          # depth -> absolute elevation
         vx = np.append(vx, vx[0]); vz = np.append(vz, vz[0])
         lbl = "R" if mode == "circle" else "a"
-        ax.plot(vx, vz, color=COLORS[mode], lw=2.2, zorder=5,
+        ax.plot(vx, vz, color="k", lw=2.2, ls=FIT_LS[mode], zorder=6,
                 label=f"{mode} fit ({lbl}={res['size']:.1f} m, "
                       f"area {it.area_of(mode, res['size'], ceil, floor):.0f} m$^2$)")
 
@@ -150,15 +176,15 @@ def main():
                              (floor, "GPR floor")] if "ellipse" in modes \
             else [(ceil, "GPR ceiling")]:
         ax.axhline(surf(x0r) - depth_pick, color="0.55", ls=":", lw=1.0, zorder=2)
-        ax.text(xs.min(), surf(x0r) - depth_pick, f" {name} ({depth_pick:.0f} m)",
-                va="bottom", ha="left", fontsize=8, color="0.4")
+        ax.text(xs.max(), surf(x0r) - depth_pick, f"{name} ({depth_pick:.0f} m) ",
+                va="bottom", ha="right", fontsize=8, color="0.4")
 
     # ---- optional LiDAR ground-truth overlay --------------------------------
     lidar = HERE / f"lidar_line{args.line}.csv"
     if lidar.exists():
         L = np.genfromtxt(lidar, delimiter=",", names=True)
-        ax.plot(L["x"], L["z"], color="k", lw=2.4, ls="--", zorder=6,
-                label="LiDAR cross-section")
+        ax.plot(L["x"], L["z"], color=LIDAR_COLOR, lw=2.6, zorder=7,
+                label="LiDAR cross-section (ground truth)")
         print(f"  overlaid LiDAR -> {lidar.name}")
     else:
         print(f"  (no LiDAR file yet; drop '{lidar.name}' with columns x,z to overlay)")
