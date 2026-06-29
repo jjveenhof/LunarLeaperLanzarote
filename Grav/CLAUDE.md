@@ -54,7 +54,11 @@ share one; Lines 2 and 5 do not), so trends are fit per line, never as one cross
   no silent substitution when an SE is unavailable.
 - Colleague's corrections file: `Data/Gravimetry/Processed/LL_gravity_corrections.csv`
   (FA_correction, BA_correction, Terrain_correction). All values are in mGal by
-  convention. The terrain correction is genuinely large at this site.
+  convention. The terrain correction is small: mean ~0.10 mGal, and on Line 3 it
+  varies only ~0.05 mGal across the profile (std ~0.016, ~4% of the cave anomaly),
+  most of which the detrend/baseline absorbs -- so it is a minor systematic for the
+  inversion. (The superseded `LL_gravity_corrections_old.csv` has unphysical
+  ~200 mGal TC values; ignore it.)
 
 ## Current Focus
 - Pipeline refactor completed (2026-06-12): all scripts use grav_utils.py for shared
