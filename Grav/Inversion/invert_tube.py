@@ -28,8 +28,13 @@ Sensitivity to the GPR picks:
     right-skewed, so the reported SE is a first-order summary.
   - VELOCITY uncertainty: the picks are time picks, so a fractional migration-
     velocity error scales every depth jointly (ceiling+floor together) -- a
-    systematic, common-mode term, propagated separately and combined in
-    quadrature with the (random) pick SE.
+    systematic, common-mode term, propagated separately.
+  - DETREND uncertainty: the regional slope removed before inverting has its own
+    1-sigma (from detrend_regional.py); perturbing the residual by that tilt and
+    refitting gives its contribution.
+All contributions (data grid-search interval + picks + velocity + detrend) are
+combined in quadrature into one reported SE; truncation is kept separate as a
+systematic bracket (compare the inf-vs-truncated runs).
 
 Run in any env; configure from the command line, e.g.:
     python invert_tube.py                              # Line 3 preset, infinite
@@ -48,6 +53,7 @@ from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
 
 BASE = Path(__file__).resolve().parents[3]
 DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended.csv"
+TREND = BASE / "Data/Gravimetry/Processed/detrend_trend_params_rho1p875.csv"
 FIG = BASE / "Results/Grav/Inversion"
 FIG.mkdir(parents=True, exist_ok=True)
 
@@ -78,6 +84,7 @@ SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
 # PLACEHOLDER values; update with the final velocity (see project memo).
 VELOCITY = 0.125             # m/ns
 VELOCITY_SIGMA = 0.010       # m/ns 1-sigma (plausible range ~0.115-0.135)
+SLOPE_SE = 0.0               # mGal/m, regional-trend slope 1-sigma (set in main)
 TRUNCATE_D = None            # set per-run from the --truncate list (None = inf 2D)
 
 
@@ -257,8 +264,31 @@ def run_mode(mode, sx, d, se):
     sm, am = fit(max(CEILING0 * (1 - dv), MIN_CEILING), FLOOR0 * (1 - dv))
     se_vel = abs(sp - sm) / 2.0
     area_se_vel = abs(ap - am) / 2.0
-    se_tot = np.hypot(se_pick, se_vel)
-    area_se_tot = np.hypot(area_se, area_se_vel)
+
+    # ---- detrend uncertainty: the regional slope was removed before inverting,
+    # so its 1-sigma tilts the residual we fit. Perturb the data by +/- the
+    # slope SE (anchor cancels: the DC offset is floated) and refit. ----------
+    tilt = SLOPE_SE * (sx - sx.mean())
+
+    def fit_data(dd):
+        s = best_size_only(mode, sx, dd, se, CEILING0, FLOOR0, sizes, res["x0"])
+        return s, area_of(mode, s, CEILING0, FLOOR0)
+
+    sp, ap = fit_data(d + tilt)
+    sm, am = fit_data(d - tilt)
+    se_det = abs(sp - sm) / 2.0
+    area_se_det = abs(ap - am) / 2.0
+
+    # ---- data (measurement) term: the chi2-rescaled grid-search half-interval.
+    se_data = (res["size_hi"] - res["size_lo"]) / 2.0
+    area_se_data = abs(area_of(mode, res["size_hi"], CEILING0, FLOOR0)
+                       - area_of(mode, res["size_lo"], CEILING0, FLOOR0)) / 2.0
+
+    # ---- combine all 1-sigma contributions in quadrature (truncation is a
+    # separate systematic bracket: see the inf-vs-truncated runs, not here). ---
+    quad = lambda *v: float(np.sqrt(np.sum(np.square(v))))
+    se_tot = quad(se_data, se_pick, se_vel, se_det)
+    area_se_tot = quad(area_se_data, area_se, area_se_vel, area_se_det)
 
     # ---- Figure 2: one-at-a-time sweep (covers gross mispicks) ---------------
     fig, b1 = plt.subplots(figsize=(7, 5))
@@ -285,12 +315,16 @@ def run_mode(mode, sx, d, se):
     fig.tight_layout()
     fig.savefig(FIG / f"sensitivity_line{LINE}_{mode}{tag}.png", dpi=140)
     print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}{tag}.png")
-    skew = " (half-width mildly right-skewed; SE is first-order)" \
+    skew = "  (half-width mildly right-skewed; SE first-order)" \
         if mode == "ellipse" else ""
-    print(f"      {size_lbl.split()[0]} = {size0:.2f} +/- {se_tot:.2f} m (1 SE)"
-          f"  [picks {se_pick:.2f}, velocity {se_vel:.2f}]{skew}")
-    print(f"      area = {area_best:.0f} +/- {area_se_tot:.0f} m^2 "
-          f"[picks {area_se:.0f}, velocity {area_se_vel:.0f}] (= volume per metre)")
+    print(f"      {size_lbl.split()[0]} = {size0:.2f} +/- {se_tot:.2f} m (1 SE total)"
+          f"{skew}")
+    print(f"         contributions (m): data {se_data:.2f} | picks {se_pick:.2f} | "
+          f"velocity {se_vel:.2f} | detrend {se_det:.2f}")
+    print(f"      area = {area_best:.0f} +/- {area_se_tot:.0f} m^2 (1 SE total, "
+          f"= volume per metre)")
+    print(f"         contributions (m^2): data {area_se_data:.0f} | picks {area_se:.0f}"
+          f" | velocity {area_se_vel:.0f} | detrend {area_se_det:.0f}")
 
 
 def parse_args():
@@ -316,7 +350,8 @@ def parse_args():
 
 
 def main():
-    global LINE, CEILING0, FLOOR0, MODES, SIGMA_PICK, VELOCITY, VELOCITY_SIGMA, TRUNCATE_D
+    global LINE, CEILING0, FLOOR0, MODES, SIGMA_PICK, VELOCITY, VELOCITY_SIGMA
+    global SLOPE_SE, TRUNCATE_D
     args = parse_args()
     pre = LINE_PRESETS[args.line]
     LINE = args.line
@@ -325,6 +360,16 @@ def main():
     MODES = tuple(args.modes) if args.modes else pre["modes"]
     SIGMA_PICK = args.sigma_pick
     VELOCITY, VELOCITY_SIGMA = args.velocity, args.velocity_sigma
+
+    # Regional-trend slope 1-sigma for this line (its tilt was removed before the
+    # inversion, so its uncertainty propagates into the residual we fit).
+    if TREND.exists():
+        tp = np.genfromtxt(TREND, delimiter=",", names=True)
+        row = tp[tp["Line"] == LINE]
+        SLOPE_SE = float(row["slope_se"][0]) if len(row) else 0.0
+    else:
+        print(f"  (no trend-params file; detrend uncertainty omitted)")
+        SLOPE_SE = 0.0
     truncs = [None if t.lower() in ("inf", "none") else float(t)
               for t in args.truncate]
 

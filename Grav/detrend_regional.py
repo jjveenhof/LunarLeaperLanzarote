@@ -45,6 +45,7 @@ MAP_GRAD_AZ  = 337.5    # deg from N, NNW
 rho = float(sys.argv[1]) if len(sys.argv) > 1 else RHO_DEFAULT
 INPUT = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str(rho)}_with_TC.csv"
 OUTCSV = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str(rho)}_detrended.csv"
+TRENDCSV = PROC_DIR / f"detrend_trend_params_rho{rho_str(rho)}.csv"
 FIG_DIR = BASE / "Results/Grav/Detrend"
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -126,6 +127,7 @@ def main():
     print("-" * 92)
 
     chi2_by_line = {}
+    param_rows = []                                    # per-line trend params
     for line_id in LINES:
         g = line_profile(df, line_id)
         x, y, se = g["dist"].values, g["CBA"].values, g["SE"].values
@@ -135,6 +137,8 @@ def main():
         trend = slope * x + intercept
         resid = y - trend
         chi2_by_line[line_id] = chi2_red
+        # slope_se is in mGal/m; xm anchors the tilt for downstream propagation.
+        param_rows.append((line_id, slope, slope_se, intercept, x.mean(), chi2_red))
 
         # Signed slope (mGal/km) with 95% CI from the weighted covariance.
         slope_km = slope * 1000
@@ -217,6 +221,13 @@ def main():
     out = pd.concat(out_rows, ignore_index=True)
     out.to_csv(OUTCSV, index=False)
     print(f"\nDetrended residuals -> {OUTCSV.relative_to(BASE)}")
+
+    # Per-line trend params (slope_se feeds the inversion's detrend-uncertainty
+    # channel; the slope is in mGal/m, tilt anchored about x_mean).
+    params = pd.DataFrame(param_rows, columns=["Line", "slope", "slope_se",
+                                               "intercept", "x_mean", "chi2_red"])
+    params.to_csv(TRENDCSV, index=False)
+    print(f"Trend params       -> {TRENDCSV.relative_to(BASE)}")
     plt.show()
 
 
