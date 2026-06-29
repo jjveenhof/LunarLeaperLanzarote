@@ -26,6 +26,10 @@ Sensitivity to the GPR picks:
     local slope is all we need -- no sampling. For the ellipse this captures the
     inverse-linear slope (da/db = -K/b^2); the half-width is then mildly
     right-skewed, so the reported SE is a first-order summary.
+  - VELOCITY uncertainty: the picks are time picks, so a fractional migration-
+    velocity error scales every depth jointly (ceiling+floor together) -- a
+    systematic, common-mode term, propagated separately and combined in
+    quadrature with the (random) pick SE.
 
 Run in any env; configure from the command line, e.g.:
     python invert_tube.py                              # Line 3 preset, infinite
@@ -69,6 +73,11 @@ LINE = 3
 CEILING0, FLOOR0 = 5.0, 16.0
 MODES = ("circle", "ellipse")
 SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
+# GPR migration velocity: picks are time picks, so velocity scales ALL depths
+# jointly (a systematic, common-mode term -- distinct from the per-pick noise).
+# PLACEHOLDER values; update with the final velocity (see project memo).
+VELOCITY = 0.125             # m/ns
+VELOCITY_SIGMA = 0.010       # m/ns 1-sigma (plausible range ~0.115-0.135)
 TRUNCATE_D = None            # set per-run from the --truncate list (None = inf 2D)
 
 
@@ -239,6 +248,18 @@ def run_mode(mode, sx, d, se):
     se_pick = np.hypot(ds_dc, ds_df) * SIGMA_PICK
     area_se = np.hypot(da_dc, da_df) * SIGMA_PICK
 
+    # ---- velocity uncertainty: a SYSTEMATIC common-mode depth scaling --------
+    # The picks are time picks; a fractional velocity error scales every depth by
+    # the same factor, so ceiling AND floor move together (correlated, unlike the
+    # independent pick noise above). Step = 1-sigma fraction, so SE = half-spread.
+    dv = VELOCITY_SIGMA / VELOCITY
+    sp, ap = fit(CEILING0 * (1 + dv), FLOOR0 * (1 + dv))
+    sm, am = fit(max(CEILING0 * (1 - dv), MIN_CEILING), FLOOR0 * (1 - dv))
+    se_vel = abs(sp - sm) / 2.0
+    area_se_vel = abs(ap - am) / 2.0
+    se_tot = np.hypot(se_pick, se_vel)
+    area_se_tot = np.hypot(area_se, area_se_vel)
+
     # ---- Figure 2: one-at-a-time sweep (covers gross mispicks) ---------------
     fig, b1 = plt.subplots(figsize=(7, 5))
     ceilings = np.arange(max(CEILING0 - SWEEP, MIN_CEILING),
@@ -253,8 +274,8 @@ def run_mode(mode, sx, d, se):
                                 sizes, x0s)["size"] for f in floors]
         b1.plot(floors, best_vs_floor, "s-", color="#00CC80", label="vs floor")
     b1.axvline(CEILING0, color="0.6", ls="--", lw=0.8, label="nominal pick")
-    b1.axhspan(size0 - se_pick, size0 + se_pick, color="#FF5C00", alpha=0.15,
-               label=rf"{size0:.1f} $\pm$ {se_pick:.1f} m (1 SE, picks)")
+    b1.axhspan(size0 - se_tot, size0 + se_tot, color="#FF5C00", alpha=0.15,
+               label=rf"{size0:.1f} $\pm$ {se_tot:.1f} m (1 SE: picks+vel)")
     b1.axhline(size0, color="#FF5C00", lw=1.0)
     b1.set_xlabel("GPR pick depth (m)")
     b1.set_ylabel(f"recovered {size_lbl}")
@@ -266,10 +287,10 @@ def run_mode(mode, sx, d, se):
     print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}{tag}.png")
     skew = " (half-width mildly right-skewed; SE is first-order)" \
         if mode == "ellipse" else ""
-    print(f"      {size_lbl.split()[0]} = {size0:.2f} +/- {se_pick:.2f} m "
-          f"(1 SE, picks only){skew}")
-    print(f"      area = {area_best:.0f} +/- {area_se:.0f} m^2 "
-          f"(= volume per metre of tube)")
+    print(f"      {size_lbl.split()[0]} = {size0:.2f} +/- {se_tot:.2f} m (1 SE)"
+          f"  [picks {se_pick:.2f}, velocity {se_vel:.2f}]{skew}")
+    print(f"      area = {area_best:.0f} +/- {area_se_tot:.0f} m^2 "
+          f"[picks {area_se:.0f}, velocity {area_se_vel:.0f}] (= volume per metre)")
 
 
 def parse_args():
@@ -287,11 +308,15 @@ def parse_args():
                         "(e.g. --truncate inf 10 15)")
     p.add_argument("--sigma-pick", type=float, default=1.0,
                    help="GPR pick 1-sigma (m)")
+    p.add_argument("--velocity", type=float, default=VELOCITY,
+                   help="GPR migration velocity (m/ns)")
+    p.add_argument("--velocity-sigma", type=float, default=VELOCITY_SIGMA,
+                   help="velocity 1-sigma (m/ns)")
     return p.parse_args()
 
 
 def main():
-    global LINE, CEILING0, FLOOR0, MODES, SIGMA_PICK, TRUNCATE_D
+    global LINE, CEILING0, FLOOR0, MODES, SIGMA_PICK, VELOCITY, VELOCITY_SIGMA, TRUNCATE_D
     args = parse_args()
     pre = LINE_PRESETS[args.line]
     LINE = args.line
@@ -299,6 +324,7 @@ def main():
     FLOOR0 = args.floor if args.floor is not None else (pre["floor"] or 16.0)
     MODES = tuple(args.modes) if args.modes else pre["modes"]
     SIGMA_PICK = args.sigma_pick
+    VELOCITY, VELOCITY_SIGMA = args.velocity, args.velocity_sigma
     truncs = [None if t.lower() in ("inf", "none") else float(t)
               for t in args.truncate]
 
