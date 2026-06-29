@@ -12,16 +12,26 @@ FIXED at 1875 kg/m^3 -- changing it would change the Bouguer correction and henc
 the CBA data + SEs, so a density sweep is a chain-level exercise (re-run the
 pipeline per rho), not a forward-only knob; deliberately out of scope here.
 
-Inversion = dense GRID SEARCH (cheap with the analytic forward), which yields the
-whole chi-square surface -> best fit AND its data-driven uncertainty (Delta chi2).
+Inversion = dense GRID SEARCH (cheap with the analytic forward) over (size, x0),
+with a DC offset fitted analytically at every grid point: gravity here is
+relative (arbitrary datum), so the model's far-field level is a free nuisance
+parameter (the weighted-mean residual). The search yields the whole chi-square
+surface -> best fit AND its data-driven uncertainty (Delta chi2); dof = n - 3.
 
-Sensitivity to the GPR picks, two complementary layers:
+Sensitivity to the GPR picks:
   - one-at-a-time SWEEP over a wide pick range (covers gross mispicks),
-  - MONTE-CARLO with Gaussian pick noise (resolution-level uncertainty),
-    folding the pick uncertainty into the recovered size.
+  - ANALYTIC linear propagation of the pick 1-sigma into size and area, via
+    central-difference partials at the best x0 (SE^2 = sum (d size/d pick)^2
+    sigma^2). The recovered size is a smooth function of the pick(s), so the
+    local slope is all we need -- no sampling. For the ellipse this captures the
+    inverse-linear slope (da/db = -K/b^2); the half-width is then mildly
+    right-skewed, so the reported SE is a first-order summary.
 
-Run in any env (no pyGIMLi needed):
-    C:/Users/jj_ve/miniconda3/envs/GPR_plotting_LL/python.exe invert_tube.py
+Run in any env; configure from the command line, e.g.:
+    python invert_tube.py                              # Line 3 preset, infinite
+    python invert_tube.py --line 5                     # Line 5 preset (circle)
+    python invert_tube.py --line 3 --truncate inf 10 15   # 3 truncation runs
+    python invert_tube.py --ceiling 6 --floor 17       # override picks
 """
 
 import numpy as np
@@ -37,26 +47,29 @@ DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended
 FIG = BASE / "Results/Grav/Inversion"
 FIG.mkdir(parents=True, exist_ok=True)
 
-# ---- configuration (edit here) ----------------------------------------------
-LINE = 5
-DENSITY = RHO_HOST              # 1875 kg/m^3, fixed (see module docstring)
-CEILING0, FLOOR0 = 10.0, 16.0  # Line 5: ceiling 10 m; no floor pick -> circle only
-MODES = ("circle",)            # no floor pick on Line 5, so ellipse is skipped
-MIN_CEILING = 1.0              # m, shallowest physical void top (rock cover above)
-SIGMA_PICK = 1.0               # m, ~50 MHz vertical resolution (100 MHz ~0.5)
-SWEEP = 6.0                    # m, +/- range for the wide one-at-a-time sweep
-N_MC = 3000                    # Monte-Carlo draws
-NVERT = 144                    # polygon vertices (>0.1% accurate, fast)
+# ---- per-line presets: GPR picks + which shapes are fittable ----------------
+# Override any of these from the command line (see parse_args / module docstring).
+LINE_PRESETS = {
+    3: dict(ceiling=5.0, floor=16.0, modes=("circle", "ellipse")),
+    5: dict(ceiling=10.0, floor=None, modes=("circle",)),   # no floor pick yet
+}
 
-# Tube length: None = infinite 2D tube (default). Set to a distance (m) to
-# truncate the tube on one side (e.g. a collapse pit ~10-15 m from Line 3),
-# which scales the signal down -> refit returns a larger cross-section.
-TRUNCATE_D = None
-
+# ---- fixed constants --------------------------------------------------------
+DENSITY = RHO_HOST             # 1875 kg/m^3, fixed (chain-coupled; see docstring)
+MIN_CEILING = 1.0             # m, shallowest physical void top (rock cover above)
+SWEEP = 6.0                   # m, +/- range for the wide one-at-a-time sweep
+NVERT = 144                  # polygon vertices (>0.1% accurate, fast)
 # Grids capped at structurally plausible sizes (no 35 m-radius caves on Earth),
 # so the fine 0.1 m step gives smooth sweeps / MC histograms for free.
 RADIUS_GRID = np.arange(1.0, 20.0, 0.1)    # circle radius (m)
 WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
+
+# ---- runtime config (set by parse_args in main; defaults = Line 3 preset) ---
+LINE = 3
+CEILING0, FLOOR0 = 5.0, 16.0
+MODES = ("circle", "ellipse")
+SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
+TRUNCATE_D = None            # set per-run from the --truncate list (None = inf 2D)
 
 
 def load_line(line=LINE):
@@ -94,16 +107,28 @@ def forward(mode, size, x0, ceiling, floor, sx):
     return F * g
 
 
+def fit_offset(g, d, w):
+    """Best DC level c and resulting chi2 (relative gravity -> arbitrary datum).
+
+    The model ->0 far from the tube, but the data flanks sit at an arbitrary
+    constant level, so c is a free nuisance parameter solved analytically (the
+    weighted mean residual) at every trial geometry. Costs one dof (n-3).
+    """
+    c = np.sum(w * (d - g)) / np.sum(w)
+    return c, np.sum(w * (d - g - c) ** 2)
+
+
 def chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s):
     # x0-shift trick: forward(x0) == forward(0) evaluated at (sensors - x0).
     # Compute one dense forward per size, then interpolate for every x0.
+    w = 1.0 / se ** 2
     xq = np.arange(sx.min() - x0s.max() - 2, sx.max() - x0s.min() + 2, 0.5)
     chi2 = np.empty((len(sizes), len(x0s)))
     for i, s in enumerate(sizes):
         g0 = forward(mode, s, 0.0, ceiling, floor, xq)
         for j, x0 in enumerate(x0s):
             g = np.interp(sx - x0, xq, g0)
-            chi2[i, j] = np.sum(((g - d) / se) ** 2)
+            chi2[i, j] = fit_offset(g, d, w)[1]
     return chi2
 
 
@@ -111,7 +136,7 @@ def invert(mode, sx, d, se, ceiling, floor, sizes, x0s):
     chi2 = chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s)
     i, j = np.unravel_index(np.argmin(chi2), chi2.shape)
     chi2min = float(chi2.min())
-    dof = len(d) - 2
+    dof = len(d) - 3                                     # size, x0, DC offset
     chi2red = chi2min / dof
     # When the model under-fits (chi2red >> 1) the formal errors are too tight;
     # rescale them so reduced chi2 = 1 -> 1-sigma threshold becomes chi2red.
@@ -128,9 +153,10 @@ def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0):
     chi2(size) is smooth and unimodal, so a bounded minimiser finds the best
     size in ~15 forwards instead of scanning the whole grid.
     """
+    w = 1.0 / se ** 2
     def chi(s):
         g = forward(mode, s, x0, ceiling, floor, sx)
-        return np.sum(((g - d) / se) ** 2)
+        return fit_offset(g, d, w)[1]
     r = minimize_scalar(chi, bounds=(sizes[0], sizes[-1]), method="bounded",
                         options={"xatol": 0.05})
     return r.x
@@ -147,9 +173,11 @@ def run_mode(mode, sx, d, se):
 
     res = invert(mode, sx, d, se, CEILING0, FLOOR0, sizes, x0s)
     chi2red = res["chi2red"]
+    c_best = fit_offset(forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, sx),
+                        d, 1.0 / se ** 2)[0]
     print(f"\n[{mode}{tag}] best {size_lbl.split()[0]}={res['size']:.2f} m "
           f"(data 1sigma, rescaled: {res['size_lo']:.2f}-{res['size_hi']:.2f}), "
-          f"x0={res['x0']:.1f} m, chi2_red={chi2red:.1f}")
+          f"x0={res['x0']:.1f} m, baseline={c_best*1000:.0f} uGal, chi2_red={chi2red:.1f}")
 
     # ---- Figure 1: chi2 surface + best-fit overlay --------------------------
     fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5))
@@ -165,12 +193,13 @@ def run_mode(mode, sx, d, se):
     a1.set_title(rf"$\chi^2-\chi^2_{{min}}$ surface (white = 68%, 95%)")
     fig.colorbar(im, ax=a1, label=r"$\Delta\chi^2$")
 
-    g_best = forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, sx)
+    g_best = forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, sx) + c_best
     a2.errorbar(sx, d, yerr=se, fmt="o", color="#FF5C00", capsize=3,
                 markersize=5, label="detrended residual")
     a2.plot(sx, g_best, "-", color="k", lw=2,
             label=f"best fit ({size_lbl.split()[0]}={res['size']:.1f} m)")
-    a2.axhline(0, color="0.6", lw=0.8)
+    a2.axhline(c_best, color="0.6", lw=0.8, ls=":",
+               label=f"fitted baseline ({c_best*1000:.0f} uGal)")
     a2.set_xlabel("distance along profile (m)")
     a2.set_ylabel("g (mGal)")
     a2.set_title(rf"Line {LINE} {mode} fit ($\chi^2_\nu$={chi2red:.1f})")
@@ -183,10 +212,35 @@ def run_mode(mode, sx, d, se):
     fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
     print(f"      saved -> Results/Grav/Inversion/invert_line{LINE}_{mode}{tag}.png")
 
-    # ---- Figure 2: sensitivity to the GPR picks -----------------------------
-    fig, (b1, b2) = plt.subplots(1, 2, figsize=(13, 5))
+    # ---- pick uncertainty: analytic linear propagation ----------------------
+    # The recovered size is a smooth function of the GPR pick(s) and we know the
+    # local slope, so we propagate it directly (no sampling). Central-difference
+    # partials at the best x0 capture the inverse-linear ellipse slope
+    # (da/db = -K/b^2) automatically. Picks assumed independent:
+    #   SE^2 = (d size/d ceiling)^2 sigma^2 + (d size/d floor)^2 sigma^2
+    # The ellipse half-width is mildly right-skewed (a ~ 1/b); this SE is the
+    # first-order (Gaussian) summary, which is all we report.
+    h = 0.5
 
-    # (a) wide one-at-a-time sweep (kept physical: ceiling >= MIN_CEILING)
+    def fit(c, f):
+        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
+        return s, area_of(mode, s, c, f)
+
+    size0 = res["size"]
+    area_best = area_of(mode, size0, CEILING0, FLOOR0)
+    sp, ap = fit(CEILING0 + h, FLOOR0)
+    sm, am = fit(max(CEILING0 - h, MIN_CEILING), FLOOR0)
+    ds_dc, da_dc = (sp - sm) / (2 * h), (ap - am) / (2 * h)
+    ds_df = da_df = 0.0
+    if mode == "ellipse":
+        sp, ap = fit(CEILING0, FLOOR0 + h)
+        sm, am = fit(CEILING0, max(FLOOR0 - h, CEILING0 + 1))
+        ds_df, da_df = (sp - sm) / (2 * h), (ap - am) / (2 * h)
+    se_pick = np.hypot(ds_dc, ds_df) * SIGMA_PICK
+    area_se = np.hypot(da_dc, da_df) * SIGMA_PICK
+
+    # ---- Figure 2: one-at-a-time sweep (covers gross mispicks) ---------------
+    fig, b1 = plt.subplots(figsize=(7, 5))
     ceilings = np.arange(max(CEILING0 - SWEEP, MIN_CEILING),
                          CEILING0 + SWEEP + 0.01, 1.0)
     best_vs_ceil = [invert(mode, sx, d, se, c,
@@ -198,55 +252,67 @@ def run_mode(mode, sx, d, se):
         best_vs_floor = [invert(mode, sx, d, se, CEILING0, max(f, CEILING0 + 1),
                                 sizes, x0s)["size"] for f in floors]
         b1.plot(floors, best_vs_floor, "s-", color="#00CC80", label="vs floor")
-    b1.axvline(CEILING0, color="0.6", ls="--", lw=0.8)
+    b1.axvline(CEILING0, color="0.6", ls="--", lw=0.8, label="nominal pick")
+    b1.axhspan(size0 - se_pick, size0 + se_pick, color="#FF5C00", alpha=0.15,
+               label=rf"{size0:.1f} $\pm$ {se_pick:.1f} m (1 SE, picks)")
+    b1.axhline(size0, color="#FF5C00", lw=1.0)
     b1.set_xlabel("GPR pick depth (m)")
     b1.set_ylabel(f"recovered {size_lbl}")
-    b1.set_title("One-at-a-time sweep (covers mispicks)")
+    b1.set_title(f"Line {LINE} {mode} -- pick sensitivity" + ttl)
     b1.legend(fontsize=8)
     b1.grid(True, alpha=0.25, ls="--")
-
-    # (b) Monte-Carlo over pick noise (x0 fixed at the data best for speed)
-    rng = np.random.default_rng(0)
-    mc = np.empty(N_MC)
-    mc_area = np.empty(N_MC)
-    for k in range(N_MC):
-        c = max(rng.normal(CEILING0, SIGMA_PICK), MIN_CEILING)
-        f = rng.normal(FLOOR0, SIGMA_PICK)
-        if mode == "ellipse" and f <= c + 1:
-            f = c + 1
-        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
-        mc[k] = s
-        mc_area[k] = area_of(mode, s, c, f)              # per-draw geometry
-    p16, p50, p84 = np.percentile(mc, [16, 50, 84])
-    se_pick = float(np.std(mc))                           # pick-propagated 1 SE
-    area_best = area_of(mode, res["size"], CEILING0, FLOOR0)  # volume per metre
-    area_se = float(np.std(mc_area))
-
-    step = sizes[1] - sizes[0]                            # align bins to the grid
-    bins = np.arange(mc.min() - step / 2, mc.max() + step, step)
-    b2.hist(mc, bins=bins, color="#FF5C00", alpha=0.8)
-    for p, ls in [(p16, ":"), (p50, "-"), (p84, ":")]:
-        b2.axvline(p, color="k", ls=ls)
-    b2.set_xlabel(f"recovered {size_lbl}")
-    b2.set_ylabel("count")
-    b2.set_title(f"MC over picks (sigma={SIGMA_PICK:.1f} m): "
-                 f"{p50:.2f} +/- {se_pick:.2f} m (1 SE)")
-    fig.suptitle(f"Line {LINE} {mode} -- sensitivity to GPR picks" + ttl,
-                 fontweight="bold")
     fig.tight_layout()
     fig.savefig(FIG / f"sensitivity_line{LINE}_{mode}{tag}.png", dpi=140)
     print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}{tag}.png")
-    print(f"      MC {size_lbl.split()[0]} = {p50:.2f} +/- {se_pick:.2f} m "
-          f"(1 SE, picks only); 68% [{p16:.2f}, {p84:.2f}]")
+    skew = " (half-width mildly right-skewed; SE is first-order)" \
+        if mode == "ellipse" else ""
+    print(f"      {size_lbl.split()[0]} = {size0:.2f} +/- {se_pick:.2f} m "
+          f"(1 SE, picks only){skew}")
     print(f"      area = {area_best:.0f} +/- {area_se:.0f} m^2 "
           f"(= volume per metre of tube)")
 
 
+def parse_args():
+    import argparse
+    p = argparse.ArgumentParser(
+        description="La Corona tube inversion (GPR-constrained, gravity-for-volume).")
+    p.add_argument("--line", type=int, default=3, choices=sorted(LINE_PRESETS),
+                   help="profile line (loads its GPR-pick preset)")
+    p.add_argument("--ceiling", type=float, help="override ceiling pick (m)")
+    p.add_argument("--floor", type=float, help="override floor pick (m, ellipse)")
+    p.add_argument("--modes", nargs="+", choices=["circle", "ellipse"],
+                   help="override which shapes to fit")
+    p.add_argument("--truncate", nargs="+", default=["inf"],
+                   help="one or more pit distances in m; 'inf' = infinite 2D tube "
+                        "(e.g. --truncate inf 10 15)")
+    p.add_argument("--sigma-pick", type=float, default=1.0,
+                   help="GPR pick 1-sigma (m)")
+    return p.parse_args()
+
+
 def main():
-    sx, d, se = load_line()
-    print(f"Line {LINE}: {len(sx)} stations, residual min {d.min()*1000:.0f} uGal")
-    for mode in MODES:
-        run_mode(mode, sx, d, se)
+    global LINE, CEILING0, FLOOR0, MODES, SIGMA_PICK, TRUNCATE_D
+    args = parse_args()
+    pre = LINE_PRESETS[args.line]
+    LINE = args.line
+    CEILING0 = args.ceiling if args.ceiling is not None else pre["ceiling"]
+    FLOOR0 = args.floor if args.floor is not None else (pre["floor"] or 16.0)
+    MODES = tuple(args.modes) if args.modes else pre["modes"]
+    SIGMA_PICK = args.sigma_pick
+    truncs = [None if t.lower() in ("inf", "none") else float(t)
+              for t in args.truncate]
+
+    if "ellipse" in MODES and pre["floor"] is None and args.floor is None:
+        raise SystemExit(f"Line {LINE} has no floor pick; pass --floor or drop "
+                         f"ellipse (--modes circle).")
+
+    sx, d, se = load_line(LINE)
+    print(f"Line {LINE}: {len(sx)} stations, residual min {d.min()*1000:.0f} uGal "
+          f"(ceiling {CEILING0:.0f} m"
+          + (f", floor {FLOOR0:.0f} m" if "ellipse" in MODES else "") + ")")
+    for TRUNCATE_D in truncs:
+        for mode in MODES:
+            run_mode(mode, sx, d, se)
 
 
 if __name__ == "__main__":
