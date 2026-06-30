@@ -71,17 +71,20 @@ def gravity_profile(line):
                     for lid in loc])
     o = np.argsort(dist)
     dist, E, N, elev, typ = dist[o], E[o], N[o], elev[o], typ[o]
-    O = np.array([E[0], N[0]])
-    u = np.array([E[-1] - E[0], N[-1] - N[0]])
-    u = u / np.hypot(*u)
-    return dist, elev, typ, O, u
+    # The gravity 'dist' is an exact linear (straight-axis PCA) projection of E,N,
+    # so recover that map by regression and reuse it to put any other dataset on
+    # the SAME axis (lines are straight to <1.5 m, so this is well posed).
+    coef, *_ = np.linalg.lstsq(np.column_stack([E, N, np.ones_like(E)]), dist,
+                               rcond=None)
+    proj = lambda e, n: coef[0] * e + coef[1] * n + coef[2]
+    return dist, elev, typ, proj
 
 
-def gpr_surface(line, O, u, xs, zs):
+def gpr_surface(line, proj, xs, zs):
     """Dense GPR-line surface: the clean GNSS points of the GPR line (identified
-    by the 'Line' column) projected by their real coordinates onto the gravity
-    profile axis -- dist = (P - O).u. Returns (dist, elev, rms-vs-stations) or
-    None. The RMS is a genuine cross-check now (independent coordinate sources)."""
+    by the 'Line' column) projected onto the SAME straight axis as the gravity
+    'dist' (via proj), so the two are exactly co-registered. Returns (dist, elev,
+    rms-vs-stations) or None -- the RMS is a genuine independent cross-check."""
     if not GPR_GNSS.exists():
         return None
     g = np.genfromtxt(GPR_GNSS, delimiter=",", names=True, dtype=None,
@@ -89,8 +92,7 @@ def gpr_surface(line, O, u, xs, zs):
     m = g["Line"] == line
     if not np.any(m):
         return None
-    P = np.column_stack([g["Easting"][m], g["Northing"][m]])
-    dist = (P - O) @ u
+    dist = proj(g["Easting"][m], g["Northing"][m])
     elev = g["Elevation"][m]
     o = np.argsort(dist)
     dist, elev = dist[o], elev[o]
@@ -120,7 +122,7 @@ def main():
     sx, d, se = it.load_line(args.line)
     xmin = sx[np.argmin(d)]
     x0s = np.arange(xmin - 20, xmin + 20, 0.5)
-    xs, zs, typ, O, u = gravity_profile(args.line)
+    xs, zs, typ, proj = gravity_profile(args.line)
     surf = lambda x: np.interp(x, xs, zs)
     col = LINE_COLORS.get(args.line, "0.1")
 
@@ -141,7 +143,7 @@ def main():
 
     # ---- figure -------------------------------------------------------------
     fig, ax = plt.subplots(figsize=(12, 5.5))
-    gpr = gpr_surface(args.line, O, u, xs, zs)
+    gpr = gpr_surface(args.line, proj, xs, zs)
     if gpr is not None:
         gd, ge, rms = gpr
         # dense GPR-line GNSS surface is the drawn surface; rock fill beneath it.
