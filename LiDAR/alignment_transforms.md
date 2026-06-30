@@ -98,6 +98,117 @@ Applied translation (to be propagated to the ENTIRE dataset via Edit > Apply tra
   least-squares-balance it away -- that would degrade the one RTK-validated anchor for
   cosmetics elsewhere.
 
+## Jameo de la Gente local re-georeference (2026-06, DONE)
+
+Second, independent local anchor (~870 m NW of Puerta Falsa), for the Line 5 gravity
+cross-section. Lower precision than Puerta Falsa (no cm-RTK rim survey here). Bridge-cloud
+pattern again: drone (truth-ish) <- Red (idx6, jameo+surface, bridge) <- Orange (idx5, tube).
+
+Subclouds: idx5 = "Tunnel around la Gente" (cave), idx6 = "La Gente and Surface" (jameo+surface).
+
+Truth hierarchy established here:
+- RTK GNSS lines L5 (N-S) + L2 (NE-SW), cm-accurate -> absolute datum (but sparse, lines only).
+  Exported to `Reregistered clouds/Line5_GNSS_RTK.xyz`, `Line2_GNSS_RTK.xyz`.
+- Drone topo -> correct SHAPE + areal coverage + horizontal, but a UNIFORM ~1 m vertical bias
+  (sits ~1 m above RTK; confirmed uniform in both E-W and N-S). So: drone shape + RTK datum.
+  NOTE the drone vertical bias is LOCAL (Puerta Falsa drone vertical was fine) -> depth maps
+  carry a spatially-varying vertical caveat, NOT a global 1 m offset.
+- LiDAR (Red/Orange) -> cave geometry only; internally inconsistent (XY slip ~7 m here, Z
+  offset, AND a real W-high/E-low tilt + spurious curled edges on Red).
+
+Method:
+- Red: coarse translate -> full-rotation ICP to the drone (NOT Z-locked -- must tip out the
+  tilt) on the trimmed core (flared edges cropped off first, they bias the fit) -> then a
+  uniform -~1 m Z shift to drop from the drone's biased level onto the RTK-true elevation.
+- Orange: ICP to the corrected Red on the pit overlap (true overlap % small, like Puerta Falsa).
+
+For the science: gravity compares cross-sectional AREA, and <0.5 m vertical is datum choice,
+so absolute vertical to ~tens of cm is plenty.
+
+Reference clouds: drone crop "Topo around La Gente" (later re-extracted larger to cover the
+whole cave); RTK lines `Line5_GNSS_RTK.xyz` + `Line2_GNSS_RTK.xyz`. C2C lines->drone gave
+drone ~+0.35 m above RTK (uniform E-W and N-S) -> -0.35 m datum drop applied to the cave + the
+local drone crop (NOT the full drone). Drone-RTK gap full C2C 0.84 m is mostly drone sparsity;
+Z-component -0.35 m is the real offset.
+
+RECIPE (ordered CloudCompare steps; the single net 4x4 is best taken from an original->final
+rigid fit, NOT by multiplying these -- the global shift flips LaCorona->drone after the first
+ICP and the full-rotation ICP rotates about a far origin, so naive matrix multiplication of the
+logged numbers is wrong):
+
+Jameo (idx6, "La Gente and Surface"):
+1. coarse translate (+6.0, -4.5, 0)
+2. Z-locked ICP -> Topo (drone), RMS 1.086 m (floor; drone ~2 m). dZ -1.252 m.
+3. -0.35 m Z datum drop (with the group)
+4. FULL-rotation ICP -> Topo, RMS 0.951 m. Fixed a real W-high/E-low tilt (~1.83 deg about
+   the N-S axis; verified balanced residuals + seats at RTK height). [matrix has a huge Z
+   column = far-origin rotation bookkeeping, NOT a real lift.]
+
+Tunnel (idx5, "Tunnel around la Gente"):
+1. -0.35 m Z datum drop (with the group)
+2. coarse translate (+6.0, -3.0, -1.5)
+3. [first Tunnel->Jameo ICP slid ~70 m (corridor-slide, RMS 3.1) -> reverted with its exact
+   inverse; these two CANCEL, excluded from the net]
+4. pit-crop ICP: cropped Tunnel to the pit/throat, ICP Tunnel_pit -> Jameo (RMS 0.315 m, no
+   slide), then that 4x4 applied to the FULL Tunnel. Net horizontal ~2.7 m, dZ +0.10 m.
+
+Result: Jameo seats on the drone/RTK surface (tilt out); Tunnel continues smoothly out of the
+pit. Lower precision than Puerta Falsa (drone-anchored ~1 m horizontal, RTK datum to ~tens of
+cm). For the L5 gravity cross-section, area is the metric, so this is plenty.
+
+### NET 4x4 PER CLOUD (2026-06-30, recovered frame-safe)
+
+Recovered NOT by multiplying the logged steps (mixed CC frames -- see RECIPE note)
+but by a rigid Kabsch fit of session-start -> final point positions, matching the
+same physical points across the before/after ASCII exports via their preserved
+scalar-field signatures (tool: `recover_transform.py`). Source exports in
+`LiDAR La Corona/Clouds to reconstruct transformations/` (OriginalJameo.txt,
+Jameo.txt, OriginalTunnel.txt) + the L5 crop for Tunnel's final state.
+
+"Session-start" = the Puerta-Falsa-corrected cave (cumulative -1109.17 E / +6901.27 N
+already applied to the bulk, idx5/idx6 being unmodified bulk); these matrices are the
+LOCAL Jameo re-registration move ON TOP of that, in true EPSG:4083 coords. To
+reproduce in CC: Edit > Apply Transformation with the 4x4 below (exact). NOTE the
+4x4 translation column is huge -- that is rotation-about-coordinate-origin
+bookkeeping, NOT a physical move; the REAL displacement is the centroid move (~6-8 m).
+
+**Jameo (idx6, "La Gente and Surface")** -- fit RMS 2.86 cm over 331,936 pts (100%):
+- Real move (centroid): dE +6.208, dN -4.366, dZ -1.899 m (|horiz| 7.59 m)
+- Rotation about centroid: Z-rot +0.2780 deg, tilt-about-N +1.8298 deg (the real
+  W-high/E-low tip, fixed by the full-rotation ICP), tilt-about-E +0.13 deg
+- Centroid (true coords): (649683.0, 3227541.5, 143.4)
+- Net 4x4 (session-start -> final, true EPSG:4083):
+```
+ 0.999478300  -0.004778698  -0.031942014   15773.172634230
+ 0.004850212   0.999985901   0.002161779   -3110.270699651
+ 0.031931234  -0.002315576   0.999487386  -13273.385419780
+ 0.000000000   0.000000000   0.000000000       1.000000000
+```
+
+**Tunnel (idx5, "Tunnel around la Gente")** -- fit RMS 0.01 cm over 48,056 pts:
+- Real move (centroid): dE +5.720, dN -3.088, dZ -1.754 m (|horiz| 6.50 m)
+- Rotation about centroid: Z-rot -0.1033 deg, tilt 0.000 deg (Z-locked, as intended)
+- Centroid (true coords): (649758.9, 3227500.3, 121.0)
+- Net 4x4 (session-start -> final, true EPSG:4083):
+```
+ 0.999998375   0.001802879  -0.000000057   -5812.017424234
+-0.001802879   0.999998375   0.000000051    1173.594651702
+ 0.000000057  -0.000000051   1.000000000      -1.626051712
+ 0.000000000   0.000000000   0.000000000       1.000000000
+```
+
+**Topo (local drone crop "Topo around La Gente")** -- pure datum drop, no fit needed:
+```
+1 0 0   0.00
+0 1 0   0.00
+0 0 1  -0.35
+0 0 0   1.00
+```
+(the -0.35 m C2C datum drop applied to the drone-vs-RTK level; idx5/idx6 received this
+same drop, already folded into their dZ above.)
+
+---
+
 ## Cumulative georef: author's raw LiDAR -> final frame
 
 Pure translation (two manual shifts, they commute). Applies to the bulk dataset (idx0 and
