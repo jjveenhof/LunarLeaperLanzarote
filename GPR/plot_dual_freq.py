@@ -12,6 +12,7 @@ Usage:
     python plot_dual_freq.py Line5
     python plot_dual_freq.py Line3 --stage topo       # topo-corrected data
     python plot_dual_freq.py Line3 --stage processed  # processed only
+    python plot_dual_freq.py Line3 --stage migrated   # Stolt-migrated data
     python plot_dual_freq.py Line3 --velocity 0.11    # override velocity
     python plot_dual_freq.py Line3 --clip 95          # clip percentile
 """
@@ -31,9 +32,10 @@ from gpr_constants import V_DEFAULT
 from gpr_processing import display_gain
 
 # ---- PATHS -------------------------------------------------------------------
-HERE     = Path(__file__).parent
-DATA_GPR = HERE / '../../Data/GPR'
-OUT_DIR  = HERE / '../../Results/GPR/DualFreq'
+HERE          = Path(__file__).parent
+DATA_GPR      = HERE / '../../Data/GPR'
+OUT_DIR       = HERE / '../../Results/GPR/DualFreq'
+MIGRATED_DIR  = HERE / '../../Results/GPR/Migrated'
 
 # x-offset (metres): where the 100 MHz back antenna sat on the full line.
 # Line2: both lines share the same start.
@@ -52,10 +54,10 @@ CMAP = 'seismic'
 def find_npz(line, freq, stage):
     """
     Locate the NPZ for a given line, frequency, and processing stage.
-    stage: 'topo' | 'processed' | 'stitched'
-    Returns Path or None.
+    stage: 'migrated' | 'topo' | 'processed' | 'stitched'
     """
     suffixes = {
+        'migrated':  ('Migration', '_migrated.npz'),
         'topo':      ('Topo',      '_topo.npz'),
         'processed': ('Processed', '_processed.npz'),
         'stitched':  ('Stitched',  '_raw.npz'),
@@ -66,7 +68,8 @@ def find_npz(line, freq, stage):
 
 
 def find_best(line, freq):
-    """Return the best available NPZ, preferring topo > processed > stitched."""
+    """Return the best available NPZ, preferring topo > processed > stitched.
+    Migrated is not auto-selected -- request with --stage migrated."""
     for stage in ('topo', 'processed', 'stitched'):
         p = find_npz(line, freq, stage)
         if p.exists():
@@ -75,11 +78,15 @@ def find_best(line, freq):
 
 
 def load_npz(path):
+    """Return (data, dist_axis, y_axis, is_depth, velocity_or_None).
+    Migrated NPZs store depth_axis (metres) and velocity (m/ns); others store time_axis (ns)."""
     with np.load(str(path)) as npz:
         data      = npz['data'].astype(np.float64)
         dist_axis = npz['dist_axis'].astype(np.float64)
-        time_axis = npz['time_axis'].astype(np.float64)
-    return data, dist_axis, time_axis
+        if 'depth_axis' in npz:
+            vel = float(npz['velocity']) if 'velocity' in npz else None
+            return data, dist_axis, npz['depth_axis'].astype(np.float64), True, vel
+        return data, dist_axis, npz['time_axis'].astype(np.float64), False, None
 
 
 def load_gain(line, freq):
@@ -112,20 +119,30 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     print('50 MHz  ({}) : {}'.format(stage50,  p50.name))
     print('100 MHz ({}) : {}'.format(stage100, p100.name))
 
-    d50,  x50,  t50  = load_npz(p50)
-    d100, x100, t100 = load_npz(p100)
+    d50,  x50,  t50,  depth50_precomputed,  v50  = load_npz(p50)
+    d100, x100, t100, depth100_precomputed, v100 = load_npz(p100)
 
     # --- display gain: use per-profile params JSON, CLI --gain overrides both ---
     gain50  = gain_exp if gain_exp is not None else load_gain(line, '50MHz')
     gain100 = gain_exp if gain_exp is not None else load_gain(line, '100MHz')
+    # For time-domain data: sfreq = 1000/dt_ns.
+    # For depth-domain (migrated): equivalent sfreq = 1000*v/(2*dz) to match time-domain gain.
     if gain50 > 0:
-        d50  = display_gain(d50,  1000.0 / float(t50[1]  - t50[0]),  gain50)
+        if depth50_precomputed and v50 is not None:
+            sfreq50 = 1000.0 * v50 / (2.0 * float(t50[1] - t50[0]))
+        else:
+            sfreq50 = 1000.0 / float(t50[1] - t50[0])
+        d50 = display_gain(d50, sfreq50, gain50)
     if gain100 > 0:
-        d100 = display_gain(d100, 1000.0 / float(t100[1] - t100[0]), gain100)
+        if depth100_precomputed and v100 is not None:
+            sfreq100 = 1000.0 * v100 / (2.0 * float(t100[1] - t100[0]))
+        else:
+            sfreq100 = 1000.0 / float(t100[1] - t100[0])
+        d100 = display_gain(d100, sfreq100, gain100)
 
     # --- depth axes ---
-    z50  = t50  * velocity / 2.0   # one-way depth (m)
-    z100 = t100 * velocity / 2.0
+    z50  = t50  if depth50_precomputed  else t50  * velocity / 2.0
+    z100 = t100 if depth100_precomputed else t100 * velocity / 2.0
 
     x_offset = X_OFFSET_100MHZ.get(line, 0.0)
 
@@ -199,7 +216,8 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     ax100.axvspan(ext100[1], x_max, color='0.88', zorder=0)
 
     # --- labels ---
-    ax50.set_ylabel('Depth (m)  [v = {:.3f} m/ns]'.format(velocity), fontsize=9)
+    ylabel50 = 'Depth (m)' if depth50_precomputed else 'Depth (m)  [v = {:.3f} m/ns]'.format(velocity)
+    ax50.set_ylabel(ylabel50, fontsize=9)
     ax100.set_ylabel('Depth (m)', fontsize=9)
     ax100.set_xlabel('Distance (m)', fontsize=9)
     plt.setp(ax50.get_xticklabels(), visible=False)
@@ -227,9 +245,10 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     plt.colorbar(im100, cax=cax100, label='Ampl.')
 
     # --- save ---
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR
+    out_root.mkdir(parents=True, exist_ok=True)
     if save_path is None:
-        save_path = OUT_DIR / '{}_dual_freq_{}.png'.format(line, stage50)
+        save_path = out_root / '{}_dual_freq_{}.png'.format(line, stage50)
     save_path = Path(save_path).resolve()
     print('Saving to: ' + str(save_path))
     plt.savefig(str(save_path), dpi=180, bbox_inches='tight')
@@ -244,9 +263,9 @@ def main():
     parser.add_argument('line', choices=['Line2', 'Line3', 'Line5'],
                         nargs='?', default=None,
                         help='Which line to plot (omit to plot all)')
-    parser.add_argument('--stage', choices=['topo', 'processed', 'stitched'],
+    parser.add_argument('--stage', choices=['migrated', 'topo', 'processed', 'stitched'],
                         default=None,
-                        help='Processing stage to load (default: best available)')
+                        help='Processing stage to load (default: best available; migrated must be explicit)')
     parser.add_argument('--velocity', type=float, default=V_DEFAULT,
                         help='Wave velocity in m/ns (default: {})'.format(V_DEFAULT))
     parser.add_argument('--clip', type=float, default=98.0,

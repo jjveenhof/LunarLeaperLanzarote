@@ -32,6 +32,9 @@ import argparse
 import json
 import numpy as np
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from scipy.signal import fftconvolve
@@ -41,9 +44,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 from stolt_migration import stolt_migration_2d
 from gpr_processing import display_gain
 
-HERE     = Path(__file__).parent
-TOPO_DIR = HERE / '../../Data/GPR/Topo'
-OUT_DIR  = HERE / '../../Results/GPR/Migration'
+HERE          = Path(__file__).parent
+TOPO_DIR      = HERE / '../../Data/GPR/Topo'
+OUT_DIR       = HERE / '../../Results/GPR/Migration'
+MIGRATED_DIR  = HERE / '../../Results/GPR/Migrated'
 
 # Stolt parameters (match Cedric's notebook defaults)
 PAD_T_FACTOR = 2.0    # one-sided time padding multiplier
@@ -100,6 +104,8 @@ def main():
                     help='display-only gdp linear gain exponent (0 = off, ungained)')
     ap.add_argument('--clip', type=float, default=99.0,
                     help='initial percentile clip (0..100), applied to current view')
+    ap.add_argument('--pick-velocity', type=float, default=None, metavar='V',
+                    help='migrate at single velocity V (m/ns) and save _migrated.npz; skips scan HTML')
     ap.add_argument('--no-live-taper', action='store_true',
                     help='skip the data-driven live-sample taper')
     ap.add_argument('--gain-values', type=str, default='0.0,1.0,2.0,2.5,3.0,3.5,4.0',
@@ -134,6 +140,77 @@ def main():
 
     pad_x_mult   = (nx + PAD_X_TRACES) / nx
     taper_frac_x = TAPER_W / nx
+
+    # --- single-velocity NPZ + PNG save (--pick-velocity) ---
+    if args.pick_velocity is not None:
+        v = float(args.pick_velocity)
+        print('Single migration at v = {:.4f} m/ns ...'.format(v))
+        mig = stolt_migration_2d(
+            section, dt=dt, dx=dx, velocity=v,
+            dz=0.5 * v * dt, nz=nt,
+            exploding_reflector=True, apply_jacobian=True,
+            pad_t=PAD_T_FACTOR, pad_x=pad_x_mult,
+            taper_t=TAPER_T_FRAC, taper_x=taper_frac_x,
+            depth_padding=2.0)
+        if n_dead > 0:
+            mig[:, dead] = 0.0
+        depth = t * (0.5 * v)
+
+        # --- save NPZ ---
+        MIGR_DATA_DIR = HERE / '../../Data/GPR/Migration'
+        MIGR_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        out_npz = MIGR_DATA_DIR / (args.line + '_migrated.npz')
+        np.savez(str(out_npz),
+                 data=mig.astype(np.float32),
+                 dist_axis=x,
+                 depth_axis=depth,
+                 ref_elev=np.float64(ref_elev),
+                 elevations=elevations,
+                 velocity=np.float64(v))
+        print('Saved NPZ: {}'.format(out_npz.resolve()))
+
+        # --- static PNG ---
+        gain_exp = args.gain
+        plot_data = mig.copy()
+        if gain_exp > 0:
+            dz = float(depth[1] - depth[0])
+            sfreq_eq = 1000.0 * v / (2.0 * dz)   # equivalent MHz for depth gain
+            plot_data = display_gain(plot_data, sfreq_eq, gain_exp)
+        clip = float(np.percentile(np.abs(plot_data), args.clip))
+        if clip <= 0:
+            clip = 1.0
+
+        fig, axes = plt.subplots(2, 1, figsize=(14, 6),
+                                 gridspec_kw={'height_ratios': [1, 4], 'hspace': 0.06})
+        axes[0].plot(x, elevations, color='0.3', linewidth=1.0)
+        axes[0].set_ylabel('Elev. (m)', fontsize=9)
+        axes[0].set_xlim(float(x[0]), float(x[-1]))
+        axes[0].tick_params(labelbottom=False)
+
+        axes[1].imshow(plot_data, aspect='auto', cmap='seismic',
+                       vmin=-clip, vmax=clip,
+                       extent=[float(x[0]), float(x[-1]),
+                               float(depth[-1]), float(depth[0])],
+                       interpolation='nearest')
+        axes[1].set_ylabel('Depth (m)', fontsize=9)
+        axes[1].set_xlabel('Distance (m)', fontsize=9)
+
+        gain_str = '  |  gain {:.1f}'.format(gain_exp) if gain_exp > 0 else ''
+        axes[0].set_title(
+            '{} -- Stolt migrated  |  v = {:.4f} m/ns{}'.format(args.line, v, gain_str),
+            fontsize=10, loc='left')
+
+        axes[1].text(0.01, 0.99, 'N', transform=axes[1].transAxes,
+                     ha='left', va='top', fontsize=11, fontweight='bold', color='black')
+        axes[1].text(0.99, 0.99, 'S', transform=axes[1].transAxes,
+                     ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+
+        MIGRATED_DIR.mkdir(parents=True, exist_ok=True)
+        out_png = MIGRATED_DIR / (args.line + '_migrated.png')
+        plt.savefig(str(out_png), dpi=180, bbox_inches='tight')
+        plt.close(fig)
+        print('Saved PNG: {}'.format(out_png.resolve()))
+        return
 
     vels = np.round(np.arange(args.vmin, args.vmax + 1e-9, args.dv), 4)
     print('Stolt-migrating {} velocities {:.3f}..{:.3f} m/ns ...'.format(
@@ -182,6 +259,11 @@ def main():
     if cthr0 <= 0:
         cthr0 = 1.0
 
+    # depth-to-surface customdata: depth_below_datum - (ref_elev - elev(x))
+    elev_corr = ref_elev - elevations           # static shift per trace, shape (nx,)
+    dts0 = (depth0[:, None] - elev_corr[None, :]).tolist()   # (nt, nx)
+    hover_tmpl = 'x %{x:.1f} m<br>depth to surface: %{customdata:.2f} m<extra></extra>'
+
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.10,
         subplot_titles=('Unmigrated (Topo-corrected input)', 'Stolt migrated')
@@ -190,8 +272,9 @@ def main():
         go.Heatmap(
             z=z_top0, x=x, y=depth0, colorscale='RdBu_r',
             zmin=-cthr0, zmax=cthr0,
+            customdata=dts0,
+            hovertemplate=hover_tmpl,
             colorbar=dict(title='amp', thickness=12, y=0.79, len=0.38, x=1.05, xanchor='left'),
-            hovertemplate='x %{x:.1f} m<br>z %{y:.2f} m<extra></extra>',
         ),
         row=1, col=1
     )
@@ -199,8 +282,9 @@ def main():
         go.Heatmap(
             z=z_bot0, x=x, y=depth0, colorscale='RdBu_r',
             zmin=-cthr0, zmax=cthr0,
+            customdata=dts0,
+            hovertemplate=hover_tmpl,
             colorbar=dict(title='amp', thickness=12, y=0.21, len=0.38, x=1.05, xanchor='left'),
-            hovertemplate='x %{x:.1f} m<br>z %{y:.2f} m<extra></extra>',
         ),
         row=2, col=1
     )
@@ -266,6 +350,7 @@ def main():
         'depth_axes': [d.tolist() for d in depth_axes],
         'tgain': [float(w) for w in tgain],
         'ref_elev': float(ref_elev),
+        'elev_corr': elev_corr.tolist(),   # ref_elev - elev(x), one value per trace
         'section_norm': np.round(section_norm, 6).tolist(),
         'mig_norm_by_v': [np.round(m, 6).tolist() for m in mig_norm_by_v],
     }
@@ -309,6 +394,17 @@ def main():
   <script>
     const S = {state_json};
     const gd = document.getElementById('vel_scan_fig');
+
+    // depth-to-surface: depth_below_datum - elev_corr[trace]
+    // elev_corr[i] = ref_elev - elev(x_i), precomputed in Python (static).
+    function depthToSurf(depth) {{
+      const nc = S.elev_corr.length;
+      return depth.map(d => {{
+        const row = new Array(nc);
+        for (let i = 0; i < nc; i++) row[i] = d - S.elev_corr[i];
+        return row;
+      }});
+    }}
 
     function gain2D(a2d, tgain, g) {{
       // gdp 'linear' display gain: weight_k = travel_time_k ** g (same as the
@@ -355,9 +451,10 @@ def main():
       const zTop = gain2D(S.section_norm, S.tgain, gain);
       const zBot = gain2D(S.mig_norm_by_v[vi], S.tgain, gain);
       const clip = percentileAbsFromTwo(zTop, zBot, clipPct);
+      const dts  = depthToSurf(depth);
 
-      Plotly.restyle(gd, {{ z: [zTop], y: [depth], zmin: [-clip], zmax: [clip] }}, [0]);
-      Plotly.restyle(gd, {{ z: [zBot], y: [depth], zmin: [-clip], zmax: [clip] }}, [1]);
+      Plotly.restyle(gd, {{ z: [zTop], y: [depth], zmin: [-clip], zmax: [clip], customdata: [dts] }}, [0]);
+      Plotly.restyle(gd, {{ z: [zBot], y: [depth], zmin: [-clip], zmax: [clip], customdata: [dts] }}, [1]);
       const dBot = depth[depth.length - 1];
       const dTop = depth[0];
       Plotly.relayout(gd, {{
