@@ -212,6 +212,12 @@ def main():
         ax2.set_ylabel("Detrended (mGal)")
         ax2.grid(True, alpha=0.25, linestyle="--")
         ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        # Plot N->S (N on the left) to match the GPR sections; dist stays S->N.
+        ax2.invert_xaxis()                                 # sharex -> flips ax1 too
+        ax2.text(0.006, 0.96, "N", transform=ax2.transAxes, ha="left", va="top",
+                 fontweight="bold", fontsize=11, color="0.3")
+        ax2.text(0.994, 0.96, "S", transform=ax2.transAxes, ha="right", va="top",
+                 fontweight="bold", fontsize=11, color="0.3")
 
         fig.tight_layout()
         save_path = FIG_DIR / f"detrend_line{line_id}.png"
@@ -228,6 +234,32 @@ def main():
                                                "intercept", "x_mean", "chi2_red"])
     params.to_csv(TRENDCSV, index=False)
     print(f"Trend params       -> {TRENDCSV.relative_to(BASE)}")
+
+    # Clean combined figure of the detrended residuals -- the exact data the
+    # tube inversion fits (one panel per line, SE bars, S->N orientation).
+    fig, axes = plt.subplots(len(LINES), 1, figsize=(11, 3.3 * len(LINES)))
+    for ax, line_id in zip(np.atleast_1d(axes), LINES):
+        g = out[out["Line"] == line_id].sort_values("dist")
+        ax.axhline(0, color="0.6", lw=0.8, zorder=1)
+        ax.errorbar(g["dist"], g["CBA_detrended"], yerr=g["SE"], fmt="o",
+                    color=LINE_COLORS[line_id], capsize=3, markersize=5,
+                    elinewidth=1.2, zorder=3, label=r"detrended CBA $\pm$ SE")
+        ax.set_ylabel("Detrended (mGal)")
+        ax.set_title(f"Line {line_id}", fontweight="bold", loc="left")
+        ax.grid(True, alpha=0.25, linestyle="--")
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        ax.legend(fontsize=8, loc="lower right")
+        ax.invert_xaxis()          # plot N->S (N left) to match the GPR sections
+        ax.text(0.006, 0.96, "N", transform=ax.transAxes, ha="left", va="top",
+                fontweight="bold", fontsize=11, color="0.3")
+        ax.text(0.994, 0.96, "S", transform=ax.transAxes, ha="right", va="top",
+                fontweight="bold", fontsize=11, color="0.3")
+    np.atleast_1d(axes)[-1].set_xlabel("Distance along profile (m)")
+    fig.suptitle("Detrended CBA residual (per line)", fontweight="bold")
+    fig.tight_layout()
+    combo = FIG_DIR / "detrended_residuals.png"
+    fig.savefig(combo, dpi=150, bbox_inches="tight")
+    print(f"Residual figure    -> {combo.relative_to(BASE)}")
     plt.show()
 
 

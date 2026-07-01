@@ -97,9 +97,10 @@ def plot_line(ax, line_df, line_id, g_col, se_col, title_suffix, se_label=None):
     ax.set_ylabel(f"{g_col} (mGal)")
 
     if line_id in {2, 3, 5}:
-        ax.text(0.01, 0.97, "S", transform=ax.transAxes,
+        ax.invert_xaxis()      # plot N->S (N left) to match the GPR sections
+        ax.text(0.01, 0.97, "N", transform=ax.transAxes,
                 fontsize=11, fontweight="bold", va="top", ha="left")
-        ax.text(0.99, 0.97, "N", transform=ax.transAxes,
+        ax.text(0.99, 0.97, "S", transform=ax.transAxes,
                 fontsize=11, fontweight="bold", va="top", ha="right")
 
     ax.grid(True, alpha=0.25, linestyle="--")

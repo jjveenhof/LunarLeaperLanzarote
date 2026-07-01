@@ -60,11 +60,14 @@ FIG.mkdir(parents=True, exist_ok=True)
 # ---- per-line presets: GPR picks + which shapes are fittable ----------------
 # Override any of these from the command line (see parse_args / module docstring).
 LINE_PRESETS = {
-    3: dict(ceiling=5.0, floor=16.0, modes=("circle", "ellipse")),
-    5: dict(ceiling=10.0, floor=None, modes=("circle",)),   # no floor pick yet
+    # Line 3 FINAL (GPR, 2026-07-01): ceiling 4.0, floor 14.6 m (air-gap corrected
+    # from apparent 8.4 m; v_rock 0.125 m/ns). Was placeholder 5 / 16.
+    3: dict(ceiling=4.0, floor=14.6, modes=("circle", "ellipse")),
+    5: dict(ceiling=10.0, floor=None, modes=("circle",)),   # PLACEHOLDER, L5 TODO
 }
 
 # ---- fixed constants --------------------------------------------------------
+LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}   # QGIS map palette
 DENSITY = RHO_HOST             # 1875 kg/m^3, fixed (chain-coupled; see docstring)
 MIN_CEILING = 1.0             # m, shallowest physical void top (rock cover above)
 SWEEP = 6.0                   # m, +/- range for the wide one-at-a-time sweep
@@ -76,12 +79,12 @@ WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 
 # ---- runtime config (set by parse_args in main; defaults = Line 3 preset) ---
 LINE = 3
-CEILING0, FLOOR0 = 5.0, 16.0
+CEILING0, FLOOR0 = 4.0, 14.6
 MODES = ("circle", "ellipse")
 SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
 # GPR migration velocity: picks are time picks, so velocity scales ALL depths
 # jointly (a systematic, common-mode term -- distinct from the per-pick noise).
-# PLACEHOLDER values; update with the final velocity (see project memo).
+# Line 3 FINAL: v_rock = 0.125 m/ns (Stolt diffraction collapse). L5 TBD.
 VELOCITY = 0.125             # m/ns
 VELOCITY_SIGMA = 0.010       # m/ns 1-sigma (plausible range ~0.115-0.135)
 SLOPE_SE = 0.0               # mGal/m, regional-trend slope 1-sigma (set in main)
@@ -210,8 +213,8 @@ def run_mode(mode, sx, d, se):
     fig.colorbar(im, ax=a1, label=r"$\Delta\chi^2$")
 
     g_best = forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, sx) + c_best
-    a2.errorbar(sx, d, yerr=se, fmt="o", color="#FF5C00", capsize=3,
-                markersize=5, label="detrended residual")
+    a2.errorbar(sx, d, yerr=se, fmt="o", color=LINE_COLORS.get(LINE, "#FF5C00"),
+                capsize=3, markersize=5, label="detrended residual")
     a2.plot(sx, g_best, "-", color="k", lw=2,
             label=f"best fit ({size_lbl.split()[0]}={res['size']:.1f} m)")
     a2.axhline(c_best, color="0.6", lw=0.8, ls=":",
@@ -221,6 +224,13 @@ def run_mode(mode, sx, d, se):
     a2.set_title(rf"Line {LINE} {mode} fit ($\chi^2_\nu$={chi2red:.1f})")
     a2.legend(fontsize=8)
     a2.grid(True, alpha=0.25, ls="--")
+    # Plot N->S (N on the left) to match the GPR sections; dist stays S->N.
+    a1.invert_xaxis()
+    a2.invert_xaxis()
+    a2.text(0.006, 0.97, "N", transform=a2.transAxes, ha="left", va="top",
+            fontweight="bold", fontsize=11, color="0.3")
+    a2.text(0.994, 0.97, "S", transform=a2.transAxes, ha="right", va="top",
+            fontweight="bold", fontsize=11, color="0.3")
     fig.suptitle(f"Line {LINE} inversion -- {mode} (ceiling {CEILING0:.0f} m"
                  + (f", floor {FLOOR0:.0f} m" if mode == "ellipse" else "") + ")" + ttl,
                  fontweight="bold")

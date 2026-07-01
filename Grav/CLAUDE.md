@@ -72,19 +72,22 @@ Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual
   half-width a). Uncertainty budget combined in quadrature: data (chi2-rescaled
   grid interval) + GPR picks (analytic propagation) + velocity (systematic depth
   scaling) + detrend slope (from `detrend_trend_params_*.csv`); truncation kept
-  separate as a systematic bracket. PLACEHOLDERS to finalise from GPR: velocity
-  0.125 m/ns, picks L3 ceiling 5/floor 16, L5 ceiling 10 (circle-only).
+  separate as a systematic bracket. GPR inputs: L3 FINAL (v 0.125 m/ns, ceiling
+  4.0/floor 14.6 m air-gap-corrected, 2026-07-01); L5 still PLACEHOLDER (ceiling
+  10, circle-only) pending GPR.
 - `plot_model_terrain.py` -- best-fit tube under the measured surface (GPR-line
   GNSS projected onto the same straight profile axis), true scale, auto-overlays
   `lidar_line{N}.csv` ground truth. Station styling matches the other grav plots.
 
 ## Current Focus
-- Inversion built + uncertainty budget complete; **LiDAR-validated (2026-06-30)**:
-  L5 gravity 186+/-35 vs LiDAR 182 m^2 (~2%), L3 218 (untruncated ellipse) vs 203.
+- Inversion built + uncertainty budget complete; **LiDAR-validated**:
+  L5 gravity 186+/-35 vs LiDAR 182 m^2 (~2%); L3 (FINAL GPR picks) untruncated
+  ellipse 195+/-24 vs LiDAR 203 (~4%), model roof aligns with LiDAR void top.
   Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
   overshoots. Frame as model selection, not input tuning (no inverse crime).
+- All profile plots read N (left) -> S (right) to match the GPR sections.
 - Next: density chain-sweep (re-run pipeline per rho -> re-detrend -> re-invert) --
-  the last quantifiable systematic. Then finalise placeholder velocity/picks from GPR.
+  the last quantifiable systematic. Then finalise L5 GPR picks (only remaining placeholder).
 - Earlier: pipeline refactor (2026-06-12, grav_utils.py shared constants, intuitive
   file names, simple drift behind --with-simple-drift). CBA profiles via
   `visualise_CBA.py`; diagnostics in `Inspect/`.
