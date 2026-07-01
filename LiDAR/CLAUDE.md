@@ -61,15 +61,37 @@ Export aligned point cloud as ASCII XYZ from CloudCompare (File > Save As > ASCI
 Target CRS: EPSG:4083 (REGCAN95 / UTM zone 28N) -- already shifted to match GPR/GNSS.
 
 ## Current Focus
-Junction alignment DONE and verified (2026-06-16). Crop "Cave around Puerta Falsa" split
-by index into ReferenceCloud (idx0 blue), StitchMove (idx2), TubeMove (idx1). Aligned by
-eye (coarse) + Z-locked ICP (fine): stitch RMS 0.54 m (at blue's sparsity floor ~0.46 m),
-tube RMS 1.6 cm (mm fit in the 20% overlap). Tube ICP first diverged at 50% overlap --
-fix was setting the overlap parameter to the true ~20%. Net 4x4 transforms + verification
-recorded in `alignment_transforms.md`. Aligned ASCII exports in
-`LiDAR La Corona/Reregistered clouds/` (true EPSG:4083). Both greens needed an identical
--1.07 m Z shift -> likely a real elevation offset of the green scans vs blue.
+All alignment + derived products DONE. Full transform record in `alignment_transforms.md`.
 
-Next: user wants to do further CloudCompare steps before assembling a deliverable. Final
-deliverable (merge of moved idx1+idx2 + untouched idx0, export ASCII XYZ EPSG:4083) is
-PARKED.
+1. **Puerta Falsa junction alignment** (2026-06-16). idx0 blue = reference; StitchMove
+   (idx2) + TubeMove (idx1) re-registered by eye + Z-locked ICP (stitch RMS 0.54 m at
+   blue's sparsity floor; tube RMS 1.6 cm). Both greens needed an identical -1.07 m Z
+   shift (a real green-vs-blue elevation offset). Exports in `Reregistered clouds/`.
+2. **Puerta Falsa RTK georef correction** (2026-06-16). Cave manually pre-shifted from
+   the author's bad georef by -1109.17 E / +6901.27 N (cumulative), then pinned to RTK
+   rim truth (-9.17 E / +1.27 N). Validated by an independent drone surface. Rest of the
+   6-7 km tube stays approximate (internally inconsistent dataset -> a single rigid fit
+   cannot align all jameos).
+3. **Jameo de la Gente local re-georef** (2026-06-30), for the L5 gravity line ~870 m NW.
+   Tunnel (idx5) + Jameo (idx6) re-registered to drone/RTK (bridge pattern). Net 4x4s
+   recovered frame-safe by `recover_transform.py` (Jameo 7.6 m move + 1.83 deg tilt fix,
+   RMS 2.9 cm; Tunnel 6.5 m, Z-locked, RMS 0.01 cm; Topo drone = -0.35 m datum drop).
+4. **Tube cross-sections for gravity** (2026-06-30). `slice_tube.py` slices the corrected
+   Tunnel in each gravity line's vertical plane -> `lidar_line{3,5}.csv` in
+   Code/Grav/Inversion/ (x=dist along line, z=ABSOLUTE REGCAN95 elevation). Areas: L3 203,
+   L5 182 m^2. Centres match gravity x0 (76 vs 73; 51 vs 50). Validated by Grav.
+5. **La Gente depth map + footprint** (2026-06-30). Corrected-Tunnel cave-top raster
+   `QGIS/caveheight_clean_laGente.tif` (2 m, ceiling = max Z) + plan-view envelope
+   `Reregistered clouds/LaGenteCleanEnvelope.shp`, handed to QGIS for the overburden map
+   (surface - cave-top, masked). Both lack an embedded CRS -> assign EPSG:4083 on load.
+
+Tools added: `slice_tube.py` (line-plane cross-section + area), `recover_transform.py`
+(net 4x4 from before/after exports via scalar-field point matching).
+
+DROPPED (decision 2026-07-01): the single merged whole-cave deliverable is NOT being
+built. The cave is consumed piecewise (cross-sections, depth maps, footprints, 3D plot),
+and the two measured sites (Puerta Falsa, Jameo de la Gente) are locally exact -- a merged
+product would only be approximate along the 6-7 km tube between them and add no thesis
+value. The dataset also has several OTHER internal misalignments away from the measurement
+sites; these are left unfixed (out of scope, no bearing on the gravity/GPR lines). Possible
+future summer project: re-register the full tube end-to-end. Do not re-open for the thesis.

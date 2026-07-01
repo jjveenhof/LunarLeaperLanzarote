@@ -29,6 +29,11 @@ Processing order inside `apply_processing` (gpr_processing.py):
 7. **SVD removal** -- removes first N singular vectors (horizontal coherent noise).
    `n_svd` (int); 0 = off. Interacts with whitening -- use both with care.
 
+**flip_x** -- applied after `apply_processing` in `run_pipeline.py` (and in the
+notebook on preview); reverses the trace order so North is on the left. Stored in
+`_params.json`; baked into `_processed.npz` and propagated automatically to topo
+and migration outputs. Currently `true` for Line3_50/100MHz only (acquired S->N).
+
 Gain is NOT a processing step -- it is display-only (`display_gain`), never baked
 into saved NPZs. See Conventions.
 
@@ -47,7 +52,8 @@ apply_processing, saves `_processed.npz`, then calls topo_correction.py.
 | `gpr_processing.py` | Core `apply_processing` function -- shared by notebook + run_pipeline |
 | `run_pipeline.py` | Batch re-process all profiles using saved `_params.json` |
 | `topo_correction.py` | Static topo correction using GNSS; reads `_processed.npz` |
-| `plot_dual_freq.py` | Side-by-side comparison of 50 MHz vs 100 MHz for the same line |
+| `plot_dual_freq.py` | Side-by-side comparison of 50 MHz vs 100 MHz for the same line; gain read from params JSON per panel |
+| `migrate_velocity_scan.py` | Stolt migration velocity scan; outputs interactive HTML with N/S annotations |
 | `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo) |
 | `check_polarity.py` | Per-profile polarity convention check (mean-trace first break) |
 | `compare_intersections.py` | Polarity cross-check at Line/petal crossings (trace overlay + xcorr) |
@@ -62,6 +68,8 @@ Data paths (relative to project root):
 - Processed output: `Data/GPR/Processed/{stem}_processed.npz`
 - Topo-corrected: `Data/GPR/Topo/{stem}_topo.npz` + `_topo.png`
 - Results plots: `Results/GPR/Topo/`
+- Dual-freq PNGs: `Results/GPR/DualFreq/`
+- Migration HTMLs: `Results/GPR/Migration/`
 
 External dependency: `georadar-data-processing` (gdp) library located at
 `Other data and scripts/Tube X/GPR/scripts/georadar-data-processing/`.
@@ -76,13 +84,18 @@ Scripts add this to sys.path at runtime; do not move it.
   to reproduce a result.
 - Gain is display-only: NPZs store raw, un-gained amplitudes; `gain_exponent` in
   params records the intended display gain. Applied at render via `display_gain()`:
-  notebook view slider, `plot_dual_freq.py --gain`, topo PNG (auto from params),
-  and `plot_flowerpetal_3d.py` interactive gain slider (`--gain` sets the initial one).
+  notebook view slider, topo PNG (auto from params), `plot_dual_freq.py` (auto from
+  params per panel; `--gain` overrides both), and `plot_flowerpetal_3d.py` interactive
+  gain slider (`--gain` sets the initial one).
 - Polarity is harmonised to the FlowerPetals (an arbitrary reference -- Tx/Rx
   swaps flip the sign, so there is no physically-correct one). `polarity: -1` in
   params negates a profile and is BAKED into the NPZ (unlike gain). Currently -1 on
   Line2_50MHz, Line3_50/100MHz, Line5_50/100MHz; +1 on the petals + Line2_100MHz.
   check_polarity.py verifies; re-run it after any reprocessing.
+- Orientation convention: North on the left in all output plots. Controlled by
+  `flip_x` in params. N/S labels are added by the output scripts (topo PNGs,
+  migration HTMLs, dual-freq PNGs) -- NOT in the notebook (notebook has no
+  geographic context). Line 3 is the only profile that needs flipping.
 - Normalisation uses `tracewise-rms-window` (not `tracewise-rms`). The plain
   `tracewise-rms` type ignores the window parameter entirely -- confirmed by
   reading gdp source and a passing unit test.
@@ -100,11 +113,11 @@ Scripts add this to sys.path at runtime; do not move it.
 
 ## Current Focus
 
-Processing pipeline and the draped 3D viz (`plot_flowerpetal_3d.py`, now with the
-LiDAR cave cloud) are stable; polarity is harmonised across all profiles. Active
-work: determining the GPR velocity from the data itself (diffraction / migration
-velocity analysis), validated blind against the LiDAR -- avoid calibrating
-velocity on the LiDAR (inverse crime for the lunar-analog argument).
+Processing pipeline, topo correction, draped 3D viz, and Stolt migration velocity
+scan are all stable. Polarity is harmonised; North-left orientation convention is
+enforced via `flip_x`. Active work: determining GPR velocity from the data itself
+(diffraction / migration velocity analysis), validated blind against the LiDAR --
+avoid calibrating velocity on the LiDAR (inverse crime for the lunar-analog argument).
 
 - Line 2 100 MHz has spectral notches at ~75 and ~160 MHz (hardware artifact from
   pulsEKKO antenna housing geometry, not geology). No processing fix available --

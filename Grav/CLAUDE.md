@@ -60,10 +60,31 @@ share one; Lines 2 and 5 do not), so trends are fit per line, never as one cross
   inversion. (The superseded `LL_gravity_corrections_old.csv` has unphysical
   ~200 mGal TC values; ignore it.)
 
+## GPR-constrained tube inversion (`Inversion/`)
+Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual.
+- `forward_polygon.py` -- fast analytic 2-D Talwani polygon forward (pure numpy).
+  `forward_fem.py` is the pyGIMLi FEM equivalent (validation/3-D only; needs the
+  `pygimli` env). `inspect_*` scripts are validation diagnostics.
+- `invert_tube.py` -- THE inversion. Dense grid search over (size, x0) with a DC
+  baseline fitted analytically at every grid point (relative gravity -> arbitrary
+  datum; dof = n-3). CLI: `--line {3,5} --truncate inf 10 15 --ceiling --floor`.
+  Modes: circle (fix GPR ceiling, fit R) and ellipse (fix ceiling+floor, fit
+  half-width a). Uncertainty budget combined in quadrature: data (chi2-rescaled
+  grid interval) + GPR picks (analytic propagation) + velocity (systematic depth
+  scaling) + detrend slope (from `detrend_trend_params_*.csv`); truncation kept
+  separate as a systematic bracket. PLACEHOLDERS to finalise from GPR: velocity
+  0.125 m/ns, picks L3 ceiling 5/floor 16, L5 ceiling 10 (circle-only).
+- `plot_model_terrain.py` -- best-fit tube under the measured surface (GPR-line
+  GNSS projected onto the same straight profile axis), true scale, auto-overlays
+  `lidar_line{N}.csv` ground truth. Station styling matches the other grav plots.
+
 ## Current Focus
-- Pipeline refactor completed (2026-06-12): all scripts use grav_utils.py for shared
-  constants, file names are now intuitive (lsq_drift_decay, station_gravity_decay, etc.),
-  simple drift is behind --with-simple-drift flag, visualise_lines.py moved to Adhoc/.
-- All 12 scripts smoke-tested; zero stale filename references.
-- Next: scientific interpretation -- the CBA profiles are the primary deliverable.
-  `visualise_CBA.py` and the Inspect/ scripts are the tools for that.
+- Inversion built + uncertainty budget complete; **LiDAR-validated (2026-06-30)**:
+  L5 gravity 186+/-35 vs LiDAR 182 m^2 (~2%), L3 218 (untruncated ellipse) vs 203.
+  Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
+  overshoots. Frame as model selection, not input tuning (no inverse crime).
+- Next: density chain-sweep (re-run pipeline per rho -> re-detrend -> re-invert) --
+  the last quantifiable systematic. Then finalise placeholder velocity/picks from GPR.
+- Earlier: pipeline refactor (2026-06-12, grav_utils.py shared constants, intuitive
+  file names, simple drift behind --with-simple-drift). CBA profiles via
+  `visualise_CBA.py`; diagnostics in `Inspect/`.
