@@ -207,8 +207,11 @@ def apply_topo_correction(data, time_axis, elevations, v):
 
 def save_figure(out_path, profile_key, dist_axis, time_axis,
                 corrected, elevations, v, ref_elev, gain_exp=0.0, flip_x=False):
-    fig, axes = plt.subplots(2, 1, figsize=(14, 8),
-                             gridspec_kw={'height_ratios': [1, 3]})
+    """Single-panel topographic section: the radargram is drawn on an absolute
+    elevation axis (m asl) so the surface relief sits inside the plot. The data is
+    referenced to a flat datum (= max elevation) by the static shift, so the real
+    surface dips below the datum -- that gap is the air overburden and is shaded."""
+    fig, ax = plt.subplots(figsize=(14, 6))
 
     # Display-only gain (saved NPZ stays un-gained); uses the recorded view gain
     disp = corrected
@@ -218,30 +221,38 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
         disp = display_gain(corrected, sfreq, gain_exp)
         gain_note = ' | view gain {:.1f}'.format(gain_exp)
 
-    axes[0].plot(dist_axis, elevations, 'k-', linewidth=1.2)
-    axes[0].axhline(ref_elev, color='r', linewidth=0.8, linestyle='--',
-                    label='datum (max) = {:.2f} m'.format(ref_elev))
-    axes[0].set_ylabel('Elevation (m asl)')
-    axes[0].set_title('{} | v = {:.3f} m/ns | topo corrected{}'.format(
-        profile_key, v, gain_note))
-    axes[0].legend(fontsize=8)
-    axes[0].grid(True, alpha=0.3)
-    axes[0].set_xlim(dist_axis[0], dist_axis[-1])
-
-    # N/S endpoint labels inside the radargram at top corners
-    axes[1].text(0.01, 0.99, 'N', transform=axes[1].transAxes,
-                 ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
-    axes[1].text(0.99, 0.99, 'S', transform=axes[1].transAxes,
-                 ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+    # Map the time axis to absolute elevation: elev = ref_elev - TWT * v / 2.
+    # Row 0 (time 0) is the datum (highest surface point); deeper rows are lower.
+    t_max      = float(time_axis[-1])
+    elev_bot   = ref_elev - t_max * v / 2.0
 
     clip_val = np.percentile(np.abs(disp), 99)
-    axes[1].imshow(disp, aspect='auto', cmap='seismic',
+    im = ax.imshow(disp, aspect='auto', cmap='seismic',
                    vmin=-clip_val, vmax=clip_val,
-                   extent=[dist_axis[0], dist_axis[-1],
-                           time_axis[-1], time_axis[0]])
-    axes[1].set_xlabel('Distance (m)')
-    axes[1].set_ylabel('Two-way travel time (ns)')
-    axes[1].set_xlim(dist_axis[0], dist_axis[-1])
+                   extent=[dist_axis[0], dist_axis[-1], elev_bot, ref_elev])
+
+    # surface topography drawn inside the section; shade the air above it
+    ax.fill_between(dist_axis, elevations, ref_elev,
+                    color='0.85', zorder=3, linewidth=0)
+    ax.plot(dist_axis, elevations, color='k', linewidth=1.3, zorder=4)
+
+    ax.set_xlim(dist_axis[0], dist_axis[-1])
+    ax.set_ylim(elev_bot, ref_elev)
+    ax.set_xlabel('Distance (m)')
+    ax.set_ylabel('Elevation (m asl)')
+    ax.set_title('{} | v = {:.3f} m/ns | topo corrected{}'.format(
+        profile_key, v, gain_note))
+
+    # N/S endpoint labels inside the section at top corners
+    ax.text(0.01, 0.99, 'N', transform=ax.transAxes,
+            ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
+    ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
+            ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+
+    # right-hand axis: depth below datum (m) = ref_elev - elevation = TWT * v / 2
+    tax = ax.twinx()
+    tax.set_ylim(t_max * v / 2.0, 0.0)   # 0 at datum, increasing downward
+    tax.set_ylabel('Depth below datum (m)')
 
     plt.tight_layout()
     plt.savefig(str(out_path), dpi=150)

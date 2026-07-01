@@ -143,10 +143,12 @@ def draw_geometry(ax):
 
     ax.set_xlim(0, xmax)
     ax.set_ylim(z_bottom, -1.2)   # depth down, a little headroom for surface label
-    ax.set_xlabel('horizontal position (schematic, m)')
-    ax.set_ylabel('true depth below surface (m)')
-    ax.set_title('Ray paths (true geometry)\nrock v = {:.2f}, air v = {:.2f} m/ns'.format(
-        V_ROCK, V_AIR), fontsize=10)
+    ax.set_xlabel('Horizontal position (schematic, m)')
+    ax.set_ylabel('True depth below surface (m)')
+    ax.set_title('Ray paths (true geometry)\n'
+                 r'$v_\mathrm{rock}=' + '{:.3f}'.format(V_ROCK) + r'$, '
+                 r'$v_\mathrm{air}=' + '{:.2f}'.format(V_AIR) + r'$ m/ns',
+                 fontsize=10)
 
 
 def draw_trace(ax):
@@ -167,13 +169,14 @@ def draw_trace(ax):
         ax.axhline(t, color=colour, lw=0.8, ls=':', alpha=0.7)
 
     ax.set_xticks([])
-    ax.set_ylabel('two-way time (ns)')
-    ax.set_title('Synthetic trace\n(apparent depth uses rock v)', fontsize=10)
+    ax.set_ylabel(r'Two-way time $t$ (ns)')
+    ax.set_title('Synthetic trace\n'
+                 r'(apparent depth uses $v_\mathrm{rock}$)', fontsize=10)
 
     # apparent-depth axis on the right
     ax2 = ax.twinx()
     ax2.set_ylim(app_depth(t_max), 0)
-    ax2.set_ylabel('apparent depth (m)  [= t x {:.2f} / 2]'.format(V_ROCK))
+    ax2.set_ylabel(r'Apparent depth (m) $=t\,v_\mathrm{rock}/2$')
 
 
 def draw_chart(ax, hd_max=10.0, n_rock=3, n_cav=3):
@@ -228,17 +231,9 @@ def make_schematic():
     draw_geometry(axL)
     draw_trace(axR)
 
-    note = ('Floor true depth {:.1f} m, but it plots at ~{:.1f} m -- the air gap is '
-            'crossed at {:.2f} m/ns yet depth-converted with rock {:.2f} m/ns, so the '
-            'floor is pulled up to ~{:.0f}% of the cave height below the ceiling. '
-            'Mc sits at ~2x the ceiling depth; both multiples are artifacts, not geology.'
-            ).format(D_FLOOR, app_depth(t_floor), V_AIR, V_ROCK,
-                     100 * V_ROCK / V_AIR)
-    fig.text(0.5, 0.02, note, ha='center', va='bottom', fontsize=8.5, wrap=True)
-
     fig.suptitle('GPR events over an air-filled lava tube: primaries and multiples',
                  fontsize=12)
-    fig.tight_layout(rect=[0, 0.06, 1, 0.96])
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / 'multiples_schematic.png'
