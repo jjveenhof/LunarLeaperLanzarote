@@ -78,15 +78,18 @@ def find_best(line, freq):
 
 
 def load_npz(path):
-    """Return (data, dist_axis, y_axis, is_depth, velocity_or_None).
-    Migrated NPZs store depth_axis (metres) and velocity (m/ns); others store time_axis (ns)."""
+    """Return (data, dist_axis, y_axis, is_depth, velocity_or_None, ref_elev_or_None, elevations_or_None).
+    Migrated NPZs store depth_axis (metres), velocity (m/ns), ref_elev, elevations;
+    topo NPZs store time_axis (ns), ref_elev, elevations; processed/stitched store neither."""
     with np.load(str(path)) as npz:
         data      = npz['data'].astype(np.float64)
         dist_axis = npz['dist_axis'].astype(np.float64)
+        ref_elev  = float(npz['ref_elev']) if 'ref_elev' in npz else None
+        elevs     = npz['elevations'].astype(np.float64) if 'elevations' in npz else None
         if 'depth_axis' in npz:
             vel = float(npz['velocity']) if 'velocity' in npz else None
-            return data, dist_axis, npz['depth_axis'].astype(np.float64), True, vel
-        return data, dist_axis, npz['time_axis'].astype(np.float64), False, None
+            return data, dist_axis, npz['depth_axis'].astype(np.float64), True, vel, ref_elev, elevs
+        return data, dist_axis, npz['time_axis'].astype(np.float64), False, None, ref_elev, elevs
 
 
 def load_gain(line, freq):
@@ -96,6 +99,15 @@ def load_gain(line, freq):
         with open(str(p), encoding='utf-8') as f:
             return float(json.load(f).get('gain_exponent', 0.0))
     return 0.0
+
+
+def load_flip(line, freq):
+    """Read flip_x from params JSON; return False if not found."""
+    p = DATA_GPR / 'Processed' / '{}_{}_params.json'.format(line, freq)
+    if p.exists():
+        with open(str(p), encoding='utf-8') as f:
+            return bool(json.load(f).get('flip_x', False))
+    return False
 
 
 def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=None):
@@ -119,8 +131,8 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     print('50 MHz  ({}) : {}'.format(stage50,  p50.name))
     print('100 MHz ({}) : {}'.format(stage100, p100.name))
 
-    d50,  x50,  t50,  depth50_precomputed,  v50  = load_npz(p50)
-    d100, x100, t100, depth100_precomputed, v100 = load_npz(p100)
+    d50,  x50,  t50,  depth50_precomputed,  v50,  ref_elev50,  elevs50  = load_npz(p50)
+    d100, x100, t100, depth100_precomputed, v100, ref_elev100, elevs100 = load_npz(p100)
 
     # --- display gain: use per-profile params JSON, CLI --gain overrides both ---
     gain50  = gain_exp if gain_exp is not None else load_gain(line, '50MHz')
@@ -146,6 +158,16 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
 
     x_offset = X_OFFSET_100MHZ.get(line, 0.0)
 
+    # X_OFFSET_100MHZ is defined in the ORIGINAL (acquisition) orientation. When the
+    # data has been flipped (North on left, baked into processed/topo/migrated NPZs),
+    # mirror the 100 MHz placement about the 50 MHz line so it lands at the correct
+    # spot: offset_eff = (x50_span) - offset - (x100_span).
+    # Stitched (raw) data is NOT flipped, so leave the offset alone there.
+    if stage100 != 'stitched' and load_flip(line, '100MHz'):
+        x_offset = ((float(x50[0]) + float(x50[-1]))
+                    - x_offset
+                    - (float(x100[0]) + float(x100[-1])))
+
     # --- common axis limits ---
     x_min = min(float(x50[0]),  x_offset + float(x100[0]))
     x_max = max(float(x50[-1]), x_offset + float(x100[-1]))
@@ -167,19 +189,20 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     fig_height = panel_h * ratio + panel_h + 0.8   # top + bottom + spacing
 
     fig = plt.figure(figsize=(fig_width, fig_height))
+    # 3 columns: plot | spacer (room for the right twin axis) | colourbar
     gs  = gridspec.GridSpec(
-        2, 2,
+        2, 3,
         figure=fig,
         height_ratios=[ratio, 1.0],
-        width_ratios=[0.97, 0.03],
+        width_ratios=[0.90, 0.055, 0.03],
         hspace=0.08,
-        wspace=0.02,
+        wspace=0.04,
     )
 
     ax50  = fig.add_subplot(gs[0, 0])
     ax100 = fig.add_subplot(gs[1, 0], sharex=ax50)
-    cax50  = fig.add_subplot(gs[0, 1])
-    cax100 = fig.add_subplot(gs[1, 1])
+    cax50  = fig.add_subplot(gs[0, 2])
+    cax100 = fig.add_subplot(gs[1, 2])
 
     # --- extents for imshow ---
     # extent = [left, right, bottom, top] where bottom > top (depth increases down)
@@ -214,6 +237,35 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # shade the region outside the 100 MHz data extent
     ax100.axvspan(x_min, ext100[0], color='0.88', zorder=0)
     ax100.axvspan(ext100[1], x_max, color='0.88', zorder=0)
+
+    # --- surface topography inside each panel (topo/migrated carry elevations) ---
+    # Depth axis is below the datum (= ref_elev); surface sits at depth ref_elev - elev(x).
+    # Shade the air overburden (depth 0 -> surface) and draw the surface curve.
+    for _ax, _xd, _xoff, _refe, _elevs in [
+        (ax50,  x50,  0.0,      ref_elev50,  elevs50),
+        (ax100, x100, x_offset, ref_elev100, elevs100),
+    ]:
+        if _refe is None or _elevs is None:
+            continue
+        _xs = _xoff + _xd
+        _surf_depth = _refe - _elevs
+        _ax.fill_between(_xs, 0.0, _surf_depth, color='0.85', zorder=2, linewidth=0)
+        _ax.plot(_xs, _surf_depth, color='k', linewidth=1.1, zorder=3)
+
+    # --- secondary right-hand axis (shared depth stays on the left) ---
+    # non-migrated: two-way time (ns) = 2*depth/velocity (exact inverse of depth conversion)
+    # migrated:     absolute elevation (m asl) = ref_elev - depth
+    for _ax, _dmax, _isdep, _refe in [
+        (ax50,  z_max,    depth50_precomputed,  ref_elev50),
+        (ax100, depth100, depth100_precomputed, ref_elev100),
+    ]:
+        _tax = _ax.twinx()
+        if _isdep and _refe is not None:
+            _tax.set_ylim(_refe - _dmax, _refe)      # elevation increases upward
+            _tax.set_ylabel('Elevation (m asl)', fontsize=9)
+        else:
+            _tax.set_ylim(2.0 * _dmax / velocity, 0.0)   # TWT increases downward
+            _tax.set_ylabel('TWT (ns)', fontsize=9)
 
     # --- labels ---
     ylabel50 = 'Depth (m)' if depth50_precomputed else 'Depth (m)  [v = {:.3f} m/ns]'.format(velocity)
