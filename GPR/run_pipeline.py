@@ -19,14 +19,22 @@ Steps per profile:
     5. Save  Data/GPR/Topo/{stem}_topo.npz
            Results/GPR/Topo/{stem}_topo.png
 
+After processing, it regenerates the deterministic downstream outputs so a browser
+refresh shows current data: dual-freq (topo), migrated NPZ/PNG + migrated dual-freq
+for any profile with a stored `migration_velocity_mns` (+ `migration_gain`) in its
+params, the flowerpetal 3D HTML, and (unless --no-scans) the velocity-scan HTMLs.
+
 Usage:
-    python run_pipeline.py                   # all profiles with saved params
-    python run_pipeline.py Line2_100MHz      # one profile
+    python run_pipeline.py                   # all profiles + downstream plots
+    python run_pipeline.py Line2_100MHz      # one profile + its downstream plots
     python run_pipeline.py Line3_50MHz Line5_100MHz
+    python run_pipeline.py --no-scans        # skip the slow velocity-scan HTMLs
+    python run_pipeline.py --no-plots        # processing + topo only, no downstream
 """
 
 import sys
 import json
+import subprocess
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
@@ -105,7 +113,72 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
     return True
 
 
-def main(targets=None):
+# lines that plot_dual_freq / velocity-scan understand
+DUAL_FREQ_LINES = {'Line2', 'Line3', 'Line5'}
+
+
+def _load_params(stem):
+    p = PROC_DIR / (stem + '_params.json')
+    if not p.exists():
+        return {}
+    with open(str(p), encoding='utf-8') as f:
+        return json.load(f)
+
+
+def regenerate_downstream(stems, do_scans):
+    """Re-make the deterministic downstream outputs (including HTML) so a browser
+    refresh shows current data. Interactive velocity-scan HTMLs are slow and are
+    only rebuilt when do_scans is True.
+
+    Auto-regenerated: dual-freq (topo), migrated NPZ/PNG + migrated dual-freq for
+    any profile carrying a stored `migration_velocity_mns`, and the flowerpetal 3D.
+    """
+    py = sys.executable
+
+    def run(script_args, desc):
+        print('  [plot] {}'.format(desc))
+        subprocess.run([py, str(HERE / script_args[0])] + script_args[1:], check=False)
+
+    # only profiles that actually produced a topo NPZ this run
+    topo_stems = [s for s in stems if (tc.TOPO_DIR / (s + '_topo.npz')).exists()]
+    lines = sorted({s.split('_')[0] for s in topo_stems} & DUAL_FREQ_LINES)
+
+    print('\nDownstream plots:')
+
+    # 1. dual-freq (topo) per line
+    for L in lines:
+        run(['plot_dual_freq.py', L, '--stage', 'topo'], 'dual-freq topo ' + L)
+
+    # 2. migrated NPZ/PNG for profiles with a stored pick
+    for s in topo_stems:
+        prm = _load_params(s)
+        mv = prm.get('migration_velocity_mns')
+        if mv is None:
+            continue
+        mg = prm.get('migration_gain', 0.0)
+        run(['migrate_velocity_scan.py', '--line', s,
+             '--pick-velocity', str(mv), '--gain', str(mg)], 'migrate ' + s)
+
+    # 2b. migrated dual-freq where BOTH freqs of a line carry a pick
+    for L in lines:
+        p50, p100 = _load_params(L + '_50MHz'), _load_params(L + '_100MHz')
+        mv = p50.get('migration_velocity_mns')
+        if mv is not None and p100.get('migration_velocity_mns') is not None:
+            mg = p50.get('migration_gain', 0.0)
+            run(['plot_dual_freq.py', L, '--stage', 'migrated',
+                 '--velocity', str(mv), '--gain', str(mg)], 'dual-freq migrated ' + L)
+
+    # 3. flowerpetal 3D (HTML) -- always refresh so the browser shows current data
+    run(['plot_flowerpetal_3d.py'], 'flowerpetal 3D')
+
+    # 4. velocity-scan HTMLs (slow, interactive picking tool) -- opt-in
+    if do_scans:
+        for s in topo_stems:
+            if s.split('_')[0] in DUAL_FREQ_LINES:
+                run(['migrate_velocity_scan.py', '--line', s], 'velocity scan ' + s)
+
+
+def main(targets=None, do_plots=True, do_scans=True):
     # --- load GNSS ---
     if not tc.GNSS_CSV.exists():
         sys.exit('Lines GNSS CSV not found: ' + str(tc.GNSS_CSV))
@@ -138,16 +211,23 @@ def main(targets=None):
     print('Profiles to process: {}\n'.format(', '.join(stems)))
 
     interp_cache = {}
-    ok = skipped = 0
+    ok_stems = []
+    skipped = 0
     for stem in stems:
-        result = run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache)
-        if result:
-            ok += 1
+        if run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
+            ok_stems.append(stem)
         else:
             skipped += 1
 
-    print('\nDone: {} processed, {} skipped.'.format(ok, skipped))
+    print('\nDone: {} processed, {} skipped.'.format(len(ok_stems), skipped))
+
+    if do_plots and ok_stems:
+        regenerate_downstream(ok_stems, do_scans=do_scans)
 
 
 if __name__ == '__main__':
-    main(sys.argv[1:] if len(sys.argv) > 1 else None)
+    argv     = sys.argv[1:]
+    do_plots = '--no-plots' not in argv
+    do_scans = '--no-scans' not in argv
+    targets  = [a for a in argv if not a.startswith('--')]
+    main(targets or None, do_plots=do_plots, do_scans=do_scans)
