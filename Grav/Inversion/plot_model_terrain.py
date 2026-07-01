@@ -142,21 +142,16 @@ def main():
         fits[mode] = it.invert(mode, sx, d, se, ceil, floor, sizes, x0s)
 
     # ---- figure -------------------------------------------------------------
-    fig, ax = plt.subplots(figsize=(12, 5.5))
+    fig, ax = plt.subplots(figsize=(12, 5.0))
     gpr = gpr_surface(args.line, proj, xs, zs)
     if gpr is not None:
         gd, ge, rms = gpr
-        # dense GPR-line GNSS surface is the drawn surface; rock fill beneath it.
-        floor_z = ge.min() - max(floor, 20) - 5
-        ax.fill_between(gd, ge, floor_z, color="0.88", zorder=0)
-        ax.plot(gd, ge, "-", color="0.25", lw=1.8, zorder=4,
-                label=f"GPR-line surface (GNSS)  [GPR-vs-stn RMS {rms*100:.0f} cm]")
+        surf_x, surf_y = gd, ge              # dense GPR-line surface (drawn + filled)
+        ax.plot(gd, ge, "-", color="0.25", lw=1.8, zorder=4, label="surface (GNSS)")
         print(f"  GPR-line GNSS projected, RMS vs gravity stations = {rms*100:.1f} cm")
     else:
-        floor_z = zs.min() - max(floor, 20) - 5
-        ax.fill_between(xs, zs, floor_z, color="0.88", zorder=0)
-        ax.plot(xs, zs, "-", color="0.25", lw=2.0, zorder=4,
-                label="measured surface (gravity stations)")
+        surf_x, surf_y = xs, zs
+        ax.plot(xs, zs, "-", color="0.25", lw=2.0, zorder=4, label="surface (GNSS)")
         print("  (no GPR topo file; using gravity station elevations only)")
     plot_stations()
 
@@ -169,16 +164,17 @@ def main():
         vx = np.append(vx, vx[0]); vz = np.append(vz, vz[0])
         lbl = "R" if mode == "circle" else "a"
         ax.plot(vx, vz, color="k", lw=2.2, ls=FIT_LS[mode], zorder=6,
-                label=f"{mode} fit ({lbl}={res['size']:.1f} m, "
-                      f"area {it.area_of(mode, res['size'], ceil, floor):.0f} m$^2$)")
+                label=f"{mode}: {lbl} {res['size']:.1f} m, "
+                      f"{it.area_of(mode, res['size'], ceil, floor):.0f} m$^2$")
 
     # GPR pick depths under the fitted centre (use the circle's x0 if present)
     x0r = fits.get("circle", fits[modes[0]])["x0"]
     surf0 = float(surf(x0r))                     # surface elevation above the tube
-    for depth_pick, name in [(ceil, "GPR ceiling"),
-                             (floor, "GPR floor")] if "ellipse" in modes \
-            else [(ceil, "GPR ceiling")]:
-        ax.axhline(surf0 - depth_pick, color="0.45", ls="--", lw=1.1, zorder=2)
+    picks = [(ceil, "GPR ceiling"), (floor, "GPR floor")] if "ellipse" in modes \
+        else [(ceil, "GPR ceiling")]
+    for i, (depth_pick, name) in enumerate(picks):
+        ax.axhline(surf0 - depth_pick, color="0.45", ls="--", lw=1.1, zorder=2,
+                   label="GPR pick (ceiling/floor)" if i == 0 else "_nolegend_")
         # x in axes fraction (left edge), y in data -> robust to the x-axis flip.
         ax.text(0.012, surf0 - depth_pick, f"{name} ({depth_pick:.1f} m)",
                 transform=ax.get_xaxis_transform(), va="bottom", ha="left",
@@ -189,11 +185,32 @@ def main():
     lidar = HERE / f"lidar_line{args.line}.csv"
     if lidar.exists():
         L = np.genfromtxt(lidar, delimiter=",", names=True)
-        ax.plot(L["x"], L["z"], color=LIDAR_COLOR, lw=2.6, zorder=7,
-                label="LiDAR cross-section (ground truth)")
-        print(f"  overlaid LiDAR -> {lidar.name}")
+        lx, lz = L["x"], L["z"]
+        # shoelace area of the closed LiDAR outline (m^2)
+        area_lidar = 0.5 * abs(np.dot(lx, np.roll(lz, -1)) - np.dot(lz, np.roll(lx, -1)))
+        ax.plot(lx, lz, color=LIDAR_COLOR, lw=2.6, zorder=7,
+                label=f"LiDAR ({area_lidar:.0f} m$^2$)")
+        print(f"  overlaid LiDAR -> {lidar.name} (area {area_lidar:.0f} m^2)")
     else:
         print(f"  (no LiDAR file yet; drop '{lidar.name}' with columns x,z to overlay)")
+
+    # ---- window: full profile (all gravity + topo data); vertical extent
+    # framed to the section (surface + tube/LiDAR), rock fills to the axis bottom.
+    fy_bot, fy_top = [], [surf0, float(surf_y.max())]
+    for mode in modes:
+        _, b, depth = it.shape_params(mode, fits[mode]["size"], ceil, floor)
+        fy_bot.append(surf0 - (depth + b))               # tube bottom elevation
+    if lidar.exists():
+        fy_bot.append(float(L["z"].min())); fy_top.append(float(L["z"].max()))
+    YM = 4.0
+    xlo = min(float(surf_x.min()), float(xs.min()))
+    xhi = max(float(surf_x.max()), float(xs.max()))
+    xpad = 0.02 * (xhi - xlo)
+    ytop, ybot = max(fy_top) + YM, min(fy_bot) - YM
+    ax.set_xlim(xlo - xpad, xhi + xpad)
+    ax.set_ylim(ybot, ytop)
+    # rock fill: surface down to the axis bottom -> no floating edge at a random depth
+    ax.fill_between(surf_x, surf_y, ybot, color="0.88", zorder=0)
 
     ttl = "" if it.TRUNCATE_D is None else f"  [tube truncated at {it.TRUNCATE_D:.0f} m]"
     ax.set_aspect("equal")
