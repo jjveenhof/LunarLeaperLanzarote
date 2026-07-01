@@ -174,12 +174,16 @@ def main():
 
     # GPR pick depths under the fitted centre (use the circle's x0 if present)
     x0r = fits.get("circle", fits[modes[0]])["x0"]
+    surf0 = float(surf(x0r))                     # surface elevation above the tube
     for depth_pick, name in [(ceil, "GPR ceiling"),
                              (floor, "GPR floor")] if "ellipse" in modes \
             else [(ceil, "GPR ceiling")]:
-        ax.axhline(surf(x0r) - depth_pick, color="0.55", ls=":", lw=1.0, zorder=2)
-        ax.text(xs.max(), surf(x0r) - depth_pick, f"{name} ({depth_pick:.0f} m) ",
-                va="bottom", ha="right", fontsize=8, color="0.4")
+        ax.axhline(surf0 - depth_pick, color="0.45", ls="--", lw=1.1, zorder=2)
+        # x in axes fraction (left edge), y in data -> robust to the x-axis flip.
+        ax.text(0.012, surf0 - depth_pick, f"{name} ({depth_pick:.1f} m)",
+                transform=ax.get_xaxis_transform(), va="bottom", ha="left",
+                fontsize=8, color="0.25",
+                bbox=dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.7))
 
     # ---- optional LiDAR ground-truth overlay --------------------------------
     lidar = HERE / f"lidar_line{args.line}.csv"
@@ -194,12 +198,31 @@ def main():
     ttl = "" if it.TRUNCATE_D is None else f"  [tube truncated at {it.TRUNCATE_D:.0f} m]"
     ax.set_aspect("equal")
     ax.set_xlabel("distance along profile (m)")
-    ax.set_ylabel("elevation (m, REGCAN95)")
+    # Elevation (REGCAN95) on the right; depth below the tube surface on the left.
+    ax.set_ylabel("elevation (m)")
+    ax.yaxis.set_label_position("right")
+    ax.yaxis.tick_right()
+    secax = ax.secondary_yaxis("left", functions=(lambda e: surf0 - e,
+                                                  lambda d: surf0 - d))
+    secax.set_ylabel("depth below surface at tube centre (m)")
     ax.set_title(f"Line {args.line}: best-fit tube in measured terrain{ttl}",
                  fontweight="bold")
-    ax.legend(fontsize=8, loc="lower left")
+    ax.legend(fontsize=8, loc="lower right")
     ax.grid(True, alpha=0.25, ls="--")
-    fig.tight_layout()
+    # Plot N->S (N on the left) to match the GPR sections; dist stays S->N.
+    ax.invert_xaxis()
+    ax.text(0.006, 0.97, "N", transform=ax.transAxes, ha="left", va="top",
+            fontweight="bold", fontsize=13, color="0.3")
+    ax.text(0.994, 0.97, "S", transform=ax.transAxes, ha="right", va="top",
+            fontweight="bold", fontsize=13, color="0.3")
+    # Size the figure so the equal-aspect axes fill it (kills the vertical slack
+    # that equal aspect + a too-tall figure would otherwise leave as big margins).
+    xspan = abs(np.subtract(*ax.get_xlim()))
+    yspan = abs(np.subtract(*ax.get_ylim()))
+    L, R, B, T = 0.09, 0.90, 0.14, 0.88          # axes position (figure fractions)
+    W = 13.0
+    fig.set_size_inches(W, W * (R - L) * yspan / xspan / (T - B))
+    fig.subplots_adjust(left=L, right=R, bottom=B, top=T)
     tag = "" if it.TRUNCATE_D is None else f"_trunc{int(it.TRUNCATE_D)}"
     out = it.FIG / f"terrain_model_line{args.line}{tag}.png"
     fig.savefig(out, dpi=150)
