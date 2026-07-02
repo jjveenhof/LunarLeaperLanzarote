@@ -60,10 +60,15 @@ FIG.mkdir(parents=True, exist_ok=True)
 # ---- per-line presets: GPR picks + which shapes are fittable ----------------
 # Override any of these from the command line (see parse_args / module docstring).
 LINE_PRESETS = {
-    # Line 3 FINAL (GPR, 2026-07-01): ceiling 4.0, floor 14.6 m (air-gap corrected
-    # from apparent 8.4 m; v_rock 0.125 m/ns). Was placeholder 5 / 16.
-    3: dict(ceiling=4.0, floor=14.6, modes=("circle", "ellipse")),
-    5: dict(ceiling=10.0, floor=None, modes=("circle",)),   # PLACEHOLDER, L5 TODO
+    # GPR-derived geometry + migration velocity per line (2026-07-01). Depths in m
+    # below surface (floors air-gap corrected). Velocity feeds the velocity-
+    # uncertainty channel and DIFFERS per line (L3 0.125, L5 0.11 m/ns).
+    # L3 re-pick: ceiling 3.5, floor 14.3 (from apparent 8.0). Supersedes 4.0/14.6.
+    3: dict(ceiling=3.5, floor=14.3, modes=("circle", "ellipse"),
+            velocity=0.125, velocity_sigma=0.010),
+    # L5: no floor reflector -> circle-only. velocity_sigma assumed (GPR gave none).
+    5: dict(ceiling=10.5, floor=None, modes=("circle",),
+            velocity=0.11, velocity_sigma=0.010),
 }
 
 # ---- fixed constants --------------------------------------------------------
@@ -79,14 +84,14 @@ WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 
 # ---- runtime config (set by parse_args in main; defaults = Line 3 preset) ---
 LINE = 3
-CEILING0, FLOOR0 = 4.0, 14.6
+CEILING0, FLOOR0 = 3.5, 14.3
 MODES = ("circle", "ellipse")
 SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
 # GPR migration velocity: picks are time picks, so velocity scales ALL depths
 # jointly (a systematic, common-mode term -- distinct from the per-pick noise).
-# Line 3 FINAL: v_rock = 0.125 m/ns (Stolt diffraction collapse). L5 TBD.
+# Per line, from LINE_PRESETS (set in main); defaults below are Line 3's.
 VELOCITY = 0.125             # m/ns
-VELOCITY_SIGMA = 0.010       # m/ns 1-sigma (plausible range ~0.115-0.135)
+VELOCITY_SIGMA = 0.010       # m/ns 1-sigma
 SLOPE_SE = 0.0               # mGal/m, regional-trend slope 1-sigma (set in main)
 TRUNCATE_D = None            # set per-run from the --truncate list (None = inf 2D)
 
@@ -212,10 +217,13 @@ def run_mode(mode, sx, d, se):
     a1.set_title(rf"$\chi^2-\chi^2_{{min}}$ surface (white = 68%, 95%)")
     fig.colorbar(im, ax=a1, label=r"$\Delta\chi^2$")
 
-    g_best = forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, sx) + c_best
+    # Evaluate the (smooth analytic) forward on a dense grid for display -- the fit
+    # itself only needs it at the stations, but plotting there gives a jagged curve.
+    xd = np.linspace(sx.min(), sx.max(), 400)
+    g_dense = forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, xd) + c_best
     a2.errorbar(sx, d, yerr=se, fmt="o", color=LINE_COLORS.get(LINE, "#FF5C00"),
                 capsize=3, markersize=5, label="detrended residual")
-    a2.plot(sx, g_best, "-", color="k", lw=2,
+    a2.plot(xd, g_dense, "-", color="k", lw=2,
             label=f"best fit ({size_lbl.split()[0]}={res['size']:.1f} m)")
     a2.axhline(c_best, color="0.6", lw=0.8, ls=":",
                label=f"fitted baseline ({c_best*1000:.0f} uGal)")
@@ -231,8 +239,8 @@ def run_mode(mode, sx, d, se):
             fontweight="bold", fontsize=11, color="0.3")
     a2.text(0.994, 0.97, "S", transform=a2.transAxes, ha="right", va="top",
             fontweight="bold", fontsize=11, color="0.3")
-    fig.suptitle(f"Line {LINE} inversion -- {mode} (ceiling {CEILING0:.0f} m"
-                 + (f", floor {FLOOR0:.0f} m" if mode == "ellipse" else "") + ")" + ttl,
+    fig.suptitle(f"Line {LINE} inversion -- {mode} (ceiling {CEILING0:.1f} m"
+                 + (f", floor {FLOOR0:.1f} m" if mode == "ellipse" else "") + ")" + ttl,
                  fontweight="bold")
     fig.tight_layout()
     fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
@@ -352,10 +360,10 @@ def parse_args():
                         "(e.g. --truncate inf 10 15)")
     p.add_argument("--sigma-pick", type=float, default=1.0,
                    help="GPR pick 1-sigma (m)")
-    p.add_argument("--velocity", type=float, default=VELOCITY,
-                   help="GPR migration velocity (m/ns)")
-    p.add_argument("--velocity-sigma", type=float, default=VELOCITY_SIGMA,
-                   help="velocity 1-sigma (m/ns)")
+    p.add_argument("--velocity", type=float, default=None,
+                   help="override GPR migration velocity (m/ns; default is per-line)")
+    p.add_argument("--velocity-sigma", type=float, default=None,
+                   help="override velocity 1-sigma (m/ns)")
     return p.parse_args()
 
 
@@ -369,7 +377,9 @@ def main():
     FLOOR0 = args.floor if args.floor is not None else (pre["floor"] or 16.0)
     MODES = tuple(args.modes) if args.modes else pre["modes"]
     SIGMA_PICK = args.sigma_pick
-    VELOCITY, VELOCITY_SIGMA = args.velocity, args.velocity_sigma
+    VELOCITY = args.velocity if args.velocity is not None else pre["velocity"]
+    VELOCITY_SIGMA = (args.velocity_sigma if args.velocity_sigma is not None
+                      else pre["velocity_sigma"])
 
     # Regional-trend slope 1-sigma for this line (its tilt was removed before the
     # inversion, so its uncertainty propagates into the residual we fit).
@@ -389,8 +399,8 @@ def main():
 
     sx, d, se = load_line(LINE)
     print(f"Line {LINE}: {len(sx)} stations, residual min {d.min()*1000:.0f} uGal "
-          f"(ceiling {CEILING0:.0f} m"
-          + (f", floor {FLOOR0:.0f} m" if "ellipse" in MODES else "") + ")")
+          f"(ceiling {CEILING0:.1f} m"
+          + (f", floor {FLOOR0:.1f} m" if "ellipse" in MODES else "") + ")")
     for TRUNCATE_D in truncs:
         for mode in MODES:
             run_mode(mode, sx, d, se)

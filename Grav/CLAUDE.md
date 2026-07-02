@@ -72,22 +72,22 @@ Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual
   half-width a). Uncertainty budget combined in quadrature: data (chi2-rescaled
   grid interval) + GPR picks (analytic propagation) + velocity (systematic depth
   scaling) + detrend slope (from `detrend_trend_params_*.csv`); truncation kept
-  separate as a systematic bracket. GPR inputs: L3 FINAL (v 0.125 m/ns, ceiling
-  4.0/floor 14.6 m air-gap-corrected, 2026-07-01); L5 still PLACEHOLDER (ceiling
-  10, circle-only) pending GPR.
+  separate as a systematic bracket. GPR inputs FINAL (2026-07-01, per-line velocity):
+  L3 v 0.125, ceiling 3.5/floor 14.3 m (air-gap corrected); L5 v 0.11, ceiling 10.5 m
+  (no floor -> circle-only). No placeholders left.
 - `plot_model_terrain.py` -- best-fit tube under the measured surface (GPR-line
   GNSS projected onto the same straight profile axis), true scale, auto-overlays
   `lidar_line{N}.csv` ground truth. Station styling matches the other grav plots.
 
 ## Current Focus
-- Inversion built + uncertainty budget complete; **LiDAR-validated**:
-  L5 gravity 186+/-35 vs LiDAR 182 m^2 (~2%); L3 (FINAL GPR picks) untruncated
-  ellipse 195+/-24 vs LiDAR 203 (~4%), model roof aligns with LiDAR void top.
-  Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
-  overshoots. Frame as model selection, not input tuning (no inverse crime).
+- Inversion built + uncertainty budget complete; **LiDAR-validated** (FINAL GPR geom):
+  L3 untruncated ellipse 188+/-23 vs LiDAR 203 m^2 (~7%); L5 circle 196+/-36 vs 182 (~8%).
+  Both inside 1 SE; model roofs align with the LiDAR void tops. Ground truth favors the
+  UNTRUNCATED 2-D model -- the pit-truncation correction overshoots. Frame as model
+  selection, not input tuning (no inverse crime).
 - All profile plots read N (left) -> S (right) to match the GPR sections.
 - Next: density chain-sweep (re-run pipeline per rho -> re-detrend -> re-invert) --
-  the last quantifiable systematic. Then finalise L5 GPR picks (only remaining placeholder).
+  the last quantifiable systematic. (All GPR picks/velocities now final.)
 - Earlier: pipeline refactor (2026-06-12, grav_utils.py shared constants, intuitive
   file names, simple drift behind --with-simple-drift). CBA profiles via
   `visualise_CBA.py`; diagnostics in `Inspect/`.
