@@ -9,12 +9,16 @@ collapses diffractions / sharpens reflectors.  This is the data-driven,
 lunar-analog-legitimate way to estimate velocity -- no LiDAR used; validate the
 chosen velocity against the LiDAR ceiling depth afterwards (blind).
 
-Input: Data/GPR/Topo/{line}_topo.npz  -- the topo-corrected (static datum shift
-to ref_elev), un-gained, polarity-baked section.  Topo correction places every
-trace at its hyperbolic position relative to a flat datum, which is exactly the
-flat-surface geometry Stolt assumes; the per-trace zero-pad at the trace tops
-(from the static shift) is handled by the dead-trace blanking + live-sample
-taper, mirroring Dr. Cedric Schmelzbach's notebook.
+Input: Data/GPR/Processed/{line}_processed.npz (pre-topo, un-gained, polarity- and
+flip-baked) plus the elevation track (elevations, ref_elev) from the matching
+Topo NPZ.  The static topo correction (datum shift to ref_elev) is recomputed at
+EACH trial velocity, then migrated -- so both the topo shift and the migration use
+the same velocity and stay self-consistent as the slider moves (the surface stays
+pinned under the surface line instead of drifting at off-nominal velocities).
+Topo correction places every trace at its hyperbolic position relative to a flat
+datum, which is exactly the flat-surface geometry Stolt assumes; the per-trace
+zero-pad at the trace tops (from the static shift) is handled by the dead-trace
+blanking + live-sample taper, mirroring Dr. Cedric Schmelzbach's notebook.
 
 Migration is run ON UN-GAINED data.  A display-only gain (--gain, default 0 =
 off) may be applied for viewing -- the gdp 'linear' travel-time gain, identical
@@ -43,8 +47,10 @@ from scipy.signal.windows import hann as _hann_win
 sys.path.insert(0, str(Path(__file__).parent))
 from stolt_migration import stolt_migration_2d
 from gpr_processing import display_gain
+from topo_correction import apply_topo_correction
 
 HERE          = Path(__file__).parent
+PROC_DIR      = HERE / '../../Data/GPR/Processed'
 TOPO_DIR      = HERE / '../../Data/GPR/Topo'
 OUT_DIR       = HERE / '../../Results/GPR/Migration'
 MIGRATED_DIR  = HERE / '../../Results/GPR/Migrated'
@@ -115,36 +121,46 @@ def main():
     ap.add_argument('--out', type=str, default=None, help='output HTML path')
     args = ap.parse_args()
 
-    npz_path = TOPO_DIR / (args.line + '_topo.npz')
-    if not npz_path.exists():
-        sys.exit('Not found: ' + str(npz_path.resolve()))
-    with np.load(str(npz_path)) as f:
-        data       = f['data'].astype(np.float64)
-        x          = f['dist_axis'].astype(np.float64)
-        t          = f['time_axis'].astype(np.float64)
+    # Load PRE-topo (processed) data + the velocity-independent elevation track.
+    # Topo is recomputed at each trial velocity (below) so the section stays
+    # consistent with its depth axis -- the surface no longer drifts under the
+    # data as the velocity slider moves.
+    proc_path = PROC_DIR / (args.line + '_processed.npz')
+    topo_path = TOPO_DIR / (args.line + '_topo.npz')
+    if not proc_path.exists():
+        sys.exit('Not found: ' + str(proc_path.resolve()))
+    if not topo_path.exists():
+        sys.exit('Not found: ' + str(topo_path.resolve()))
+    with np.load(str(proc_path)) as f:
+        data0 = f['data'].astype(np.float64)
+        x     = f['dist_axis'].astype(np.float64)
+        t     = f['time_axis'].astype(np.float64)
+    with np.load(str(topo_path)) as f:
         ref_elev   = float(f['ref_elev'])
         elevations = f['elevations'].astype(np.float64)
     dt = float(t[1] - t[0])
     dx = float(x[1] - x[0])
-    nt, nx = data.shape
+    nt, nx = data0.shape
     print('{}: {} samples x {} traces, dx={:.3f} m, dt={:.3f} ns'.format(
         args.line, nt, nx, dx, dt))
 
-    # data-driven taper + dead-trace mask (topo shift leaves zero tops/edges)
-    if args.no_live_taper:
-        section, dead = data, ~np.any(data != 0, axis=0)
-    else:
-        section, dead = live_sample_taper(data)
-    n_dead = int(dead.sum())
-    print('Dead (all-zero) traces: {} / {}'.format(n_dead, nx))
-
     pad_x_mult   = (nx + PAD_X_TRACES) / nx
     taper_frac_x = TAPER_W / nx
+
+    def build_section(v):
+        """Topo-correct the processed data at velocity v, then live-sample taper.
+        Recomputing the static shift per v pins the surface to depth
+        (ref_elev - elev) regardless of v, so it stays under the surface line."""
+        corrected, _shifts, _re = apply_topo_correction(data0, t, elevations, v)
+        if args.no_live_taper:
+            return corrected, ~np.any(corrected != 0, axis=0)
+        return live_sample_taper(corrected)
 
     # --- single-velocity NPZ + PNG save (--pick-velocity) ---
     if args.pick_velocity is not None:
         v = float(args.pick_velocity)
         print('Single migration at v = {:.4f} m/ns ...'.format(v))
+        section, dead = build_section(v)
         mig = stolt_migration_2d(
             section, dt=dt, dx=dx, velocity=v,
             dz=0.5 * v * dt, nz=nt,
@@ -152,7 +168,7 @@ def main():
             pad_t=PAD_T_FACTOR, pad_x=pad_x_mult,
             taper_t=TAPER_T_FRAC, taper_x=taper_frac_x,
             depth_padding=2.0)
-        if n_dead > 0:
+        if dead.any():
             mig[:, dead] = 0.0
         depth = t * (0.5 * v)
 
@@ -216,8 +232,9 @@ def main():
     print('Stolt-migrating {} velocities {:.3f}..{:.3f} m/ns ...'.format(
         len(vels), vels[0], vels[-1]))
 
-    frames, depth_axes = [], []
+    top_frames, frames, depth_axes = [], [], []
     for v in vels:
+        section, dead = build_section(v)     # topo-corrected at THIS velocity
         mig = stolt_migration_2d(
             section, dt=dt, dx=dx, velocity=float(v),
             dz=0.5 * v * dt, nz=nt,
@@ -225,9 +242,10 @@ def main():
             pad_t=PAD_T_FACTOR, pad_x=pad_x_mult,
             taper_t=TAPER_T_FRAC, taper_x=taper_frac_x,
             depth_padding=2.0)
-        if n_dead > 0:
+        if dead.any():
             mig[:, dead] = 0.0
         depth = t * (0.5 * v)               # TWT -> depth below datum [m]
+        top_frames.append(section)
         frames.append(mig)
         depth_axes.append(depth)
         print('  v = {:.3f} m/ns  ->  max depth {:.2f} m  done'.format(v, depth[-1]))
@@ -243,14 +261,20 @@ def main():
     g0 = int(np.argmin(np.abs(np.asarray(gain_vals, dtype=float) - float(args.gain))))
     c0 = int(np.argmin(np.abs(np.asarray(clip_vals, dtype=float) - float(args.clip))))
 
-    # Lightweight payload: precompute only velocity stacks; gain+clip are computed live in JS.
-    section_norm = norm99(section).astype(np.float32)
+    # Payload: the MIGRATED panel is a per-velocity stack. The top (unmigrated,
+    # topo-corrected) panel is rebuilt in JS from a SINGLE pre-topo array by rolling
+    # each trace by the static shift at the current velocity. This keeps the file
+    # small enough to afford 6-decimal precision -- so gain at depth stays smooth
+    # (storing 16 top copies forced 3 decimals, which the depth gain amplified into
+    # blocky quantisation).
+    pre_topo_norm = norm99(data0).astype(np.float32)
     mig_norm_by_v = [norm99(fr).astype(np.float32) for fr in frames]
+    top0_norm     = norm99(top_frames[i0]).astype(np.float32)   # initial render only
 
     depth0 = depth_axes[i0]
     sfreq  = 1000.0 / dt
     tgain  = tgain_weights(t)                      # (k+1)/sfreq, gdp-linear basis
-    z_top0 = display_gain(section_norm, sfreq, gain_vals[g0])
+    z_top0 = display_gain(top0_norm, sfreq, gain_vals[g0])
     z_bot0 = display_gain(mig_norm_by_v[i0], sfreq, gain_vals[g0])
 
     # Python-side init clip threshold for first render.
@@ -351,7 +375,10 @@ def main():
         'tgain': [float(w) for w in tgain],
         'ref_elev': float(ref_elev),
         'elev_corr': elev_corr.tolist(),   # ref_elev - elev(x), one value per trace
-        'section_norm': np.round(section_norm, 6).tolist(),
+        'dt': float(dt),
+        # One pre-topo array (top panel rebuilt per-v in JS by rolling) + the
+        # migrated stack, at 6 decimals so depth gain stays smooth.
+        'pre_topo': np.round(pre_topo_norm, 6).tolist(),
         'mig_norm_by_v': [np.round(m, 6).tolist() for m in mig_norm_by_v],
     }
 
@@ -406,6 +433,25 @@ def main():
       }});
     }}
 
+    // Rebuild the topo-corrected (unmigrated) top panel at velocity v by rolling
+    // each trace of the single stored pre-topo array down by its static shift
+    // sh = round(2*elev_corr/v/dt) -- exactly what apply_topo_correction does in
+    // Python, but done per-slider so the surface stays pinned across velocities.
+    function buildTop(v) {{
+      const P = S.pre_topo, ec = S.elev_corr, dt = S.dt;
+      const nt = P.length, nx = P[0].length;
+      const out = new Array(nt);
+      for (let r = 0; r < nt; r++) out[r] = new Array(nx).fill(0.0);
+      for (let j = 0; j < nx; j++) {{
+        const sh = Math.round(2.0 * ec[j] / v / dt);
+        for (let r = 0; r < nt; r++) {{
+          const src = r - sh;
+          if (src >= 0 && src < nt) out[r][j] = P[src][j];
+        }}
+      }}
+      return out;
+    }}
+
     function gain2D(a2d, tgain, g) {{
       // gdp 'linear' display gain: weight_k = travel_time_k ** g (same as the
       // notebook + 3D plot).  g <= 0 -> unchanged.
@@ -448,7 +494,7 @@ def main():
       const gain = S.gains[gi];
       const clipPct = S.clip_pcts[ci];
 
-      const zTop = gain2D(S.section_norm, S.tgain, gain);
+      const zTop = gain2D(buildTop(S.vels[vi]), S.tgain, gain);
       const zBot = gain2D(S.mig_norm_by_v[vi], S.tgain, gain);
       const clip = percentileAbsFromTwo(zTop, zBot, clipPct);
       const dts  = depthToSurf(depth);

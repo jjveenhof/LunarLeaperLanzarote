@@ -164,11 +164,11 @@ def build_track_interps(gnss_df, line_key, metre_mode):
 
 
 def load_velocity(profile_key):
-    """Read velocity_mns from the saved params, falling back to V_DEFAULT."""
+    """Read velocity (m/ns) from the saved params, falling back to V_DEFAULT."""
     params_path = PROC_DIR / (profile_key + '_params.json')
     if params_path.exists():
         with open(str(params_path), encoding='utf-8') as f:
-            return float(json.load(f).get('velocity_mns', V_DEFAULT))
+            return float(json.load(f).get('velocity', V_DEFAULT))
     return V_DEFAULT
 
 

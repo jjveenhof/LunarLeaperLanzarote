@@ -48,9 +48,9 @@ apply_processing, saves `_processed.npz`, then calls topo_correction.py. After
 processing it regenerates the deterministic downstream outputs (incl. HTML, so a
 browser refresh shows current data):
 - dual-freq topo PNGs (per line)
-- for any profile with a stored `migration_velocity_mns` (+ `migration_gain`) in
-  its params: the migrated NPZ/PNG and, when both freqs of a line carry a pick,
-  the migrated dual-freq PNG
+- for any profile flagged `migrate: true` in its params: the migrated NPZ/PNG
+  (migrated at its `velocity`, with `migration_gain`) and, when both freqs of a
+  line are flagged, the migrated dual-freq PNG
 - the flowerpetal 3D HTML
 - velocity-scan HTMLs (opt-out with `--no-scans` -- they are the interactive
   picking tool, slow to rebuild)
@@ -96,11 +96,17 @@ Scripts add this to sys.path at runtime; do not move it.
 - Processing params are stored as JSON (`_params.json`) alongside processed data.
   The notebook writes them; run_pipeline.py reads them. This is the canonical way
   to reproduce a result.
-- The migration pick is stored in params (`migration_velocity_mns`, `migration_gain`)
-  so run_pipeline.py can re-migrate reproducibly. The picking itself is manual (read
-  the velocity-scan HTML); once settled, add these two fields to make it pipeline-driven.
-  Currently set on Line3_50/100MHz (v=0.125, gain 2.5). Depth-below-surface picks are
+- Velocity is a single field `velocity` (m/ns). It is THE overburden-rock velocity
+  -- topo correction and migration both read it, so they cannot drift apart. All
+  profiles are currently 0.125.
+- The migration pick is flagged with `migrate: true` (+ `migration_gain`) in params,
+  so run_pipeline.py re-migrates the flagged profiles reproducibly at their
+  `velocity`. The picking itself is manual (read the velocity-scan HTML); once you
+  settle a velocity, set `velocity` to it and add `migrate: true` + `migration_gain`.
+  Currently flagged on Line3_50/100MHz (gain 2.5). Depth-below-surface picks are
   recorded in `Data/GPR/Migration/tube_picks.csv` (air-gap corrected for the floor).
+  The notebook merges on save, so these pipeline-managed keys survive a re-save of
+  the params from GPRProcessing.ipynb.
 - Gain is display-only: NPZs store raw, un-gained amplitudes; `gain_exponent` in
   params records the intended display gain. Applied at render via `display_gain()`:
   notebook view slider, topo PNG (auto from params), `plot_dual_freq.py` (auto from

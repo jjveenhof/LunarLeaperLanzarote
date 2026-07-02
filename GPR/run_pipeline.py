@@ -21,8 +21,8 @@ Steps per profile:
 
 After processing, it regenerates the deterministic downstream outputs so a browser
 refresh shows current data: dual-freq (topo), migrated NPZ/PNG + migrated dual-freq
-for any profile with a stored `migration_velocity_mns` (+ `migration_gain`) in its
-params, the flowerpetal 3D HTML, and (unless --no-scans) the velocity-scan HTMLs.
+for any profile flagged `migrate: true` (migrated at its `velocity`, with
+`migration_gain`), the flowerpetal 3D HTML, and (unless --no-scans) the scan HTMLs.
 
 Usage:
     python run_pipeline.py                   # all profiles + downstream plots
@@ -90,7 +90,7 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
               params.get('normalize', False),
               params.get('whiten_window', 0),
               params.get('n_svd', 0),
-              float(params['velocity_mns']),
+              float(params['velocity']),
           ))
 
     # --- step 1: processing ---
@@ -131,7 +131,8 @@ def regenerate_downstream(stems, do_scans):
     only rebuilt when do_scans is True.
 
     Auto-regenerated: dual-freq (topo), migrated NPZ/PNG + migrated dual-freq for
-    any profile carrying a stored `migration_velocity_mns`, and the flowerpetal 3D.
+    any profile flagged `migrate: true` (migrated at its `velocity`), and the
+    flowerpetal 3D.
     """
     py = sys.executable
 
@@ -149,21 +150,21 @@ def regenerate_downstream(stems, do_scans):
     for L in lines:
         run(['plot_dual_freq.py', L, '--stage', 'topo'], 'dual-freq topo ' + L)
 
-    # 2. migrated NPZ/PNG for profiles with a stored pick
+    # 2. migrated NPZ/PNG for profiles flagged migrate: true (at their velocity)
     for s in topo_stems:
         prm = _load_params(s)
-        mv = prm.get('migration_velocity_mns')
-        if mv is None:
+        if not prm.get('migrate'):
             continue
+        mv = prm.get('velocity')
         mg = prm.get('migration_gain', 0.0)
         run(['migrate_velocity_scan.py', '--line', s,
              '--pick-velocity', str(mv), '--gain', str(mg)], 'migrate ' + s)
 
-    # 2b. migrated dual-freq where BOTH freqs of a line carry a pick
+    # 2b. migrated dual-freq where BOTH freqs of a line are flagged migrate
     for L in lines:
         p50, p100 = _load_params(L + '_50MHz'), _load_params(L + '_100MHz')
-        mv = p50.get('migration_velocity_mns')
-        if mv is not None and p100.get('migration_velocity_mns') is not None:
+        if p50.get('migrate') and p100.get('migrate'):
+            mv = p50.get('velocity')
             mg = p50.get('migration_gain', 0.0)
             run(['plot_dual_freq.py', L, '--stage', 'migrated',
                  '--velocity', str(mv), '--gain', str(mg)], 'dual-freq migrated ' + L)

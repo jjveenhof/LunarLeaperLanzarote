@@ -284,7 +284,7 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
 
     with open(str(params_path), encoding='utf-8') as f:
         params = json.load(f)
-    v = float(params.get('velocity_mns', V_FALLBACK))
+    v = float(params.get('velocity', V_FALLBACK))
 
     # build or reuse elevation interpolator for this GNSS line
     line_key = PROFILE_CONFIG[profile_key]['gnss_line']
@@ -347,7 +347,7 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
             'profile_key':          profile_key,
             'gnss_csv':             GNSS_FP_CSV.name if PROFILE_CONFIG[profile_key]['type'] == 'flowerpetal'
                                     else GNSS_CSV.name,
-            'velocity_mns':         v,
+            'velocity':             v,
             'ref_elev_m':           round(ref_elev, 4),
             'elev_range_m':         round(dz_range, 4),
             'max_shift_samples':    int(shifts.max()),

@@ -189,20 +189,18 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     fig_height = panel_h * ratio + panel_h + 0.8   # top + bottom + spacing
 
     fig = plt.figure(figsize=(fig_width, fig_height))
-    # 3 columns: plot | spacer (room for the right twin axis) | colourbar
+    # single plot column; the right twin axis (TWT/elevation) lives in the margin.
+    # No colourbar: GPR amplitudes are relative/gained/clipped, so the scale is
+    # uninformative (and polarity is arbitrary under our convention).
     gs  = gridspec.GridSpec(
-        2, 3,
+        2, 1,
         figure=fig,
         height_ratios=[ratio, 1.0],
-        width_ratios=[0.90, 0.055, 0.03],
         hspace=0.08,
-        wspace=0.04,
     )
 
     ax50  = fig.add_subplot(gs[0, 0])
     ax100 = fig.add_subplot(gs[1, 0], sharex=ax50)
-    cax50  = fig.add_subplot(gs[0, 2])
-    cax100 = fig.add_subplot(gs[1, 2])
 
     # --- extents for imshow ---
     # extent = [left, right, bottom, top] where bottom > top (depth increases down)
@@ -215,13 +213,13 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
               float(z100[-1]),
               float(z100[0])]
 
-    im50 = ax50.imshow(
+    ax50.imshow(
         d50, aspect='auto', cmap=CMAP,
         vmin=-clip50, vmax=clip50,
         extent=ext50,
         interpolation='nearest',
     )
-    im100 = ax100.imshow(
+    ax100.imshow(
         d100, aspect='auto', cmap=CMAP,
         vmin=-clip100, vmax=clip100,
         extent=ext100,
@@ -291,10 +289,6 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
                 ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
         ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
                 ha='right', va='top', fontsize=11, fontweight='bold', color='black')
-
-    # --- colourbars ---
-    plt.colorbar(im50,  cax=cax50,  label='Ampl.')
-    plt.colorbar(im100, cax=cax100, label='Ampl.')
 
     # --- save ---
     out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR
