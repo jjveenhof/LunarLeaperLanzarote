@@ -207,6 +207,32 @@ bookkeeping, NOT a physical move; the REAL displacement is the centroid move (~6
 (the -0.35 m C2C datum drop applied to the drone-vs-RTK level; idx5/idx6 received this
 same drop, already folded into their dZ above.)
 
+### Coregistration check (2026-07-01, verify_alignment.py --gente)
+
+Independent nearest-neighbour residuals on the corrected exports (Tunnel + Jameo +
+drone TopoLaGente.xyz + RTK lines L5/L2). Figure: `Reregistered clouds/gente_check.png`
+(TOP plan, projected SIDE, two cross-sections through the pit centre; role colours
+drone=blue truth, Jameo=gold bridge, Tunnel=green mover -- as at Puerta Falsa). These
+are NN residuals (a coregistration indicator, floored by the sparser cloud's spacing),
+NOT rigid-fit RMS:
+
+- **Tunnel <-> Jameo** (internal, at the pit throat): within 0.5 m, mean 0.26 m /
+  RMS 0.29 m (18% of tunnel pts overlap; the tube runs well past the jameo). p5 0.17 m.
+  The two LiDAR scans agree at the skylight.
+- **Jameo <-> drone** (surface fit -- jameo registered to the drone): drone->Jameo
+  (dense ref = real surface separation) within 1 m RMS 0.30 m, median 0.17 m. The
+  reverse jameo->drone is 0.67-0.88 m, floored by the drone's ~2 m spacing (this is the
+  direction the full-rotation ICP reported, ~0.95 m). So the jameo sits on the drone to
+  ~0.3 m; larger figures are drone sparsity, not disagreement.
+- **drone -> RTK** (absolute datum): RTK L5 p5 0.21 m, RTK L2 p5 0.24 m; sub-metre
+  throughout, at the drone's ~2 m sampling floor. Confirms the -0.35 m datum drop -- the
+  surface now sits on RTK truth, and the tunnel hangs correctly beneath it.
+
+Conclusion: the Jameo de la Gente re-georef is validated by three independent datasets
+(internal LiDAR pit agreement, drone surface fit, RTK absolute datum), consistent with
+Puerta Falsa. Lower precision than Puerta Falsa (drone-anchored, no cm-RTK rim survey
+here), but area is the gravity metric and <0.5 m vertical is datum choice, so ample.
+
 ---
 
 ## Cumulative georef: author's raw LiDAR -> final frame
