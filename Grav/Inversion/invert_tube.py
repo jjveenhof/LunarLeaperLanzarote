@@ -321,13 +321,24 @@ def run_mode(mode, sx, d, se):
         best_vs_floor = [invert(mode, sx, d, se, CEILING0, max(f, CEILING0 + 1),
                                 sizes, x0s)["size"] for f in floors]
         b1.plot(floors, best_vs_floor, "s-", color="#00CC80", label="vs floor")
-    b1.axvline(CEILING0, color="0.6", ls="--", lw=0.8, label="nominal pick")
+    # nominal picks with +/- SIGMA_PICK margin (blue = ceiling, green = floor)
+    b1.axvspan(CEILING0 - SIGMA_PICK, CEILING0 + SIGMA_PICK, color="#0099FF",
+               alpha=0.12, zorder=0)
+    b1.axvline(CEILING0, color="#0099FF", ls="--", lw=0.9,
+               label=r"ceiling pick $\pm1\sigma$")
+    if mode == "ellipse":
+        b1.axvspan(FLOOR0 - SIGMA_PICK, FLOOR0 + SIGMA_PICK, color="#00CC80",
+                   alpha=0.12, zorder=0)
+        b1.axvline(FLOOR0, color="#00CC80", ls="--", lw=0.9,
+                   label=r"floor pick $\pm1\sigma$")
+    # horizontal band = combined 1 SE (data + picks + velocity + detrend); x0 fixed
+    # at the best-fit lateral position for the analytic pick/velocity propagation.
     b1.axhspan(size0 - se_tot, size0 + se_tot, color="#FF5C00", alpha=0.15,
-               label=rf"{size0:.1f} $\pm$ {se_tot:.1f} m (1 SE: picks+vel)")
+               label=rf"{size0:.1f} $\pm$ {se_tot:.1f} m (1 SE total)")
     b1.axhline(size0, color="#FF5C00", lw=1.0)
     b1.set_xlabel("GPR pick depth (m)")
     b1.set_ylabel(f"recovered {size_lbl}")
-    b1.set_title(f"Line {LINE} {mode} -- pick sensitivity" + ttl)
+    b1.set_title(f"Line {LINE} {mode} -- pick sensitivity (at best cave-centre position)" + ttl)
     b1.legend(fontsize=8)
     b1.grid(True, alpha=0.25, ls="--")
     fig.tight_layout()
