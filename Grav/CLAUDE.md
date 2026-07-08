@@ -86,8 +86,39 @@ Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual
   UNTRUNCATED 2-D model -- the pit-truncation correction overshoots. Frame as model
   selection, not input tuning (no inverse crime).
 - All profile plots read N (left) -> S (right) to match the GPR sections.
-- Next: density chain-sweep (re-run pipeline per rho -> re-detrend -> re-invert) --
-  the last quantifiable systematic. (All GPR picks/velocities now final.)
+
+### Remaining uncertainty / sensitivity work (planned 2026-07-07)
+Settled -- NO sweep, reasons recorded so we don't relitigate:
+- Detrend model form: assume LINEAR (short-profile linearisation; regional field is
+  linear over tens of m). State as justified assumption only.
+- Terrain correction: treat as EXACT. Magnitude tiny (~0.05 mGal var on L3, ~4% of the
+  cave anomaly, mostly absorbed by baseline/detrend) -> its uncertainty can't move area.
+- 2-D vs 3-D / finite tube length: ALREADY bracketed by the truncation runs (truncating
+  toward the pit IS the finite-strike correction = dominant 2-D departure). Full 3-D FEM
+  out of scope (2nd-order). Frame the truncation bracket as the 2-D-limitation bound.
+
+Still to do (order: B -> A -> density):
+1. **Plan B -- LiDAR-pick robustness.** Re-invert L3/L5 with ceiling/floor read off
+   `lidar_line{3,5}.csv` as the constraint; compare recovered AREA to the GPR-pick area.
+   Similar -> result insensitive to ~1 m pick differences. Frame STRICTLY as
+   sensitivity-to-constraint, NOT a 2nd validation (feeding LiDAR geom + comparing to
+   LiDAR area double-uses ground truth = inverse crime). Empirically bounds the total
+   depth-constraint sensitivity, subsuming the rough guessed velocity/pick sigma.
+2. **Plan A -- free-depth grid search (non-uniqueness).** Add depth as a search axis
+   (circle: ceiling,R,x0; ellipse: ceiling,floor,a,x0), float DC, slice chi2 in the
+   (depth, area) plane. Expect a BROAD soft depth-size valley (gravity has weak, not
+   zero, depth resolution via anomaly width). Frame as quantifying the tightening:
+   "gravity alone constrains ceiling to +/-X m; GPR pick reduces it to +/-Y m." Do NOT
+   oversell as "unconstrained" -- a tight valley would backfire.
+3. **Density chain-sweep** -- last independent systematic. Re-run pipeline per rho ->
+   re-detrend -> re-invert over a plausible range; report the area bracket.
+
+Reconciliation to state explicitly (A and B look contradictory but aren't): the depth
+prior is NECESSARY (A) but its PRECISION is forgiving (B). Turns the "subjective picks"
+weakness into a strength and neutralises the ground-truth-bias worry -- a pick error of
+plausible size doesn't change the result, so residual bias is immaterial. Picks are the
+acknowledged weakest link; these two experiments (supervisor-suggested) justify them.
+
 - Earlier: pipeline refactor (2026-06-12, grav_utils.py shared constants, intuitive
   file names, simple drift behind --with-simple-drift). CBA profiles via
   `visualise_CBA.py`; diagnostics in `Inspect/`.

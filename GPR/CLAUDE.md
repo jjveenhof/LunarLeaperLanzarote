@@ -103,10 +103,12 @@ Scripts add this to sys.path at runtime; do not move it.
   so run_pipeline.py re-migrates the flagged profiles reproducibly at their
   `velocity`. The picking itself is manual (read the velocity-scan HTML); once you
   settle a velocity, set `velocity` to it and add `migrate: true` + `migration_gain`.
-  Currently flagged on Line3_50/100MHz (gain 2.5). Depth-below-surface picks are
-  recorded in `Data/GPR/Migration/tube_picks.csv` (air-gap corrected for the floor).
-  The notebook merges on save, so these pipeline-managed keys survive a re-save of
-  the params from GPRProcessing.ipynb.
+  Currently flagged on Line3_50/100MHz and Line5_50/100MHz (gain 2.5). Depth-below-
+  surface picks are recorded in `Data/GPR/Migration/tube_picks.csv` (air-gap corrected
+  for the floor; L5 is ceiling-only, no floor reflector). Line 2 is intentionally not
+  flagged (see Current Focus). Flower-petal migration is planned on straight
+  sub-segments only. The notebook merges on save, so these pipeline-managed keys
+  survive a re-save of the params from GPRProcessing.ipynb.
 - Gain is display-only: NPZs store raw, un-gained amplitudes; `gain_exponent` in
   params records the intended display gain. Applied at render via `display_gain()`:
   notebook view slider, topo PNG (auto from params), `plot_dual_freq.py` (auto from
@@ -138,12 +140,19 @@ Scripts add this to sys.path at runtime; do not move it.
 
 ## Current Focus
 
-Processing pipeline, topo correction, draped 3D viz, and Stolt migration velocity
-scan are all stable. Polarity is harmonised; North-left orientation convention is
-enforced via `flip_x`. Active work: determining GPR velocity from the data itself
-(diffraction / migration velocity analysis), validated blind against the LiDAR --
-avoid calibrating velocity on the LiDAR (inverse crime for the lunar-analog argument).
+Processing pipeline, topo correction, draped 3D viz, and Stolt migration are all
+stable. Velocity determination is DONE: picked blind from diffraction collapse
+(L3 0.125, L5 0.11 m/ns), validated against the LiDAR afterwards, and handed to the
+gravity inversion. Picks recorded in `Data/GPR/Migration/tube_picks.csv`.
 
+Active work: migrate the flower petals. Plan -- take reasonably straight sub-segments
+of each petal and run them through the existing Stolt code, then 3D-plot the migrated
+segments alongside the unmigrated draped sections. Full 3D migration is OUT OF SCOPE
+for this thesis.
+
+- Line 2 is deliberately NOT migrated (mixed results: fewest stacks, slack-tape
+  positioning, and the 100 MHz spectral notches below). It stays a processed/topo
+  profile only; no migration pick.
 - Line 2 100 MHz has spectral notches at ~75 and ~160 MHz (hardware artifact from
   pulsEKKO antenna housing geometry, not geology). No processing fix available --
   those frequency bins are dead. Note this in any results writeup.
