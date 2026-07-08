@@ -206,7 +206,8 @@ def apply_topo_correction(data, time_axis, elevations, v):
 
 
 def save_figure(out_path, profile_key, dist_axis, time_axis,
-                corrected, elevations, v, ref_elev, gain_exp=0.0, flip_x=False):
+                corrected, elevations, v, ref_elev, gain_exp=0.0, flip_x=False,
+                annotate_ns=True):
     """Single-panel topographic section: the radargram is drawn on an absolute
     elevation axis (m asl) so the surface relief sits inside the plot. The data is
     referenced to a flat datum (= max elevation) by the static shift, so the real
@@ -243,11 +244,14 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
     ax.set_title('{} | v = {:.3f} m/ns | topo corrected{}'.format(
         profile_key, v, gain_note))
 
-    # N/S endpoint labels inside the section at top corners
-    ax.text(0.01, 0.99, 'N', transform=ax.transAxes,
-            ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
-    ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
-            ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+    # N/S endpoint labels inside the section at top corners. Only meaningful for
+    # the straight lines -- the flower petals curve through many azimuths (acquired
+    # clockwise), so N/S is dropped there (orientation is read from the 3D plan view).
+    if annotate_ns:
+        ax.text(0.01, 0.99, 'N', transform=ax.transAxes,
+                ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
+        ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
+                ha='right', va='top', fontsize=11, fontweight='bold', color='black')
 
     # right-hand axis: depth below datum (m) = ref_elev - elevation = TWT * v / 2
     tax = ax.twinx()
@@ -324,7 +328,8 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
     save_figure(out_png, profile_key, dist_axis, time_axis,
                 corrected, elevations, v, ref_elev,
                 gain_exp=float(params.get('gain_exponent', 0.0)),
-                flip_x=bool(params.get('flip_x', False)))
+                flip_x=bool(params.get('flip_x', False)),
+                annotate_ns=(PROFILE_CONFIG[profile_key]['type'] != 'flowerpetal'))
 
     # --- sidecar JSON: topo info + processing params + raw instrument header ---
     def _serial(v):
