@@ -42,6 +42,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import topo_correction as tc
+import segment_tzero as seg_tz
 from gpr_processing import apply_processing
 
 # ---- PATHS -------------------------------------------------------------------
@@ -80,6 +81,12 @@ def run_profile(stem, gnss_lines_df, gnss_fp_df, interp_cache):
 
     with open(str(params_json), encoding='utf-8') as f:
         params = json.load(f)
+
+    # --- step 0: block-wise time-zero pre-alignment (stitched/patched lines) ---
+    # Equalise each segment to the header_source zero BEFORE the global time-zero
+    # shift in apply_processing (which then works as before). No-op for single-file
+    # lines. Recorded in the _topo.json as `tzero_align_info`.
+    data = seg_tz.align_segments(data, info, verbose=False)
 
     print('    dewow={}  tzero={:.2f}  bp={:.0f}-{:.0f}MHz  '
           'norm={}  whiten={}  svd={}  v={:.3f}m/ns'.format(

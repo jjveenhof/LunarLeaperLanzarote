@@ -347,6 +347,16 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
             with open(str(raw_json_path), encoding='utf-8') as f:
                 raw_info = json.load(f)
 
+    # block-wise time-zero pre-alignment provenance (the shift itself is applied in
+    # run_pipeline before processing; here we just record what it did). Deterministic
+    # from the raw stitch/patch info + .HD headers, so recomputed rather than plumbed.
+    tz_align = None
+    if raw_info is not None and (
+            (raw_info.get('stitch_info') or {}).get('applied') or
+            (raw_info.get('patch_info') or {}).get('applied')):
+        import segment_tzero as _seg_tz
+        tz_align = _seg_tz.align_info_block(raw_info, data.shape[1])
+
     sidecar = {
         'topo_correction': {
             'profile_key':          profile_key,
@@ -359,6 +369,7 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
             'max_shift_ns':         round(max_ns, 3),
             'source_processed_file': npz_path.name,
         },
+        'tzero_align_info':  tz_align,
         'processing_params': params,
         'raw_header':        raw_info,
     }
