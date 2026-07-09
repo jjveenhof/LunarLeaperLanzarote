@@ -174,7 +174,9 @@ def regenerate_downstream(stems, do_scans):
             mv = p50.get('velocity')
             mg = p50.get('migration_gain', 0.0)
             run(['plot_dual_freq.py', L, '--stage', 'migrated',
-                 '--velocity', str(mv), '--gain', str(mg)], 'dual-freq migrated ' + L)
+                 '--velocity', str(mv), '--gain', str(mg),
+                 '--depth-max', '25', '--depth-max-100', '15'],
+                'dual-freq migrated ' + L)
 
     # 3. flowerpetal 3D (HTML) -- always refresh so the browser shows current data
     run(['plot_flowerpetal_3d.py'], 'flowerpetal 3D')
