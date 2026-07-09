@@ -110,7 +110,8 @@ def load_flip(line, freq):
     return False
 
 
-def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=None):
+def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=None,
+                depth_max=None, depth_max_100=None):
     # --- find files ---
     if stage_override:
         p50  = find_npz(line, '50MHz',  stage_override)
@@ -171,18 +172,23 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # --- common axis limits ---
     x_min = min(float(x50[0]),  x_offset + float(x100[0]))
     x_max = max(float(x50[-1]), x_offset + float(x100[-1]))
-    z_max = float(z50[-1])   # 50 MHz sets the depth limit (deeper penetration)
 
     # --- colour limits (independent per panel) ---
     clip50  = np.percentile(np.abs(d50),  clip_pct)
     clip100 = np.percentile(np.abs(d100), clip_pct)
 
-    # --- figure layout ---
-    # Height ratio: proportional to each profile's depth so the vertical scale
-    # (metres per pixel) is the same in both panels.
+    # --- displayed depth per panel (optionally capped; HF can cap tighter) ---
     depth50  = float(z50[-1])
     depth100 = float(z100[-1])
-    ratio    = depth50 / depth100 if depth100 > 0 else 1.0
+    cap100   = depth_max_100 if depth_max_100 is not None else depth_max
+    disp50   = min(depth_max, depth50)  if depth_max else depth50
+    disp100  = min(cap100,    depth100) if cap100    else depth100
+    z_max    = disp50   # 50 MHz sets the (capped) depth limit
+
+    # --- figure layout ---
+    # Height ratio: proportional to each panel's DISPLAYED depth so the vertical
+    # scale (metres per pixel) is the same in both panels.
+    ratio    = disp50 / disp100 if disp100 > 0 else 1.0
 
     fig_width  = 14.0
     panel_h    = 3.5          # height in inches for 100 MHz panel
@@ -228,9 +234,9 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
 
     # --- axis limits (same x for both; y proportional to depth) ---
     ax50.set_xlim(x_min, x_max)
-    ax50.set_ylim(z_max, 0)
+    ax50.set_ylim(disp50, 0)
     ax100.set_xlim(x_min, x_max)
-    ax100.set_ylim(depth100, 0)
+    ax100.set_ylim(disp100, 0)
 
     # shade the region outside the 100 MHz data extent
     ax100.axvspan(x_min, ext100[0], color='0.88', zorder=0)
@@ -254,8 +260,8 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # non-migrated: two-way time (ns) = 2*depth/velocity (exact inverse of depth conversion)
     # migrated:     absolute elevation (m asl) = ref_elev - depth
     for _ax, _dmax, _isdep, _refe in [
-        (ax50,  z_max,    depth50_precomputed,  ref_elev50),
-        (ax100, depth100, depth100_precomputed, ref_elev100),
+        (ax50,  disp50,  depth50_precomputed,  ref_elev50),
+        (ax100, disp100, depth100_precomputed, ref_elev100),
     ]:
         _tax = _ax.twinx()
         if _isdep and _refe is not None:
@@ -320,13 +326,19 @@ def main():
                         help='Display gain exponent override (default: read from params JSON)')
     parser.add_argument('--out', type=str, default=None,
                         help='Output PNG path (default: auto)')
+    parser.add_argument('--depth-max', type=float, default=None,
+                        help='Cap the displayed depth (m); nothing shown below it')
+    parser.add_argument('--depth-max-100', type=float, default=None,
+                        help='Tighter depth cap (m) for the 100 MHz panel only '
+                             '(default: same as --depth-max)')
     args = parser.parse_args()
 
     lines    = [args.line] if args.line else ['Line2', 'Line3', 'Line5']
     out_path = Path(args.out) if args.out else None
     for line in lines:
         make_figure(line, args.stage, args.velocity, args.clip, out_path,
-                    gain_exp=args.gain)
+                    gain_exp=args.gain, depth_max=args.depth_max,
+                    depth_max_100=args.depth_max_100)
 
 
 if __name__ == '__main__':
