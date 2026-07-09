@@ -226,6 +226,56 @@ def main():
         plt.savefig(str(out_png), dpi=180, bbox_inches='tight')
         plt.close(fig)
         print('Saved PNG: {}'.format(out_png.resolve()))
+
+        # --- before/after comparison (stacked: input on top, migrated below) ---
+        # `section` is the topo-corrected migration input; `mig` its migration.
+        # Same depth axis, same gain, per-panel clip -> only migration differs.
+        # Conventions match the other figures: TWT on the right of the (time-domain)
+        # before panel, absolute elevation on the right of the migrated after panel,
+        # and the surface topography drawn inside both (air overburden shaded).
+        before = display_gain(section, 1000.0 / dt, gain_exp) if gain_exp > 0 else section
+        after  = display_gain(mig,     1000.0 / dt, gain_exp) if gain_exp > 0 else mig
+        clip_b = float(np.percentile(np.abs(before), args.clip)) or 1.0
+        clip_a = float(np.percentile(np.abs(after),  args.clip)) or 1.0
+        ext_ba = [float(x[0]), float(x[-1]), float(depth[-1]), float(depth[0])]
+        ba_depth_max = min(25.0, float(depth[-1]))   # nothing of interest below ~25 m
+        surf_depth   = ref_elev - elevations         # surface depth below datum (per trace)
+
+        fig2, ax2 = plt.subplots(2, 1, figsize=(14, 9), sharex=True,
+                                 gridspec_kw={'hspace': 0.14})
+        ax2[0].imshow(before, aspect='auto', cmap='seismic', vmin=-clip_b, vmax=clip_b,
+                      extent=ext_ba, interpolation='nearest')
+        ax2[0].set_title('{} -- before migration (topo-corrected input)'.format(args.line),
+                         fontsize=10, loc='left')
+        ax2[0].set_ylabel('Depth (m)', fontsize=9)
+        ax2[1].imshow(after, aspect='auto', cmap='seismic', vmin=-clip_a, vmax=clip_a,
+                      extent=ext_ba, interpolation='nearest')
+        ax2[1].set_title('after Stolt migration  |  v = {:.3f} m/ns{}'.format(v, gain_str),
+                         fontsize=10, loc='left')
+        ax2[1].set_ylabel('Depth (m)', fontsize=9)
+        ax2[1].set_xlabel('Distance (m)', fontsize=9)
+
+        for _a in ax2:
+            _a.fill_between(x, 0.0, surf_depth, color='0.85', zorder=2, linewidth=0)
+            _a.plot(x, surf_depth, color='k', linewidth=1.1, zorder=3)
+            _a.set_ylim(ba_depth_max, 0.0)
+            _a.text(0.01, 0.99, 'N', transform=_a.transAxes, ha='left', va='top',
+                    fontsize=11, fontweight='bold', color='black')
+            _a.text(0.99, 0.99, 'S', transform=_a.transAxes, ha='right', va='top',
+                    fontsize=11, fontweight='bold', color='black')
+
+        # right-hand axes: TWT (ns) on the before panel, elevation (m asl) on the after
+        _tax0 = ax2[0].twinx()
+        _tax0.set_ylim(2.0 * ba_depth_max / v, 0.0)
+        _tax0.set_ylabel('TWT (ns)', fontsize=9)
+        _tax1 = ax2[1].twinx()
+        _tax1.set_ylim(ref_elev - ba_depth_max, ref_elev)
+        _tax1.set_ylabel('Elevation (m asl)', fontsize=9)
+
+        out_ba = MIGRATED_DIR / (args.line + '_before_after.png')
+        fig2.savefig(str(out_ba), dpi=180, bbox_inches='tight')
+        plt.close(fig2)
+        print('Saved before/after: {}'.format(out_ba.resolve()))
         return
 
     vels = np.round(np.arange(args.vmin, args.vmax + 1e-9, args.dv), 4)
