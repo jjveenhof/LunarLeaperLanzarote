@@ -186,6 +186,102 @@ def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0):
     return r.x
 
 
+def size_area_se(mode, sx, d, se, res, ceiling, floor, sizes):
+    """Combined 1-sigma on recovered size AND area, from the four RANDOM channels
+    (data + picks + velocity + detrend) added in quadrature. Truncation is a
+    separate systematic bracket, NOT included here. Uses module globals SIGMA_PICK,
+    VELOCITY, VELOCITY_SIGMA, SLOPE_SE. Returns a dict of components + totals so
+    both run_mode and the terrain-model plot share one budget definition.
+    """
+    h = 0.5
+
+    def fit(c, f):
+        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
+        return s, area_of(mode, s, c, f)
+
+    size0 = res["size"]
+    area_best = area_of(mode, size0, ceiling, floor)
+
+    # picks: independent ceiling/floor noise (central-difference partials).
+    sp, ap = fit(ceiling + h, floor)
+    sm, am = fit(max(ceiling - h, MIN_CEILING), floor)
+    ds_dc, da_dc = (sp - sm) / (2 * h), (ap - am) / (2 * h)
+    ds_df = da_df = 0.0
+    if mode == "ellipse":
+        sp, ap = fit(ceiling, floor + h)
+        sm, am = fit(ceiling, max(floor - h, ceiling + 1))
+        ds_df, da_df = (sp - sm) / (2 * h), (ap - am) / (2 * h)
+    se_pick = np.hypot(ds_dc, ds_df) * SIGMA_PICK
+    area_se_pick = np.hypot(da_dc, da_df) * SIGMA_PICK
+
+    # velocity: a SYSTEMATIC common-mode depth scaling (ceiling+floor together).
+    dv = VELOCITY_SIGMA / VELOCITY
+    sp, ap = fit(ceiling * (1 + dv), floor * (1 + dv))
+    sm, am = fit(max(ceiling * (1 - dv), MIN_CEILING), floor * (1 - dv))
+    se_vel = abs(sp - sm) / 2.0
+    area_se_vel = abs(ap - am) / 2.0
+
+    # detrend: the removed regional slope's 1-sigma tilts the residual we fit.
+    tilt = SLOPE_SE * (sx - sx.mean())
+
+    def fit_data(dd):
+        s = best_size_only(mode, sx, dd, se, ceiling, floor, sizes, res["x0"])
+        return s, area_of(mode, s, ceiling, floor)
+
+    sp, ap = fit_data(d + tilt)
+    sm, am = fit_data(d - tilt)
+    se_det = abs(sp - sm) / 2.0
+    area_se_det = abs(ap - am) / 2.0
+
+    # data: the chi2-rescaled grid-search half-interval.
+    se_data = (res["size_hi"] - res["size_lo"]) / 2.0
+    area_se_data = abs(area_of(mode, res["size_hi"], ceiling, floor)
+                       - area_of(mode, res["size_lo"], ceiling, floor)) / 2.0
+
+    quad = lambda *v: float(np.sqrt(np.sum(np.square(v))))
+    return dict(
+        size=size0, area=area_best,
+        se_data=se_data, se_pick=se_pick, se_vel=se_vel, se_det=se_det,
+        se_tot=quad(se_data, se_pick, se_vel, se_det),
+        area_se_data=area_se_data, area_se_pick=area_se_pick,
+        area_se_vel=area_se_vel, area_se_det=area_se_det,
+        area_se_tot=quad(area_se_data, area_se_pick, area_se_vel, area_se_det),
+    )
+
+
+def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
+    """Hierarchical posterior sample of tube geometry over the SAME four channels
+    size_area_se propagates (picks, velocity common-mode, detrend tilt, data noise)
+    -- sampled instead of propagated, for the terrain-plot ensemble/envelope. Each
+    draw perturbs the GPR picks (independent noise), the migration velocity (common-
+    mode depth scaling of ceiling+floor together), the regional-trend slope (a tilt
+    on the residual) and the station data (measurement noise), then refits (size, x0)
+    on a coarse grid with the DC baseline floated inside invert(). Returns
+    [(size, x0, ceiling, floor), ...]. Uses module globals SIGMA_PICK, VELOCITY,
+    VELOCITY_SIGMA, SLOPE_SE, MIN_CEILING -- so it stays in lock-step with the
+    analytic budget in size_area_se (one definition of the channels, both here).
+    """
+    sizes = (np.arange(1.0, 20.0, 0.25) if mode == "circle"
+             else np.arange(1.0, 30.0, 0.25))          # coarser than the fit grid
+    xmin = sx[np.argmin(d)]
+    x0s = np.arange(xmin - 20, xmin + 20, 0.5)
+    dv_sig = VELOCITY_SIGMA / VELOCITY
+    xm = sx - sx.mean()
+    out = []
+    for _ in range(n):
+        c = ceil0 + rng.normal(0, SIGMA_PICK)
+        f = floor0 + (rng.normal(0, SIGMA_PICK) if mode == "ellipse" else 0.0)
+        scale = 1.0 + rng.normal(0, dv_sig)            # velocity: common-mode
+        c *= scale; f *= scale
+        c = max(c, MIN_CEILING)
+        if mode == "ellipse":
+            f = max(f, c + 1.0)
+        dd = d + rng.normal(0, SLOPE_SE) * xm + rng.normal(0.0, se)
+        res = invert(mode, sx, dd, se, c, f, sizes, x0s)
+        out.append((res["size"], res["x0"], c, f))
+    return out
+
+
 # ============================== run one mode =================================
 def run_mode(mode, sx, d, se):
     sizes = RADIUS_GRID if mode == "circle" else WIDTH_GRID
@@ -246,67 +342,15 @@ def run_mode(mode, sx, d, se):
     fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
     print(f"      saved -> Results/Grav/Inversion/invert_line{LINE}_{mode}{tag}.png")
 
-    # ---- pick uncertainty: analytic linear propagation ----------------------
-    # The recovered size is a smooth function of the GPR pick(s) and we know the
-    # local slope, so we propagate it directly (no sampling). Central-difference
-    # partials at the best x0 capture the inverse-linear ellipse slope
-    # (da/db = -K/b^2) automatically. Picks assumed independent:
-    #   SE^2 = (d size/d ceiling)^2 sigma^2 + (d size/d floor)^2 sigma^2
-    # The ellipse half-width is mildly right-skewed (a ~ 1/b); this SE is the
-    # first-order (Gaussian) summary, which is all we report.
-    h = 0.5
-
-    def fit(c, f):
-        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
-        return s, area_of(mode, s, c, f)
-
-    size0 = res["size"]
-    area_best = area_of(mode, size0, CEILING0, FLOOR0)
-    sp, ap = fit(CEILING0 + h, FLOOR0)
-    sm, am = fit(max(CEILING0 - h, MIN_CEILING), FLOOR0)
-    ds_dc, da_dc = (sp - sm) / (2 * h), (ap - am) / (2 * h)
-    ds_df = da_df = 0.0
-    if mode == "ellipse":
-        sp, ap = fit(CEILING0, FLOOR0 + h)
-        sm, am = fit(CEILING0, max(FLOOR0 - h, CEILING0 + 1))
-        ds_df, da_df = (sp - sm) / (2 * h), (ap - am) / (2 * h)
-    se_pick = np.hypot(ds_dc, ds_df) * SIGMA_PICK
-    area_se = np.hypot(da_dc, da_df) * SIGMA_PICK
-
-    # ---- velocity uncertainty: a SYSTEMATIC common-mode depth scaling --------
-    # The picks are time picks; a fractional velocity error scales every depth by
-    # the same factor, so ceiling AND floor move together (correlated, unlike the
-    # independent pick noise above). Step = 1-sigma fraction, so SE = half-spread.
-    dv = VELOCITY_SIGMA / VELOCITY
-    sp, ap = fit(CEILING0 * (1 + dv), FLOOR0 * (1 + dv))
-    sm, am = fit(max(CEILING0 * (1 - dv), MIN_CEILING), FLOOR0 * (1 - dv))
-    se_vel = abs(sp - sm) / 2.0
-    area_se_vel = abs(ap - am) / 2.0
-
-    # ---- detrend uncertainty: the regional slope was removed before inverting,
-    # so its 1-sigma tilts the residual we fit. Perturb the data by +/- the
-    # slope SE (anchor cancels: the DC offset is floated) and refit. ----------
-    tilt = SLOPE_SE * (sx - sx.mean())
-
-    def fit_data(dd):
-        s = best_size_only(mode, sx, dd, se, CEILING0, FLOOR0, sizes, res["x0"])
-        return s, area_of(mode, s, CEILING0, FLOOR0)
-
-    sp, ap = fit_data(d + tilt)
-    sm, am = fit_data(d - tilt)
-    se_det = abs(sp - sm) / 2.0
-    area_se_det = abs(ap - am) / 2.0
-
-    # ---- data (measurement) term: the chi2-rescaled grid-search half-interval.
-    se_data = (res["size_hi"] - res["size_lo"]) / 2.0
-    area_se_data = abs(area_of(mode, res["size_hi"], CEILING0, FLOOR0)
-                       - area_of(mode, res["size_lo"], CEILING0, FLOOR0)) / 2.0
-
-    # ---- combine all 1-sigma contributions in quadrature (truncation is a
-    # separate systematic bracket: see the inf-vs-truncated runs, not here). ---
-    quad = lambda *v: float(np.sqrt(np.sum(np.square(v))))
-    se_tot = quad(se_data, se_pick, se_vel, se_det)
-    area_se_tot = quad(area_se_data, area_se, area_se_vel, area_se_det)
+    # ---- combined uncertainty: data + picks + velocity + detrend in quadrature
+    # (analytic propagation; truncation is a separate systematic, not here). Shared
+    # with plot_model_terrain via size_area_se so both use one budget definition.
+    u = size_area_se(mode, sx, d, se, res, CEILING0, FLOOR0, sizes)
+    size0, area_best = u["size"], u["area"]
+    se_data, se_pick, se_vel, se_det, se_tot = (u["se_data"], u["se_pick"],
+        u["se_vel"], u["se_det"], u["se_tot"])
+    area_se_data, area_se, area_se_vel, area_se_det, area_se_tot = (u["area_se_data"],
+        u["area_se_pick"], u["area_se_vel"], u["area_se_det"], u["area_se_tot"])
 
     # ---- Figure 2: one-at-a-time sweep (covers gross mispicks) ---------------
     fig, b1 = plt.subplots(figsize=(7, 5))
