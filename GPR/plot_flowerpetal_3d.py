@@ -172,6 +172,17 @@ def load_velocity(profile_key):
     return V_DEFAULT
 
 
+def load_flip(profile_key):
+    """Read flip_x from the saved params. flip_x is a 2D North-left DISPLAY
+    convention baked into _processed.npz; the 3D scene is in true E/N coordinates,
+    so it must be undone here (otherwise the profile drapes backward)."""
+    params_path = PROC_DIR / (profile_key + '_params.json')
+    if params_path.exists():
+        with open(str(params_path), encoding='utf-8') as f:
+            return bool(json.load(f).get('flip_x', False))
+    return False
+
+
 def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity):
     """
     Load a processed radargram and drape it on the real surface.
@@ -188,6 +199,11 @@ def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity):
         data      = f['data'].astype(np.float64)        # (n_samp, n_tr)
         dist_axis = f['dist_axis'].astype(np.float64)   # (n_tr,)
         time_axis = f['time_axis'].astype(np.float64)   # (n_samp,)
+
+    # Undo the 2D North-left flip: dist_axis (and thus the GNSS mapping below) is in
+    # acquisition order, so a flipped profile's columns must be reversed to realign.
+    if load_flip(prof['key']):
+        data = data[:, ::-1]
 
     sfreq = 1000.0 / float(time_axis[1] - time_axis[0])  # MHz (samples per us)
 
