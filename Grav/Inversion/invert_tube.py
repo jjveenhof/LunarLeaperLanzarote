@@ -50,6 +50,9 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.optimize import minimize_scalar
 from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 BASE = Path(__file__).resolve().parents[3]
 DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended.csv"
@@ -340,6 +343,8 @@ def run_mode(mode, sx, d, se):
                  fontweight="bold")
     fig.tight_layout()
     fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
+    if not tag:   # untruncated run == the thesis figure
+        save_figure(fig, f"invert_line{LINE}_{mode}", "Inversion", vector=True)
     print(f"      saved -> Results/Grav/Inversion/invert_line{LINE}_{mode}{tag}.png")
 
     # ---- combined uncertainty: data + picks + velocity + detrend in quadrature

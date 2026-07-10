@@ -27,6 +27,9 @@ Run:  python plot_model_terrain.py --line 3 [--truncate 10] [--modes circle elli
 
 import argparse
 import numpy as np
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+from plot_utils import save_figure
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -321,6 +324,8 @@ def main():
         trunc = "" if it.TRUNCATE_D is None else f"_trunc{int(it.TRUNCATE_D)}"
         out = it.FIG / f"terrain_model_line{args.line}_{mode}{trunc}.png"
         fig.savefig(out, dpi=150)
+        if not trunc:   # untruncated run == the thesis figure
+            save_figure(fig, out.stem, "Inversion", vector=True)
         plt.close(fig)
         print(f"  saved -> {out.relative_to(it.BASE)}")
 

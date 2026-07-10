@@ -28,6 +28,9 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+import pathlib as _pl
+sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 from pathlib import Path
 
 HERE     = Path(__file__).parent
@@ -128,6 +131,7 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / 'convention_check.png'
     fig.savefig(str(out), dpi=160)
+    save_figure(fig, out.stem, "Appendices", vector=True)   # title-free thesis PDF
     plt.close(fig)
     print('\nSaved: {}'.format(out.resolve()))
 

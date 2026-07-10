@@ -24,6 +24,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import station_decay as sd
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 PICKS = [(5, 0), (3, 17), (5, 28), (5, 1)]      # (line, station), left -> right
 OUT = sd.BASE / "Results/Grav/Decay fitting/decay_examples.png"
@@ -113,8 +115,10 @@ def main():
     plt.tight_layout(rect=[0, 0.13, 1, 1.0], w_pad=1.4)
     fig.legend(handles=legend_elements, loc="lower center", ncol=4, fontsize=7,
                frameon=True, bbox_to_anchor=(0.5, 0.01))
-    fig.savefig(OUT, dpi=150, bbox_inches="tight")
-    print(f"saved -> {OUT.relative_to(sd.BASE)}")
+    fig.savefig(OUT, dpi=150, bbox_inches="tight")            # titled browse PNG
+    thesis_path, _ = save_figure(fig, OUT.stem, "Grav", vector=True)  # title-free PDF
+    print(f"saved browse -> {OUT.relative_to(sd.BASE)}")
+    print(f"saved thesis -> {thesis_path}")
 
 
 if __name__ == "__main__":

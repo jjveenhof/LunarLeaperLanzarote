@@ -30,6 +30,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from gpr_constants import V_DEFAULT
 from gpr_processing import display_gain
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 # ---- PATHS -------------------------------------------------------------------
 HERE          = Path(__file__).parent
@@ -303,7 +305,12 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
         save_path = out_root / '{}_dual_freq_{}.png'.format(line, stage50)
     save_path = Path(save_path).resolve()
     print('Saving to: ' + str(save_path))
-    plt.savefig(str(save_path), dpi=180, bbox_inches='tight')
+    plt.savefig(str(save_path), dpi=180, bbox_inches='tight')   # titled browse PNG
+    # thesis copy: title-free hybrid PDF -- radargram auto-rasterized (300 dpi)
+    # inside vector axes/text.
+    thesis_path, _ = save_figure(fig, save_path.stem, 'GPR', vector=True, dpi=300,
+                                 titles='all')
+    print('thesis -> ' + str(thesis_path))
     plt.close(fig)
     print('Done.')
 

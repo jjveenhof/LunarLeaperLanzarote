@@ -28,6 +28,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 from pathlib import Path
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, rho_str, along_profile_distance
@@ -222,6 +225,7 @@ def main():
         fig.tight_layout()
         save_path = FIG_DIR / f"detrend_line{line_id}.png"
         fig.savefig(save_path, dpi=150, bbox_inches="tight")
+        save_figure(fig, save_path.stem, "Grav", vector=True)   # title-free thesis PDF
         print(f"      saved -> {save_path.relative_to(BASE)}")
 
     out = pd.concat(out_rows, ignore_index=True)

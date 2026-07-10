@@ -34,6 +34,9 @@ Usage:
 import sys
 import argparse
 import json
+import pathlib as _pl
+sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 import numpy as np
 from pathlib import Path
 import matplotlib
@@ -274,6 +277,7 @@ def main():
 
         out_ba = MIGRATED_DIR / (args.line + '_before_after.png')
         fig2.savefig(str(out_ba), dpi=180, bbox_inches='tight')
+        save_figure(fig2, out_ba.stem, "GPR", vector=True, titles="all")   # thesis PDF
         plt.close(fig2)
         print('Saved before/after: {}'.format(out_ba.resolve()))
         return

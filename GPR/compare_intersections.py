@@ -236,6 +236,10 @@ def main():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / 'intersection_traces.png'
     fig.savefig(str(out), dpi=160)
+    import sys as _sys, pathlib as _pl
+    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+    from plot_utils import save_figure
+    save_figure(fig, out.stem, "Appendices", vector=True)   # title-free thesis PDF
     plt.close(fig)
     print('Saved: {}'.format(out.resolve()))
 

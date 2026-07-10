@@ -28,6 +28,8 @@ import matplotlib.ticker as mticker
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+from plot_utils import save_figure
 from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, rho_str as rho_fmt, sba_file
 
 # Marker colours matching the QGIS map styling (Code/QGIS/CLAUDE.md)
@@ -228,5 +230,6 @@ ax.legend(handles=[
 plt.tight_layout()
 save_path = SAVE_DIR / f"{FILESTEM}.png"
 fig.savefig(save_path, dpi=150, bbox_inches="tight")
+save_figure(fig, save_path.stem, "Grav", vector=True)   # title-free thesis PDF
 print(f"\nSaved -> {save_path.name}")
 plt.show()

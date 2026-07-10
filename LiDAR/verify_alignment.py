@@ -25,6 +25,9 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 # --- ASC mode: the three aligned exports -------------------------------------
 ASC_DIR = (r"C:\Users\jj_ve\OneDrive - Delft University of Technology\Documents"
@@ -242,6 +245,8 @@ def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HAL
     _compass(axs[1, 1], "S", "N")
 
     fig.tight_layout(); fig.savefig(out_png, dpi=130, bbox_inches="tight")
+    save_figure(fig, os.path.splitext(os.path.basename(out_png))[0],
+                "Appendices/Lidar reregistering", vector=False, dpi=300)   # thesis PNG
     print("saved", os.path.abspath(out_png))
 
 

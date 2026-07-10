@@ -14,6 +14,9 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.lines as mlines
 from pathlib import Path
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 BASE = Path(__file__).resolve().parents[3]
 FIG = BASE / "Results/Grav/Inversion"
@@ -90,6 +93,7 @@ def main():
     fig.tight_layout()
     out = FIG / "area_summary.png"
     fig.savefig(out, dpi=150, bbox_inches="tight")
+    save_figure(fig, out.stem, "Inversion", vector=True)   # title-free thesis PDF
     print(f"  saved -> {out.relative_to(BASE)}")
 
 

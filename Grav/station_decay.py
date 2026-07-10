@@ -28,6 +28,9 @@ import warnings
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import sys as _sys, pathlib as _pl
+_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 from scipy.optimize import curve_fit
@@ -299,6 +302,7 @@ def main(plot=True):
             fig = plot_line(df[df["Line"] == line_id], line_id, results)
             save_path = fig_dir / f"decay_line{line_id}.png"
             fig.savefig(save_path, dpi=150, bbox_inches="tight")
+            save_figure(fig, save_path.stem, "Appendices/Grav decay fits", vector=True)
             print(f"Saved -> {save_path.name}")
         plt.show()
 

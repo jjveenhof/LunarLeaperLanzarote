@@ -238,6 +238,10 @@ def make_schematic():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / 'multiples_schematic.png'
     fig.savefig(str(out), dpi=170)
+    import sys as _sys, pathlib as _pl
+    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+    from plot_utils import save_figure
+    save_figure(fig, out.stem, "GPR", vector=True)   # title-free thesis PDF
     plt.close(fig)
     print('Saved: {}'.format(out.resolve()))
     print('Events (two-way ns | apparent m):')
@@ -253,6 +257,10 @@ def make_chart():
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / 'arrival_chart.png'
     fig.savefig(str(out), dpi=170)
+    import sys as _sys, pathlib as _pl
+    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+    from plot_utils import save_figure
+    save_figure(fig, out.stem, "GPR", vector=True)   # title-free thesis PDF
     plt.close(fig)
     print('Saved: {}'.format(out.resolve()))
 
