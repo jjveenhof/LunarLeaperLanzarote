@@ -3,7 +3,7 @@ verify_alignment.py -- before/after checks for the La Corona junction alignment.
 
 Two input modes:
   * ASC (default): the three re-aligned CloudCompare ASCII exports
-    (ReferenceCloud / StitchMoved / TubeMoved), already in the aligned frame.
+    (PF_ref_after / PF_stitch_after / PF_tube_after), already in the aligned frame.
         python verify_alignment.py
   * LAS (baseline): a single LAS holding all subsets with an Original_cloud_index
     scalar field, read via las_tools (laspy cannot parse these clouds' points).
@@ -25,6 +25,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 import sys as _sys, pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
@@ -33,9 +34,9 @@ from plot_utils import save_figure
 ASC_DIR = (r"C:\Users\jj_ve\OneDrive - Delft University of Technology\Documents"
            r"\Thesis Lunar Leaper\LiDAR La Corona\Reregistered clouds")
 ASC_FILES = [  # (label, filename, colour)
-    ("ref",    "ReferenceCloud.txt", "tab:blue"),
-    ("stitch", "StitchMoved.txt",    "gold"),
-    ("tube",   "TubeMoved.txt",      "green"),
+    ("ref",    "PF_ref_after.txt",    "tab:blue"),
+    ("stitch", "PF_stitch_after.txt", "gold"),
+    ("tube",   "PF_tube_after.txt",   "green"),
 ]
 ASC_PAIRS = [("stitch", "ref"), ("tube", "stitch")]   # (mover, reference) for residuals
 
@@ -58,17 +59,17 @@ _DOCS = (r"C:\Users\jj_ve\OneDrive - Delft University of Technology\Documents"
          r"\Thesis Lunar Leaper\LiDAR La Corona")
 GENTE_FILES = [  # (label, path, colour, is_sparse)
     # role-based colours, matching the Puerta Falsa check (truth<-bridge<-mover):
-    #   drone surface = blue  (truth, like ReferenceCloud)
-    #   Jameo         = gold  (bridge, like StitchMove)
-    #   Tunnel        = green (mover,  like TubeMove)
-    ("Jameo",       _DOCS + r"\Clouds to reconstruct transformations\Jameo.txt",
+    #   drone surface = blue  (truth,  like PF_ref)
+    #   Jameo         = gold  (bridge, like PF_stitch)
+    #   Tunnel        = green (mover,  like PF_tube)
+    ("Jameo",       _DOCS + r"\Clouds to reconstruct transformations\Gente_jameo_after.txt",
      "gold", False),
-    ("Tunnel",      _DOCS + r"\Reregistered clouds\TunnelLaGente_corrected.xyz",
+    ("Tunnel",      _DOCS + r"\Reregistered clouds\Gente_tunnel_after.txt",
      "green", False),
-    ("Topo drone",  _DOCS + r"\Reregistered clouds\TopoLaGente.xyz",
+    ("Topo drone",  _DOCS + r"\Reregistered clouds\Gente_topo.xyz",
      "tab:blue", False),     # optional -- skipped if absent
-    ("RTK L5",      _DOCS + r"\Reregistered clouds\Line5_GNSS_RTK.xyz", "k", True),
-    ("RTK L2",      _DOCS + r"\Reregistered clouds\Line2_GNSS_RTK.xyz", "0.35", True),
+    ("RTK L5",      _DOCS + r"\Reregistered clouds\Gente_rtk_L5.xyz", "k", True),
+    ("RTK L2",      _DOCS + r"\Reregistered clouds\Gente_rtk_L2.xyz", "0.35", True),
 ]
 GENTE_PAIRS = [("Tunnel", "Jameo"),             # internal: pit-throat overlap
                ("Topo drone", "Jameo"),         # surface fit: jameo vs drone it was
@@ -81,6 +82,10 @@ GENTE_SLICE_HALF = 2.5
 # focus the check on the pit/jameo/RTK zone (the full tunnel is ~450 m long)
 GENTE_BBOX = (649600.0, 649850.0, 3227420.0, 3227650.0)   # E_min,E_max,N_min,N_max
 GENTE_CMAP_LABELS = set()   # (elevation-cmap layers; unused -- flat role colours)
+GENTE_BEFORE_PATHS = {      # 'before' (pre-Jameo-move) positions of the movers
+    "Jameo":  _DOCS + r"\Clouds to reconstruct transformations\Gente_jameo_before.txt",
+    "Tunnel": _DOCS + r"\Clouds to reconstruct transformations\Gente_tunnel_before.txt",
+}   # fixed clouds (drone, RTK) are identical before/after in plan view
 
 
 def load_asc_xyz(path):
@@ -111,6 +116,48 @@ def load_asc():
     return layers, ASC_PAIRS
 
 
+# Puerta Falsa RTK truth (sparse), added to both before & after plots as the datum.
+ASC_RTK = [("RTK rim", "PuertaFalsa_edge_RTK.xyz", "k")]
+
+
+def load_asc_rtk():
+    out = []
+    for label, fn, col in ASC_RTK:
+        p = os.path.join(ASC_DIR, fn)
+        if not os.path.exists(p):
+            print(f"  (skip missing {label}: {fn})"); continue
+        out.append((label, np.atleast_2d(load_asc_xyz(p)), col))
+    return out
+
+
+# Puerta Falsa 'before': the misaligned originals, one crop split by Original cloud
+# index (col 6) -> ref(idx0)/stitch(idx2)/tube(idx1), same labels/colours as load_asc.
+ASC_BEFORE_FILE = os.path.join(ASC_DIR, "PF_junction_before.txt")
+ASC_BEFORE_IDX = [(0, "ref", "tab:blue"), (2, "stitch", "gold"), (1, "tube", "green")]
+
+
+def load_asc_before():
+    """Misaligned idx0/1/2 for the Puerta Falsa before/after, or None if absent."""
+    if not os.path.exists(ASC_BEFORE_FILE):
+        return None
+    rows = []
+    for ln in open(ASC_BEFORE_FILE):
+        p = ln.split()
+        if len(p) < 7:
+            continue
+        try:
+            rows.append([float(x) for x in p[:7]])
+        except ValueError:
+            continue
+    a = np.array(rows)
+    layers = []
+    for idx, label, col in ASC_BEFORE_IDX:
+        m = np.round(a[:, 6]) == idx
+        if m.any():
+            layers.append((label, a[m, :3], col))
+    return layers
+
+
 def load_las(path, indices=(0, 1, 2), step=1):
     from las_tools import read_las_xyz_oci
     x, y, z, oci = read_las_xyz_oci(path, step=step)
@@ -124,26 +171,36 @@ def load_las(path, indices=(0, 1, 2), step=1):
     return layers, LAS_PAIRS
 
 
+def _load_bbox(label, path, col):
+    """Load X,Y,Z of one cloud, cropped to GENTE_BBOX. None if missing/empty."""
+    if not os.path.exists(path):
+        print(f"  (skip missing {label}: {os.path.basename(path)})"); return None
+    P = np.loadtxt(path, usecols=(0, 1, 2))
+    e0, e1, n0, n1 = GENTE_BBOX
+    m = (P[:, 0] >= e0) & (P[:, 0] <= e1) & (P[:, 1] >= n0) & (P[:, 1] <= n1)
+    P = P[m]
+    if len(P) == 0:
+        print(f"  (skip {label}: no points in bbox)"); return None
+    return (label, P, col)
+
+
 def load_gente():
-    """Corrected Gente clouds + RTK datum (+ drone if exported). Returns
-    (layers, pairs, sparse_labels). Missing optional files are skipped."""
-    layers, sparse = [], set()
+    """Corrected 'after' clouds + their 'before' (pre-move) positions + RTK datum.
+    Returns (after, before, pairs, sparse). Fixed clouds (drone, RTK) are the same
+    in both lists; only the movers (Jameo, Tunnel) differ (before = Original*)."""
+    after, before, sparse = [], [], set()
     for label, path, col, is_sparse in GENTE_FILES:
-        if not os.path.exists(path):
-            print(f"  (skip missing {label}: {os.path.basename(path)})")
+        a = _load_bbox(label, path, col)
+        if a is None:
             continue
-        P = np.loadtxt(path, usecols=(0, 1, 2))
-        e0, e1, n0, n1 = GENTE_BBOX
-        m = (P[:, 0] >= e0) & (P[:, 0] <= e1) & (P[:, 1] >= n0) & (P[:, 1] <= n1)
-        P = P[m]
-        if len(P) == 0:
-            print(f"  (skip {label}: no points in bbox)"); continue
-        layers.append((label, P, col))
+        after.append(a)
         if is_sparse:
             sparse.add(label)
-    have = {l for l, _, _ in layers}
+        b = _load_bbox(label, GENTE_BEFORE_PATHS.get(label, path), col)
+        before.append(b if b is not None else a)
+    have = {l for l, _, _ in after}
     pairs = [(m, r) for m, r in GENTE_PAIRS if m in have and r in have]
-    return layers, pairs, sparse
+    return after, before, pairs, sparse
 
 
 def residual(P, Q, label):
@@ -188,66 +245,177 @@ def _scatter(ax, label, P, col, cols, sparse, base_s, base_a, cmap_labels=frozen
                       linewidths=0, label=f"{label} n={len(P)}")
 
 
-def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HALF,
-         sparse=frozenset(), cmap_labels=frozenset(), suptitle=None):
-    fig, axs = plt.subplots(2, 2, figsize=(16, 13))
-    if suptitle:
-        fig.suptitle(suptitle, fontsize=14, fontweight="bold")
-
-    # (0,0) TOP XY
-    for label, P, col in layers:
-        _scatter(axs[0, 0], label, P, col, (0, 1), sparse, 2, 0.5, cmap_labels)
-    # mark where the two cross-sections are cut (with their +-slice_half slab)
-    xlim, ylim = axs[0, 0].get_xlim(), axs[0, 0].get_ylim()
-    axs[0, 0].axhspan(slice_n - slice_half, slice_n + slice_half, color="k", alpha=0.12)
-    axs[0, 0].axhline(slice_n, color="k", lw=1, ls="--")
-    axs[0, 0].axvspan(slice_e - slice_half, slice_e + slice_half, color="k", alpha=0.12)
-    axs[0, 0].axvline(slice_e, color="k", lw=1, ls="--")
-    axs[0, 0].text(xlim[0], slice_n, " E-Z cut", va="bottom", ha="left", fontsize=8)
-    axs[0, 0].text(slice_e, ylim[1], "N-Z cut ", va="top", ha="right", rotation=90, fontsize=8)
-    axs[0, 0].set_xlim(xlim); axs[0, 0].set_ylim(ylim)
-    axs[0, 0].set_aspect("equal")
-    # fixed-size legend handles (else markerscale blows up the sparse 'x' markers)
+def _legend_handles(layers, sparse):
+    """Fixed-size legend proxies (else markerscale blows up the sparse 'x' markers)."""
     from matplotlib.lines import Line2D
-    handles = [Line2D([0], [0], color=col, ls="none",
-                      marker=("x" if label in sparse else "o"),
-                      ms=7, mew=(1.6 if label in sparse else 0),
-                      label=(label if label in sparse else f"{label} n={len(P)}"))
-               for label, P, col in layers]
-    axs[0, 0].legend(handles=handles, loc="best")
-    axs[0, 0].set_title("TOP (XY)"); axs[0, 0].set_xlabel("E"); axs[0, 0].set_ylabel("N")
+    return [Line2D([0], [0], color=col, ls="none",
+                   marker=("x" if l in sparse else "o"),
+                   ms=8, mew=(1.8 if l in sparse else 0),
+                   label=(l if l in sparse else f"{l} n={len(P)}"))
+            for l, P, col in layers]
 
-    # (0,1) projected SIDE E-Z (all points)
-    for label, P, col in layers:
-        _scatter(axs[0, 1], label, P, col, (0, 2), sparse, 2, 0.4, cmap_labels)
-    axs[0, 1].set_aspect("equal")
-    axs[0, 1].set_title("SIDE projected (E-Z, all pts)")
-    axs[0, 1].set_xlabel("E"); axs[0, 1].set_ylabel("Z")
 
-    # (1,0) E-Z cross-section at fixed Northing
+def _plan_panel(ax, layers, sparse, cmap_labels, title, xlim, ylim,
+                cuts=None, legend=False):
+    """TOP (XY) plan of the layers, fixed limits so BEFORE/AFTER frame identically."""
     for label, P, col in layers:
-        m = np.abs(P[:, 1] - slice_n) < slice_half
+        _scatter(ax, label, P, col, (0, 1), sparse, 2, 0.5, cmap_labels)
+    if cuts is not None:
+        sn, se, sh = cuts               # se=None -> only the W-E cut is drawn
+        if sn is not None:
+            ax.axhspan(sn - sh, sn + sh, color="k", alpha=0.10)
+            ax.axhline(sn, color="k", lw=1, ls="--")
+            ax.text(xlim[0], sn, f" W-E cut (N={sn:.0f})", va="bottom", ha="left",
+                    fontsize=9)
+        if se is not None:
+            ax.axvspan(se - sh, se + sh, color="k", alpha=0.10)
+            ax.axvline(se, color="k", lw=1, ls="--")
+            ax.text(se, ylim[1], f"S-N cut (E={se:.0f}) ", va="top", ha="right",
+                    rotation=90, fontsize=9)
+    ax.set_xlim(xlim); ax.set_ylim(ylim); ax.set_aspect("equal")
+    if legend:
+        ax.legend(handles=_legend_handles(layers, sparse), loc="best")
+    ax.set_title(title); ax.set_xlabel("E"); ax.set_ylabel("N")
+
+
+def _slab_title(kind, coord, val, half):
+    """Cross-section slab title. The thesis font (cmr10 via plot_utils) mangles literal
+    '|' and '<', so express the slab via mathtext ($\\pm$) and plain wording instead."""
+    return f"{kind} section, {coord}={val:.0f} m  ($\\pm${half:.1f} m slab)"
+
+
+def _slice_window(layer_sets, fcol, fval, half, pcol, exclude):
+    """Narrow x-window (of column pcol) spanning the non-excluded clouds' points that
+    fall in the slice |coord[fcol]-fval|<half, pooled over layer_sets (before+after).
+    Used to frame a cross-section tight to the cave, not the full plan width."""
+    lo, hi = np.inf, -np.inf
+    for layers in layer_sets:
+        for label, P, _ in layers:
+            if label in exclude:
+                continue
+            m = np.abs(P[:, fcol] - fval) < half
+            if m.any():
+                lo = min(lo, P[m, pcol].min()); hi = max(hi, P[m, pcol].max())
+    if not np.isfinite(lo):
+        return None
+    pad = 0.08 * (hi - lo) + 2.0
+    return (lo - pad, hi + pad)
+
+
+def _section_panel(ax, layers, sparse, cmap_labels, fcol, fval, half, pcols,
+                   title, compass):
+    """Thin-slab cross-section: keep pts with |coord[fcol]-fval|<half, plot pcols."""
+    for label, P, col in layers:
+        m = np.abs(P[:, fcol] - fval) < half
         if m.any():
-            _scatter(axs[1, 0], label, P[m], col, (0, 2), sparse, 4, 0.7, cmap_labels)
-    axs[1, 0].set_aspect("equal")
-    axs[1, 0].set_title(f"CROSS-SECTION E-Z (|N-{slice_n:.0f}|<{slice_half:.1f} m)")
-    axs[1, 0].set_xlabel("E"); axs[1, 0].set_ylabel("Z")
-    _compass(axs[1, 0], "W", "E")
+            _scatter(ax, label, P[m], col, pcols, sparse, 4, 0.7, cmap_labels)
+    ax.set_aspect("equal"); ax.set_title(title)
+    ax.set_xlabel("E" if pcols[0] == 0 else "N"); ax.set_ylabel("Z")
+    _compass(ax, *compass)
+    # force the abbreviated "+6.49e5" offset label (matplotlib's auto threshold misses
+    # the ~100 m windows and prints full 6-digit coords, overcrowding the axis)
+    fmt = mticker.ScalarFormatter(); fmt.set_useOffset(True); fmt._offset_threshold = 2
+    ax.xaxis.set_major_formatter(fmt)
 
-    # (1,1) N-Z cross-section at fixed Easting
-    for label, P, col in layers:
-        m = np.abs(P[:, 0] - slice_e) < slice_half
-        if m.any():
-            _scatter(axs[1, 1], label, P[m], col, (1, 2), sparse, 4, 0.7, cmap_labels)
-    axs[1, 1].set_aspect("equal")
-    axs[1, 1].set_title(f"CROSS-SECTION N-Z (|E-{slice_e:.0f}|<{slice_half:.1f} m)")
-    axs[1, 1].set_xlabel("N"); axs[1, 1].set_ylabel("Z")
-    _compass(axs[1, 1], "S", "N")
 
-    fig.tight_layout(); fig.savefig(out_png, dpi=130, bbox_inches="tight")
-    save_figure(fig, os.path.splitext(os.path.basename(out_png))[0],
-                "Appendices/Lidar reregistering", vector=False, dpi=300)   # thesis PNG
-    print("saved", os.path.abspath(out_png))
+def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HALF,
+         sparse=frozenset(), cmap_labels=frozenset(), suptitle=None,
+         before_layers=None, plan_extent=None, wide_labels=frozenset(),
+         section_style="row"):
+    style = {"font.size": 14, "axes.titlesize": 16, "axes.labelsize": 14,
+             "xtick.labelsize": 12, "ytick.labelsize": 12, "legend.fontsize": 12}
+    with plt.rc_context(style):
+        if before_layers is not None:
+            xlim, ylim = plan_extent
+            cuts = (slice_n, slice_e, slice_half)
+            if section_style == "stacked":
+                # Gente: plan row, then FULL-WIDTH W-E and S-N section rows stacked, so
+                # the RTK datum shows in-section. Tight vertical spacing.
+                fig, axs = plt.subplots(3, 2, figsize=(16, 9.5),
+                                        gridspec_kw={"height_ratios": [2.6, 0.7, 0.7]})
+                _plan_panel(axs[0, 0], before_layers, sparse, cmap_labels,
+                            "BEFORE  (plan)", xlim, ylim, cuts=cuts)
+                _plan_panel(axs[0, 1], layers, sparse, cmap_labels, "AFTER  (plan)",
+                            xlim, ylim, cuts=cuts, legend=True)
+                _section_panel(axs[1, 0], before_layers, sparse, cmap_labels, 1,
+                               slice_n, slice_half, (0, 2), "W-E", ("W", "E"))
+                _section_panel(axs[1, 1], layers, sparse, cmap_labels, 1, slice_n,
+                               slice_half, (0, 2), "W-E", ("W", "E"))
+                _section_panel(axs[2, 0], before_layers, sparse, cmap_labels, 0,
+                               slice_e, slice_half, (1, 2), "N-S", ("N", "S"))
+                _section_panel(axs[2, 1], layers, sparse, cmap_labels, 0, slice_e,
+                               slice_half, (1, 2), "N-S", ("N", "S"))
+                for row, xwin in ((1, xlim), (2, ylim)):   # full-width sections
+                    zlo = min(axs[row, 0].get_ylim()[0], axs[row, 1].get_ylim()[0])
+                    zhi = max(axs[row, 0].get_ylim()[1], axs[row, 1].get_ylim()[1])
+                    for a in (axs[row, 0], axs[row, 1]):
+                        a.set_xlim(xwin); a.set_ylim(zlo, zhi); a.set_anchor("N")
+                axs[2, 0].invert_xaxis(); axs[2, 1].invert_xaxis()   # N-S: N on the left
+            else:
+                # PF: plans span 2 cols; the four sections in one row, framed tight to
+                # the cave (not the full plan width).
+                fig = plt.figure(figsize=(16, 9))
+                gs = fig.add_gridspec(2, 4, height_ratios=[2.0, 1])
+                axpb = fig.add_subplot(gs[0, 0:2])
+                axpa = fig.add_subplot(gs[0, 2:4])
+                _plan_panel(axpb, before_layers, sparse, cmap_labels, "BEFORE  (plan)",
+                            xlim, ylim, cuts=cuts)
+                _plan_panel(axpa, layers, sparse, cmap_labels, "AFTER  (plan)",
+                            xlim, ylim, cuts=cuts, legend=True)
+                axbWE, axbSN = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
+                axaWE, axaSN = fig.add_subplot(gs[1, 2]), fig.add_subplot(gs[1, 3])
+                _section_panel(axbWE, before_layers, sparse, cmap_labels, 1, slice_n,
+                               slice_half, (0, 2), "W-E", ("W", "E"))
+                _section_panel(axaWE, layers, sparse, cmap_labels, 1, slice_n,
+                               slice_half, (0, 2), "W-E", ("W", "E"))
+                _section_panel(axbSN, before_layers, sparse, cmap_labels, 0, slice_e,
+                               slice_half, (1, 2), "N-S", ("N", "S"))
+                _section_panel(axaSN, layers, sparse, cmap_labels, 0, slice_e,
+                               slice_half, (1, 2), "N-S", ("N", "S"))
+                excl = sparse | wide_labels
+                wewin = _slice_window([before_layers, layers], 1, slice_n, slice_half,
+                                      0, excl) or xlim
+                snwin = _slice_window([before_layers, layers], 0, slice_e, slice_half,
+                                      1, excl) or ylim
+                for a in (axbWE, axaWE):
+                    a.set_xlim(wewin)
+                for a in (axbSN, axaSN):
+                    a.set_xlim(snwin); a.invert_xaxis()   # N-S: N on the left
+                secax = (axbWE, axaWE, axbSN, axaSN)
+                zlo = min(a.get_ylim()[0] for a in secax)
+                zhi = max(a.get_ylim()[1] for a in secax)
+                for a in secax:
+                    a.set_ylim(zlo, zhi); a.set_anchor("N")
+            if suptitle:
+                fig.suptitle(suptitle, fontsize=17, fontweight="bold")
+            fig.tight_layout(h_pad=0.25)
+        else:
+            fig, axs = plt.subplots(2, 2, figsize=(16, 13))
+            if suptitle:
+                fig.suptitle(suptitle, fontsize=15, fontweight="bold")
+            for label, P, col in layers:               # (0,0) TOP XY
+                _scatter(axs[0, 0], label, P, col, (0, 1), sparse, 2, 0.5, cmap_labels)
+            xlim, ylim = axs[0, 0].get_xlim(), axs[0, 0].get_ylim()
+            _plan_panel(axs[0, 0], [], sparse, cmap_labels, "TOP (XY)", xlim, ylim,
+                        cuts=(slice_n, slice_e, slice_half), legend=False)
+            axs[0, 0].legend(handles=_legend_handles(layers, sparse), loc="best")
+            for label, P, col in layers:               # (0,1) SIDE E-Z projected
+                _scatter(axs[0, 1], label, P, col, (0, 2), sparse, 2, 0.4, cmap_labels)
+            axs[0, 1].set_aspect("equal")
+            axs[0, 1].set_title("SIDE projected (E-Z, all pts)")
+            axs[0, 1].set_xlabel("E"); axs[0, 1].set_ylabel("Z")
+            _section_panel(axs[1, 0], layers, sparse, cmap_labels, 1, slice_n,
+                           slice_half, (0, 2), _slab_title("E-Z", "N", slice_n,
+                           slice_half), ("W", "E"))
+            _section_panel(axs[1, 1], layers, sparse, cmap_labels, 0, slice_e,
+                           slice_half, (1, 2), _slab_title("N-Z", "E", slice_e,
+                           slice_half), ("S", "N"))
+            fig.tight_layout()
+
+        fig.savefig(out_png, dpi=130, bbox_inches="tight")
+        save_figure(fig, os.path.splitext(os.path.basename(out_png))[0],
+                    "Appendices/Lidar reregistering", vector=False, dpi=300)  # thesis PNG
+        print("saved", os.path.abspath(out_png))
 
 
 def main():
@@ -263,9 +431,12 @@ def main():
     sparse = frozenset()
     sn, se, sh = SLICE_N, SLICE_E, SLICE_HALF
     suptitle = None
+    before_layers = None
+    plan_extent = None
     if args.gente:
-        layers, pairs, sparse = load_gente()
+        layers, before_layers, pairs, sparse = load_gente()
         sn, se, sh = GENTE_SLICE_N, GENTE_SLICE_E, GENTE_SLICE_HALF
+        plan_extent = ((GENTE_BBOX[0], GENTE_BBOX[1]), (GENTE_BBOX[2], GENTE_BBOX[3]))
         suptitle = ("Jameo de la Gente coregistration check")
         out = args.out or os.path.join(GENTE_FILES[0][1].rsplit("\\", 2)[0],
                                        "Reregistered clouds", "gente_check.png")
@@ -274,6 +445,17 @@ def main():
         out = args.out or os.path.splitext(args.las)[0] + "_check.png"
     else:
         layers, pairs = load_asc()
+        before_layers = load_asc_before()   # None if the misaligned crop is absent
+        if before_layers is not None:
+            rtk = load_asc_rtk()            # RTK rim + plumb datum on both plots
+            layers = layers + rtk
+            before_layers = before_layers + rtk
+            sparse = frozenset(lbl for lbl, _, _ in rtk)
+            allp = np.vstack([P[:, :2] for _, P, _ in layers + before_layers])
+            m = 15.0
+            plan_extent = ((allp[:, 0].min() - m, allp[:, 0].max() + m),
+                           (allp[:, 1].min() - m, allp[:, 1].max() + m))
+            suptitle = "Puerta Falsa junction re-registration"
         out = args.out or os.path.join(ASC_DIR, "alignment_check.png")
 
     by = {label: P for label, P, _ in layers}
@@ -286,8 +468,11 @@ def main():
             residual(by[mover], by[ref], f"{mover}->{ref}")
 
     cmap_labels = GENTE_CMAP_LABELS if args.gente else frozenset()
+    wide_labels = {"Topo drone"} if args.gente else frozenset()   # wide context: don't
+    section_style = "stacked" if args.gente else "row"            # let it size sections
     plot(layers, out, slice_n=sn, slice_e=se, slice_half=sh, sparse=sparse,
-         cmap_labels=cmap_labels, suptitle=suptitle)
+         cmap_labels=cmap_labels, suptitle=suptitle, before_layers=before_layers,
+         plan_extent=plan_extent, wide_labels=wide_labels, section_style=section_style)
 
 
 if __name__ == "__main__":

@@ -52,7 +52,7 @@ angle, not just the junction patch.
   default reads the three aligned ASCII exports; `--las CLOUD.las` reads a single LAS with
   all subsets (baseline). Residuals reported by distance threshold (isolates the genuine
   overlap). Baseline (pre-alignment) idx2->idx0 residual ~ mean 8.7 m / median 5.6 m.
-- `alignment_transforms.md`: the reproducible record of the final transforms (net 4x4 per
+- `alignment_transforms.txt`: the reproducible record of the final transforms (net 4x4 per
   mover, component transforms, RMS, verification results).
 - Run with the env python (see root CLAUDE.md). Pass Windows-form paths.
 
@@ -61,7 +61,7 @@ Export aligned point cloud as ASCII XYZ from CloudCompare (File > Save As > ASCI
 Target CRS: EPSG:4083 (REGCAN95 / UTM zone 28N) -- already shifted to match GPR/GNSS.
 
 ## Current Focus
-All alignment + derived products DONE. Full transform record in `alignment_transforms.md`.
+All alignment + derived products DONE. Full transform record in `alignment_transforms.txt`.
 
 1. **Puerta Falsa junction alignment** (2026-06-16). idx0 blue = reference; StitchMove
    (idx2) + TubeMove (idx1) re-registered by eye + Z-locked ICP (stitch RMS 0.54 m at
@@ -82,7 +82,7 @@ All alignment + derived products DONE. Full transform record in `alignment_trans
    L5 182 m^2. Centres match gravity x0 (76 vs 73; 51 vs 50). Validated by Grav.
 5. **La Gente depth map + footprint** (2026-06-30). Corrected-Tunnel cave-top raster
    `QGIS/caveheight_clean_laGente.tif` (2 m, ceiling = max Z) + plan-view envelope
-   `Reregistered clouds/LaGenteCleanEnvelope.shp`, handed to QGIS for the overburden map
+   `Reregistered clouds/Gente_envelope.shp`, handed to QGIS for the overburden map
    (surface - cave-top, masked). Both lack an embedded CRS -> assign EPSG:4083 on load.
 
 Tools added: `slice_tube.py` (line-plane cross-section + area), `recover_transform.py`

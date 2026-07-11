@@ -1,0 +1,284 @@
+# La Corona LiDAR -- georeferencing & re-alignment record
+
+Reproducibility record of EVERY transform applied to Tomasi's source LiDAR to produce
+the georeferenced, re-registered clouds used in the thesis (gravity cross-sections,
+depth maps, 3-D plot). Read top-to-bottom = the data's journey, in chronological order.
+
+- CRS throughout: EPSG:4083 (REGCAN95 / UTM zone 28N), orthometric heights.
+- Tools: CloudCompare (manual + ICP registration, rasterizing); Python for verification
+  (verify_alignment.py), transform recovery (recover_transform.py), slicing (slice_tube.py).
+- Sub-clouds are referred to by their `Original cloud index` (idx0..idx6) and the working
+  names we gave them. CloudCompare display COLOURS are arbitrary (they change with user
+  settings) and are NOT used here. The only colour convention is in the PLOTS:
+  blue = reference, yellow = bridge, green = tube/mover.
+
+## Summary -- the processing chain
+
+| # | Stage | Date | Action | Key numbers |
+|---|-------|------|--------|-------------|
+| 0 | Source | -- | Tomasi merged cloud; no georef; internally inconsistent | `LaCorona.bin` |
+| 1 | Pre-shift | (pre-record) | manual translate to Google basemap | -1100 E / +6900 N |
+| 2 | Puerta Falsa junction | 2026-06-15 | re-register idx2, idx1 -> idx0 | see sec. 2 |
+| 3 | Puerta Falsa RTK anchor | 2026-06-16 | translate onto RTK rim truth | -9.17 E / +1.27 N |
+| 4 | Jameo de la Gente | 2026-06-30 | re-register idx6, idx5 -> drone/RTK | see sec. 4 |
+| 5 | Derived products | 2026-06-30+ | cross-sections, depth map, envelope, 3-D | see sec. 5 |
+
+- **Cumulative source -> final (bulk / idx0):** dE = -1109.17 m, dN = +6901.27 m, dZ = 0
+  (= stage 1 -1100/+6900  +  stage 3 -9.17/+1.27). Pure translation; RTK-validated.
+- **Which cloud feeds which gravity line:** Line 3 <- Puerta Falsa junction (stages 1-3);
+  Line 5 <- Jameo de la Gente (stages 1, 3, 4).
+- **Precision:** Puerta Falsa is EXACT (cm-RTK rim survey on the feature). Jameo de la
+  Gente is drone-anchored (~0.3 m, no cm-RTK on the feature). The 6-7 km of tube between
+  the two sites is only approximate -- the source dataset is internally inconsistent and a
+  single rigid fit cannot align all jameos (see sec. 6).
+
+## Reading the transforms (frames & rotation reference)
+
+Every 4x4 acts as  **p' = R.p + t**  (rotate by R, then translate by t). The rotation R
+is about the **ORIGIN (0,0,0) of the frame the matrix lives in -- NOT about the cloud.**
+So the "centre of rotation" is wherever (0,0,0) sits in that frame:
+
+- Junction matrices (sec. 2) are in CloudCompare's SHIFTED-LOCAL frame (global shift
+  -651100, -3227000, 0); its origin (0,0,0) sits at true (651100, 3227000), a few hundred
+  m from the junction -> translation columns are modest (tens-hundreds of m).
+- Jameo de la Gente matrices (sec. 4) are in TRUE EPSG:4083; its origin is the UTM false
+  origin, ~thousands of km away. Rotating the cloud about that far origin sweeps it
+  enormously, so the translation column is huge (~15 km) -- pure bookkeeping that cancels
+  the sweep, NOT a physical move.
+
+Therefore do NOT read the translation column as "how far the cloud moved." The
+frame-independent, physically meaningful quantities are (1) the **rotation angle** and
+(2) the **centroid displacement** (where the cloud's centre actually goes). Any rigid move
+= "rotate about the centroid by that angle, then shift the centroid by that vector" -- that
+is what the sec. 4a "real move (centroid)" + "rotation about centroid" lines report, and it
+is how to sanity-check a matrix (angle in deg, move in metres).
+
+- **Apply / verify** a matrix: CloudCompare > Edit > Apply Transformation (paste the 4x4).
+  To check a matrix makes sense, apply it to the ORIGINAL cloud and confirm it lands on the
+  FINAL export.
+- **Global shift**: stored_local = true + shift. Editing a cloud's global shift in CC
+  relabels the shift WITHOUT moving the true coordinates (verified).
+- **Net 4x4 recovery** from before/after exports: recover_transform.py (Kabsch on
+  scalar-field-matched points) -- frame-safe, sidesteps CC's mixed intermediate frames.
+
+---
+
+## 0. Source data
+
+Tomasi's merged point cloud `LaCorona.bin`, carrying an `Original cloud index` scalar
+field (idx0..idx6; split via Edit > Scalar fields > Filter By Value). Relevant subsets:
+- idx0 = SE passage at Puerta Falsa -- trusted / correct orientation (the reference).
+- idx1 = big NW passage at Puerta Falsa -- misaligned (swung anticlockwise).
+- idx2 = junction patch at Puerta Falsa -- the "bandaid" bridge between idx0 and idx1.
+- idx5 = tunnel at Jameo de la Gente (~870 m NW).
+- idx6 = jameo + surface at Jameo de la Gente.
+
+The cloud has NO valid georeferencing as delivered, and is internally inconsistent
+(scan sections misaligned by metres in XY, plus local Z offsets and tilts).
+
+---
+
+## 1. Manual pre-shift to basemap (pre-record)
+
+Whole cloud translated by eye to fit the jameos onto a Google satellite basemap:
+**dE = -1100 m, dN = +6900 m** (horizontal only). Gets the cave roughly onto the map;
+leaves a residual few-metre offset, worse near the jameos (surface points past the rim
+bias the fit). Refined to RTK truth in stage 3.
+
+---
+
+## 2. Puerta Falsa junction re-registration (2026-06-15)  [feeds Line 3]
+
+The scans meeting at the fieldwork junction were misaligned. Working on a copy
+(`LaCorona_aligning.bin`), with idx0 (SE passage) as the fixed reference, the two
+misaligned scans were re-registered in sequence: idx2 -> idx0, then idx1 -> moved idx2.
+Method: coarse by eye, then Z-locked ICP (fine). Crop "Cave around Puerta Falsa".
+Matrices are in CloudCompare's shifted-local frame (global shift -651100, -3227000, 0),
+i.e. the stage-1 pre-shift frame -- BEFORE the stage-3 RTK correction.
+
+### 2a. StitchMove (idx2, junction patch) -> ReferenceCloud (idx0)
+
+ICP: 70% partial overlap, farthest-point removal on, Z-rotation + Tz. Final RMS 0.5358 m
+on 7791 pts -- but idx0 is sparse (surface ~1.2 pts/m^2 -> spacing ~0.91 m -> floor
+~0.46 m), so 0.54 m is essentially AT the data floor = as good as the data allows.
+
+Net matrix (original -> final), M = T4.T3.T2.T1:
+```
+ 0.962344244   0.271834122   0.000000000   -53.757933412
+-0.271834122   0.962344244   0.000000000  -118.812743345
+ 0.000000000   0.000000000   1.000000000    -1.074063122
+ 0.000000000   0.000000000   0.000000000     1.000000000
+```
+- Net Z-rotation -15.7734 deg; translation (-53.758, -118.813, -1.074) m.
+- Component steps (time order): 1) 18:15:54 coarse Z -16.08 deg, t(-54.622,-121.379,0);
+  2) 18:20:32 t(0,0,-0.800); 3) 18:24:42 t(-0.300,0,0); 4) 18:35:34 ICP Z +0.305 deg,
+  t(0.518,2.856,-0.274).
+
+### 2b. TubeMove (idx1, NW passage) -> moved StitchMove (idx2)
+
+idx1 and idx2 are both dense (no sparsity floor), so ICP RMS is a REAL fit. First ICP
+diverged (RMS 3 m, slid east) because Final overlap was left at 50% while the true overlap
+is small -- ICP dragged the tube to force coverage. Fix: set Final overlap to the real
+~20%, farthest-point removal off; then it snapped in. Final RMS 0.0162 m (1.6 cm).
+
+Net matrix (original -> final), M = T3.T2.T1:
+```
+ 0.626818114   0.779165623   0.000000000  -289.144916444
+-0.779165623   0.626818114   0.000000000  -307.683458856
+ 0.000000000   0.000000000   1.000000000    -1.074082971
+ 0.000000000   0.000000000   0.000000000     1.000000000
+```
+- Net Z-rotation -51.1842 deg; translation (-289.145, -307.683, -1.074) m.
+- Component steps: 1) 19:07:12 coarse Z -50.79 deg, t(-285.918,-306.484,0);
+  2) 19:07:43 t(0,0,-1.100); 3) 19:15:23 ICP Z -0.381 deg, t(-1.195,-3.107,0.026).
+
+Note: BOTH movers (idx1, idx2) needed an identical **-1.074 m Z** drop to match idx0
+-> a real systematic elevation offset of those scans vs idx0, not drift.
+
+### 2c. Verification (2026-06-16, verify_alignment.py)
+
+Aligned subsets exported to `Reregistered clouds/` (PF_ref_after / PF_stitch_after /
+PF_tube_after.txt, true EPSG:4083). Independent NN residuals + figure `alignment_check.png`:
+- idx1->idx2: ~20% of idx1 pts (the true overlap) within 0.3 m, mean NN 0.006 m -> mm fit.
+- idx2->idx0: closest ~0.25-0.5 m = idx0's sparsity floor -> as good as data allows.
+- idx0 + idx2 + idx1 form one continuous passage; the tube cross-section rings coincide;
+  the idx0 ceiling line is level -> no residual tilt. Z-rotation + horizontal translation
+  model confirmed sufficient. (Baseline pre-alignment idx2->idx0 was ~mean 8.7 / med 5.6 m.)
+
+---
+
+## 3. Puerta Falsa RTK georef correction (2026-06-16)  [absolute anchor]
+
+Pins the (already junction-corrected) cave to cm-accurate RTK GNSS truth at the Puerta
+Falsa jameo. RTK rim trace (25 pts, `Line=Edge`) + 1 plumb tie, from
+`Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv` -> `PuertaFalsa_edge_RTK.xyz`,
+`_plumb_RTK.xyz`. The plumb pick on the cloud was 9.17 m E / 1.27 m S of RTK truth.
+
+TRANSLATION ONLY (no rotation -- a ~20 m rim arc cannot constrain rotation over a 6-7 km
+lever). Applied to the ENTIRE dataset via Edit > Apply Transformation:
+```
+1 0 0  -9.170000076294
+0 1 0   1.269999980927
+0 0 1   0.000000000000
+0 0 0   1.000000000000
+```
+- dE = -9.17 m (west), dN = +1.27 m (north), dZ = 0.
+- **Cumulative source -> final (bulk):** dE -1109.17, dN +6901.27, dZ 0 (stage 1 + stage 3).
+- VALIDATION: an independent, separately-georeferenced drone surface lands on the RTK rim
+  after correction -> three datasets agree (RTK edge + RTK plumb + drone).
+- Note: envelope polylines do NOT auto-move with their cloud -- re-shift or regenerate.
+
+---
+
+## 4. Jameo de la Gente local re-georeference (2026-06-30)  [feeds Line 5]
+
+A second, independent local anchor ~870 m NW, for the Line 5 gravity cross-section. No
+cm-RTK rim survey here, so lower precision than Puerta Falsa. Bridge-cloud pattern:
+drone (truth-ish) <- idx6 (jameo+surface, bridge) <- idx5 (tunnel, mover).
+
+**Truth hierarchy:**
+- RTK GNSS lines L5 (N-S) + L2 (NE-SW), cm-accurate -> absolute datum (but sparse, lines
+  only). `Gente_rtk_L5.xyz`, `Gente_rtk_L2.xyz`.
+- Drone topo -> correct shape + horizontal, but a local ~+0.35 m vertical bias vs RTK
+  (uniform). So: drone shape, RTK datum. (Bias is LOCAL -- Puerta Falsa drone was fine.)
+- LiDAR (idx5, idx6) -> cave geometry only; here it is off ~7 m in XY, plus a real
+  W-high/E-low tilt and spurious curled edges on idx6.
+
+**Method:** idx6 -> full-rotation ICP to the drone (NOT Z-locked, to tip out the tilt) on
+the trimmed core, then a -0.35 m datum drop onto RTK-true elevation. idx5 -> ICP to the
+corrected idx6 on the small pit overlap. The -0.35 m drop was applied to the cave + the
+local drone crop (C2C drone-vs-RTK Z-component was -0.35 m; the full 0.84 m C2C gap is
+mostly drone sparsity).
+
+### 4a. Net 4x4 per cloud (recovered frame-safe)
+
+The logged CC steps CANNOT be multiplied into a net matrix (the global shift flips
+LaCorona<->drone after the first ICP, and the full-rotation ICP rotates about a far
+origin -- see "Reading the transforms"). Instead each net 4x4 was recovered by a rigid
+Kabsch fit of session-start -> final point positions, matching the same physical points
+via their preserved scalar-field signatures (recover_transform.py; exports in
+`Clouds to reconstruct transformations/`). "Session-start" = the Puerta-Falsa-corrected
+cave (idx5/idx6 are unmodified bulk, so they already carry the -1109.17/+6901.27
+cumulative); these matrices are the LOCAL Jameo move on top, in true EPSG:4083.
+
+**idx6 (jameo)** -- Kabsch RMS 2.86 cm over 331,936 pts (100%):
+- Real move (centroid): dE +6.208, dN -4.366, dZ -1.899 m (|horiz| 7.59 m)
+- Rotation about centroid: Z-rot +0.278 deg, tilt-about-N +1.830 deg (the real
+  W-high/E-low tip, fixed by the full-rotation ICP), tilt-about-E +0.13 deg
+- Centroid (true coords): (649683.0, 3227541.5, 143.4)
+```
+ 0.999478300  -0.004778698  -0.031942014   15773.172634230
+ 0.004850212   0.999985901   0.002161779   -3110.270699651
+ 0.031931234  -0.002315576   0.999487386  -13273.385419780
+ 0.000000000   0.000000000   0.000000000       1.000000000
+```
+
+**idx5 (tunnel)** -- Kabsch RMS 0.01 cm over 48,056 pts:
+- Real move (centroid): dE +5.720, dN -3.088, dZ -1.754 m (|horiz| 6.50 m)
+- Rotation about centroid: Z-rot -0.103 deg, tilt 0.000 deg (Z-locked, as intended)
+- Centroid (true coords): (649758.9, 3227500.3, 121.0)
+```
+ 0.999998375   0.001802879  -0.000000057   -5812.017424234
+-0.001802879   0.999998375   0.000000051    1173.594651702
+ 0.000000057  -0.000000051   1.000000000      -1.626051712
+ 0.000000000   0.000000000   0.000000000       1.000000000
+```
+
+**drone (local crop)** -- pure datum drop, no fit:
+```
+1 0 0   0.00
+0 1 0   0.00
+0 0 1  -0.35
+0 0 0   1.00
+```
+(idx5/idx6 received this same -0.35 m drop, already folded into their dZ above.)
+
+### 4b. Coregistration check (2026-07-01, verify_alignment.py --gente)
+
+Independent NN residuals on the corrected exports (idx5 + idx6 + drone + RTK L5/L2).
+Figure `gente_check.png` (plot colours: blue = drone/reference, yellow = idx6/bridge,
+green = idx5/mover). NN residuals (floored by the sparser cloud's spacing), not
+rigid-fit RMS:
+- **idx5 <-> idx6** (internal, pit throat): within 0.5 m, mean 0.26 m / RMS 0.29 m,
+  p5 0.17 m -> the two LiDAR scans agree at the skylight.
+- **idx6 <-> drone** (surface fit): drone->idx6 (dense ref = real separation) within 1 m
+  RMS 0.30 m, median 0.17 m. Reverse idx6->drone 0.67-0.88 m is drone-sparsity-floored
+  (the direction the ICP reported, ~0.95 m). idx6 sits on the drone to ~0.3 m.
+- **drone -> RTK** (absolute datum): RTK L5 p5 0.21 m, L2 p5 0.24 m; sub-metre throughout,
+  at the drone's ~2 m floor. Confirms the -0.35 m drop -- surface on RTK, tunnel beneath.
+
+Conclusion: validated by three independent datasets (internal LiDAR pit agreement, drone
+surface fit, RTK datum). Lower precision than Puerta Falsa, but area is the gravity metric
+and <0.5 m vertical is datum choice, so ample.
+
+---
+
+## 5. Derived products (provenance)
+
+- **Gravity cross-sections** (slice_tube.py): `Code/Grav/Inversion/lidar_line3.csv`
+  (area 203 m^2, from the Puerta Falsa junction) and `lidar_line5.csv` (area 182 m^2,
+  from the corrected idx5). x = distance along the gravity line, z = ABSOLUTE REGCAN95
+  elevation. Slice = +-1 m slab in the line's vertical plane; outline by angular binning.
+- **La Gente depth-to-ceiling raster**: `QGIS/caveheight_clean_laGente.tif` (2 m, ceiling
+  = max Z of the corrected idx5) -> QGIS overburden map (surface - cave-top, masked).
+- **La Gente footprint**: `Reregistered clouds/Gente_envelope.shp` (plan-view
+  envelope of the corrected idx5). NOTE: raster + shp carry NO embedded CRS -> assign
+  EPSG:4083 on load.
+- **3-D flowerpetal plot**: `Reregistered clouds/PF_junction_subsampled.xyz`
+  (subsampled corrected junction) -> GPR session.
+
+---
+
+## 6. Scope & limitations (do NOT re-open for the thesis)
+
+- A single rigid translation CANNOT align all jameos -- the source LiDAR is internally
+  inconsistent. After anchoring to RTK at Puerta Falsa, Jameo de la Gente sat ~5-6 m too
+  far west BEFORE its local re-georef; that is the LiDAR's own coregistration error, not
+  the basemap (Google imagery is smooth over ~1 km and RTK+drone confirm it at Puerta
+  Falsa). The two measured sites are locally exact; the tube between/beyond is approximate.
+- Do NOT least-squares-balance the whole tube -- that would degrade the RTK-validated
+  anchor for cosmetics elsewhere. The dataset has several OTHER internal misalignments away
+  from the measurement sites; left unfixed (out of scope, no bearing on the gravity/GPR
+  lines). Possible future summer project: re-register the full tube end-to-end.
+- The single merged whole-cave deliverable is DROPPED (decision 2026-07-01): the cave is
+  consumed piecewise and a merged product would only be approximate along the tube.

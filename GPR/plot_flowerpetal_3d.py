@@ -53,7 +53,7 @@ PROC_DIR   = HERE / '../../Data/GPR/Processed'
 GNSS_FP    = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_FlowerPetals.csv'
 GNSS_LINES = HERE / '../../Data/GNSS/Cleaned/CleanedGNSS_GPR_Lines.csv'
 OUT_DIR    = HERE / '../../Results/GPR/FlowerPetals3D'
-LIDAR_XYZ  = HERE / '../../LiDAR La Corona/Reregistered clouds/PuertaFalsaClean_ExportCropSubsampled.xyz'
+LIDAR_XYZ  = HERE / '../../LiDAR La Corona/Reregistered clouds/PF_junction_subsampled.xyz'
 
 # Back-antenna to rig midpoint offsets (metres), matching topo_correction.py.
 OFFSET_50MHZ  = 1.10    # 2.2 m rig

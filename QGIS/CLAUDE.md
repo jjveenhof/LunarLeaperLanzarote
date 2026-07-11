@@ -38,7 +38,7 @@ to each final as `cavetop_clean*.tif` (no `_masked`). Ceilings are `caveheight_c
 (used in figures):
 - `QGIS/cavetop_clean_masked.tif` -- FULL CAVE. Depth min -10.7 / mean 17.0 / max 36.3 m. CAVEAT:
   reliable near the fieldwork site, rougher west (source LiDAR horizontal accuracy degrades westward,
-  Jameo de la Gente ~5-6 m off -- see Code/LiDAR/alignment_transforms.md).
+  Jameo de la Gente ~5-6 m off -- see Code/LiDAR/alignment_transforms.txt).
 - `QGIS/cavetop_clean_masked_PuertaFalsa.tif` -- PUERTA FALSA junction. RTK-anchored -- NO westward caveat.
 - `QGIS/cavetop_clean_masked_LaGente.tif` -- JAMEO DE LA GENTE / L5 (ceiling re-registered ~6-7 m).
   Surface used a -0.35 m drone correction (local ~+0.35 m drone bias vs RTK); ceiling export had NO

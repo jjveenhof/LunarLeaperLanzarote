@@ -17,7 +17,7 @@ We key on a few scalar columns (default 7,8,9,10,11 -- C2C distance + components
 which are unique per point and invariant under the move.
 
 Usage:
-  python recover_transform.py --before OriginalJameo.txt --after Jameo.txt --label Jameo
+  python recover_transform.py --before Gente_jameo_before.txt --after Gente_jameo_after.txt --label Jameo
 """
 import argparse
 import numpy as np
