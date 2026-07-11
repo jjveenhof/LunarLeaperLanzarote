@@ -325,7 +325,9 @@ def main():
         out = it.FIG / f"terrain_model_line{args.line}_{mode}{trunc}.png"
         fig.savefig(out, dpi=150)
         if not trunc:   # untruncated run == the thesis figure
-            save_figure(fig, out.stem, "Inversion", vector=True)
+            # tight=False: this figure is pre-sized so the equal-aspect box fills
+            # the canvas; bbox_inches="tight" would re-fit it and blow up the page.
+            save_figure(fig, out.stem, "Inversion", vector=True, tight=False)
         plt.close(fig)
         print(f"  saved -> {out.relative_to(it.BASE)}")
 

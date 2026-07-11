@@ -8,6 +8,11 @@ save_figure(fig, name, folder, ...) writes TWO things from one figure:
   * optionally a titled PNG into `browse_dir`, so the results tree keeps the title
     as context when you browse it.
 
+All text is rendered in Computer Modern (the LaTeX body font) so figures match the
+thesis -- applied on `import plot_utils` and re-asserted at save time (see
+set_thesis_style / _apply_thesis_font). This uses matplotlib's bundled cm fonts via
+mathtext, NOT usetex, so there is no LaTeX call at plot time.
+
 Choose the format by what the figure is MADE OF, not by habit:
   * lines / markers / text only (decay fits, detrend, inversion sections,
     schematics)                       -> vector=True   (PDF)
@@ -20,6 +25,14 @@ The title toggle is free because these scripts save with bbox_inches="tight":
 hidden title artists drop out of the tight bounding box, so the thesis figure
 crops clean with no leftover band.
 
+  * tight=True (default) -- crop to the drawn content (bbox_inches="tight"). Do NOT
+    use this on a figure that is pre-sized for equal aspect (fig.set_size_inches +
+    subplots_adjust chosen so an aspect="equal" box exactly fills the canvas): the
+    tight pass re-fits the equal-aspect box on a resized canvas and the page height
+    diverges (seen: an 18-foot-tall terrain PDF). Pass tight=False for those -- it
+    saves the figure's own layout verbatim (like a plain savefig), matching the PNG.
+    The reserved title margin then shows as a little whitespace, which is harmless.
+
 Which titles get hidden is set by `titles=`:
   * "auto" (default) -- hide the figure suptitle always; hide axes titles ONLY when
     the figure has a single data panel. So a lone plot loses its (caption-like) title,
@@ -31,6 +44,8 @@ Which titles get hidden is set by `titles=`:
   * "keep"     -- hide nothing.
 """
 from pathlib import Path
+import matplotlib as mpl
+from matplotlib.text import Text
 from matplotlib.image import AxesImage
 from matplotlib.collections import QuadMesh
 
@@ -39,6 +54,40 @@ from matplotlib.collections import QuadMesh
 THESIS = Path(r"C:\Users\jj_ve\thesis-overleaf")
 
 _TITLE_MODES = ("auto", "all", "suptitle", "keep")
+
+# Computer Modern (the LaTeX body font) via matplotlib's BUNDLED cm fonts + mathtext,
+# NOT usetex -- no LaTeX process at plot time, so it stays fast and dependency-free and
+# keeps the project's "mathtext default" rule. Regular text renders in cmr10; math (the
+# r"$\Delta\rho$" / r"$\mu$Gal" labels) renders in the cm math fonts, matching the thesis.
+_THESIS_RC = {
+    "font.family": "serif",
+    "font.serif": ["cmr10", "STIX Two Text", "DejaVu Serif"],
+    "mathtext.fontset": "cm",
+    "axes.formatter.use_mathtext": True,   # tick offset/exponent text via mathtext too
+    # cmr10 has no U+2212 minus glyph; without this, minus signs render as boxes and
+    # matplotlib spams a warning on every save. Mathtext still draws proper minus signs.
+    "axes.unicode_minus": False,
+}
+
+
+def set_thesis_style():
+    """Switch matplotlib to the thesis font (Computer Modern via mathtext, no usetex).
+    Applied automatically on `import plot_utils`; call it explicitly at the top of a
+    script only if that script builds figures BEFORE importing this module."""
+    mpl.rcParams.update(_THESIS_RC)
+
+
+set_thesis_style()  # apply on import (covers scripts that import before plotting)
+
+
+def _apply_thesis_font(fig):
+    """Re-assert the thesis font at save time. Font is captured when a Text artist is
+    CREATED, so axis labels/titles built before set_thesis_style ran keep their old
+    font; restyle every existing Text here so late-import scripts still come out right.
+    Tick labels are (re)created at draw and pick up the rcParams directly."""
+    set_thesis_style()
+    for t in fig.findobj(Text):
+        t.set_family("serif")
 
 
 def _data_axes(fig):
@@ -68,11 +117,13 @@ def _title_artists(fig, mode):
 
 
 def save_figure(fig, name, folder, vector=True, dpi=300, titles="auto",
-                browse_dir=None, browse_dpi=150):
+                tight=True, browse_dir=None, browse_dpi=150):
     """Write the title-free thesis figure into thesis-overleaf/<folder>/<name>.<ext>
     and, if browse_dir is given, a titled <name>_titled.png beside your results.
 
     `titles` in {"auto","all","suptitle","keep"} -- see module docstring.
+    `tight` -- crop to content; set False for figures pre-sized for equal aspect
+    (see module docstring). Both saves honour it.
     Returns (thesis_path, browse_path); browse_path is None when browse_dir is None.
     """
     if titles not in _TITLE_MODES:
@@ -87,12 +138,14 @@ def save_figure(fig, name, folder, vector=True, dpi=300, titles="auto",
                 if isinstance(art, (AxesImage, QuadMesh)):
                     art.set_rasterized(True)
 
+    _apply_thesis_font(fig)  # Computer Modern, regardless of import order
+    bbox = "tight" if tight else None
     titles = _title_artists(fig, titles)
     prev = [(a, a.get_visible()) for a in titles]
     for a, _ in prev:
         a.set_visible(False)
     thesis_path = out_dir / "{}.{}".format(name, ext)
-    fig.savefig(thesis_path, dpi=dpi, bbox_inches="tight")
+    fig.savefig(thesis_path, dpi=dpi, bbox_inches=bbox)
     for a, vis in prev:
         a.set_visible(vis)
 
@@ -101,6 +154,6 @@ def save_figure(fig, name, folder, vector=True, dpi=300, titles="auto",
         bdir = Path(browse_dir)
         bdir.mkdir(parents=True, exist_ok=True)
         browse_path = bdir / "{}_titled.png".format(name)
-        fig.savefig(browse_path, dpi=browse_dpi, bbox_inches="tight")
+        fig.savefig(browse_path, dpi=browse_dpi, bbox_inches=bbox)
 
     return thesis_path, browse_path
