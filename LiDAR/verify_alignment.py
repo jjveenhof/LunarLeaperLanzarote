@@ -46,8 +46,10 @@ LAS_COLS  = {0: "tab:blue", 1: "darkgreen", 2: "limegreen"}
 LAS_PAIRS = [("light green idx2", "blue idx0"), ("dark green idx1", "light green idx2")]
 
 # --- cross-section cut locations (EPSG:4083) ---------------------------------
-SLICE_N = 3227163.0   # E-Z section: keep points within +-SLICE_HALF of this Northing
-SLICE_E = 650645.0    # N-Z section: keep points within +-SLICE_HALF of this Easting
+SLICE_N = 3227164.0   # E-Z section: keep points within +-SLICE_HALF of this Northing
+SLICE_E = 650636.0    # N-Z section: keep points within +-SLICE_HALF of this Easting
+# (chosen relative to the cave, then carried through the -9.17 E / +1.27 N RTK pin
+#  and rounded to whole m, so the slabs stay put over the georef-corrected cloud)
 SLICE_HALF = 1.5      # slab half-thickness (m)
 
 # --- GENTE mode: Jameo de la Gente re-georef check ---------------------------
