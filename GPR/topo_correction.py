@@ -227,7 +227,7 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
     t_max      = float(time_axis[-1])
     elev_bot   = ref_elev - t_max * v / 2.0
 
-    clip_val = np.percentile(np.abs(disp), 99)
+    clip_val = np.percentile(np.abs(disp), 99.5)
     im = ax.imshow(disp, aspect='auto', cmap='seismic',
                    vmin=-clip_val, vmax=clip_val,
                    extent=[dist_axis[0], dist_axis[-1], elev_bot, ref_elev])

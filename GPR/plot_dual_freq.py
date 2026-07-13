@@ -192,8 +192,8 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # scale (metres per pixel) is the same in both panels.
     ratio    = disp50 / disp100 if disp100 > 0 else 1.0
 
-    fig_width  = 14.0
-    panel_h    = 3.5          # height in inches for 100 MHz panel
+    fig_width  = 8.0
+    panel_h    = 2.0          # height in inches for 100 MHz panel
     fig_height = panel_h * ratio + panel_h + 0.8   # top + bottom + spacing
 
     fig = plt.figure(figsize=(fig_width, fig_height))
@@ -280,16 +280,10 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     ax100.set_xlabel('Distance (m)', fontsize=9)
     plt.setp(ax50.get_xticklabels(), visible=False)
 
-    gain50_str  = '  |  gain {:.1f}'.format(gain50)  if gain50  > 0 else ''
-    gain100_str = '  |  gain {:.1f}'.format(gain100) if gain100 > 0 else ''
-    ax50.set_title(
-        '{} -- 50 MHz ({}){}'.format(line, stage50, gain50_str),
-        fontsize=10, loc='left'
-    )
-    ax100.set_title(
-        '{} -- 100 MHz ({})  |  offset {:.0f} m{}'.format(line, stage100, x_offset, gain100_str),
-        fontsize=10, loc='left'
-    )
+    # Short per-panel labels only (frequency); stage/gain/offset live in the
+    # LaTeX caption. Kept via titles="auto" in the thesis save below.
+    ax50.set_title('50 MHz', fontsize=10, loc='left')
+    ax100.set_title('100 MHz', fontsize=10, loc='left')
 
     # N/S endpoint labels inside both panels at top corners
     for ax in (ax50, ax100):
@@ -309,7 +303,7 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # thesis copy: title-free hybrid PDF -- radargram auto-rasterized (300 dpi)
     # inside vector axes/text.
     thesis_path, _ = save_figure(fig, save_path.stem, 'GPR', vector=True, dpi=300,
-                                 titles='all')
+                                 titles='auto')   # keep the short 50/100 MHz panel labels
     print('thesis -> ' + str(thesis_path))
     plt.close(fig)
     print('Done.')
@@ -327,8 +321,8 @@ def main():
                         help='Processing stage to load (default: best available; migrated must be explicit)')
     parser.add_argument('--velocity', type=float, default=V_DEFAULT,
                         help='Wave velocity in m/ns (default: {})'.format(V_DEFAULT))
-    parser.add_argument('--clip', type=float, default=98.0,
-                        help='Amplitude clip percentile (default: 98)')
+    parser.add_argument('--clip', type=float, default=99.5,
+                        help='Amplitude clip percentile (default: 99.5)')
     parser.add_argument('--gain', type=float, default=None,
                         help='Display gain exponent override (default: read from params JSON)')
     parser.add_argument('--out', type=str, default=None,

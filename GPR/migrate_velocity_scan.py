@@ -111,7 +111,7 @@ def main():
     ap.add_argument('--dv',   type=float, default=0.005, help='velocity step m/ns')
     ap.add_argument('--gain', type=float, default=0.0,
                     help='display-only gdp linear gain exponent (0 = off, ungained)')
-    ap.add_argument('--clip', type=float, default=99.0,
+    ap.add_argument('--clip', type=float, default=99.5,
                     help='initial percentile clip (0..100), applied to current view')
     ap.add_argument('--pick-velocity', type=float, default=None, metavar='V',
                     help='migrate at single velocity V (m/ns) and save _migrated.npz; skips scan HTML')
@@ -244,11 +244,17 @@ def main():
         ba_depth_max = min(25.0, float(depth[-1]))   # nothing of interest below ~25 m
         surf_depth   = ref_elev - elevations         # surface depth below datum (per trace)
 
-        fig2, ax2 = plt.subplots(2, 1, figsize=(14, 9), sharex=True,
+        # pretty label: "Line3_50MHz" -> "Line3 -- 50 MHz" (avoids the raw
+        # underscore, which renders as a raised mark in Computer Modern)
+        _p = args.line.split('_')
+        pretty = '{} -- {}'.format(_p[0], _p[1].replace('MHz', ' MHz')) \
+            if len(_p) == 2 else args.line
+
+        fig2, ax2 = plt.subplots(2, 1, figsize=(8, 5.1), sharex=True,
                                  gridspec_kw={'hspace': 0.14})
         ax2[0].imshow(before, aspect='auto', cmap='seismic', vmin=-clip_b, vmax=clip_b,
                       extent=ext_ba, interpolation='nearest')
-        ax2[0].set_title('{} -- before migration (topo-corrected input)'.format(args.line),
+        ax2[0].set_title('{} -- before migration (topo-corrected input)'.format(pretty),
                          fontsize=10, loc='left')
         ax2[0].set_ylabel('Depth (m)', fontsize=9)
         ax2[1].imshow(after, aspect='auto', cmap='seismic', vmin=-clip_a, vmax=clip_a,
@@ -277,7 +283,7 @@ def main():
 
         out_ba = MIGRATED_DIR / (args.line + '_before_after.png')
         fig2.savefig(str(out_ba), dpi=180, bbox_inches='tight')
-        save_figure(fig2, out_ba.stem, "GPR", vector=True, titles="all")   # thesis PDF
+        save_figure(fig2, out_ba.stem, "GPR", vector=True, titles="auto")   # thesis PDF (keep per-panel titles)
         plt.close(fig2)
         print('Saved before/after: {}'.format(out_ba.resolve()))
         return

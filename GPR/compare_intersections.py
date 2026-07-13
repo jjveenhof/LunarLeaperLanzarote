@@ -148,7 +148,7 @@ def main():
         sys.exit('No crossings found between {} and the petals.'.format(line['label']))
 
     nrow = len(crossings)
-    fig, axes = plt.subplots(nrow, 3, figsize=(15, 3.4 * nrow),
+    fig, axes = plt.subplots(nrow, 3, figsize=(8.6, 1.95 * nrow),
                              gridspec_kw={'width_ratios': [1.0, 1.2, 1.0]})
     axes = np.atleast_2d(axes)
 
@@ -193,7 +193,7 @@ def main():
         axm = axes[r, 0]
         axm.plot(line['E'], line['N'], '-', color='0.6', lw=1.2, label=line['label'])
         axm.plot(pet['E'], pet['N'], '-', color=pet['colour'], lw=1.2, label=pet['label'])
-        axm.plot(cx, cy, 'kx', ms=9, mew=2, label='crossing')
+        axm.plot(cx, cy, 'kx', ms=5, mew=1.2, label='crossing')
         axm.set_aspect('equal', 'datalim')
         axm.set_title('{}   ({:.2f} m apart)'.format(c['name'], dist), fontsize=9)
         axm.set_xlabel('Easting (m)'); axm.set_ylabel('Northing (m)')
@@ -209,7 +209,7 @@ def main():
         axt.set_xlim(0, tmax)
         axt.set_ylim(-1.1, 1.1)
         axt.set_xlabel('two-way time (ns)')
-        axt.set_ylabel('norm. amplitude  (gain {:.1f})'.format(args.gain))
+        axt.set_ylabel('norm. amplitude')      # gain stated in the caption
         axt.set_title('overlaid traces', fontsize=9)
         axt.legend(fontsize=8, loc='upper right')
         axt.grid(True, alpha=0.3)
@@ -221,7 +221,7 @@ def main():
         axc.plot(lags, env, color='0.5', lw=0.9, ls='--', label='envelope')
         axc.plot(lags, -env, color='0.5', lw=0.9, ls='--')
         axc.axhline(0, color='0.7', lw=0.8)
-        axc.plot([cc_lag], [cc_peak], 'o', color=vcol, ms=7)
+        axc.plot([cc_lag], [cc_peak], 'o', color=vcol, ms=4)
         axc.set_xlim(-50, 50)
         axc.set_ylim(-1.05, 1.05)
         axc.set_xlabel('lag (ns)')
@@ -229,6 +229,19 @@ def main():
         axc.set_title('peak {:+.2f} @ {:+.0f} ns  ->  {}'.format(cc_peak, cc_lag, verdict),
                       fontsize=9, color=vcol)
         axc.grid(True, alpha=0.3)
+
+    # share axes down the rows: the trace (col 1) and xcorr (col 2) columns have
+    # identical x/y meaning per row, so only the bottom row needs the x label/ticks.
+    # The map column (col 0) keeps its own ticks (each crossing spans a different
+    # E/N range) but sheds the repeated axis-label words on non-bottom rows.
+    for r in range(nrow):
+        if r < nrow - 1:
+            for col in range(3):
+                axes[r, col].set_xlabel('')
+            axes[r, 1].tick_params(labelbottom=False)
+            axes[r, 2].tick_params(labelbottom=False)
+        if r > 0:
+            axes[r, 1].set_title('')      # generic "overlaid traces" only on top
 
     fig.suptitle('Line 3 vs FlowerPetals -- polarity check at all crossings', fontsize=12)
     fig.tight_layout(rect=[0, 0, 1, 0.98])

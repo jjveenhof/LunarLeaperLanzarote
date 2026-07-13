@@ -72,6 +72,9 @@ def main():
     args = ap.parse_args()
 
     files = sorted(PROC_DIR.glob('*_processed.npz'))
+    # skip experimental variants (e.g. the SVD-removal test) -- not part of the
+    # final profile set, so they don't belong in the convention figure
+    files = [f for f in files if '_svd' not in f.name]
     if not files:
         sys.exit('No processed NPZs found in {}'.format(PROC_DIR.resolve()))
 
@@ -103,26 +106,39 @@ def main():
     n = len(profs)
     ncol = 3
     nrow = int(np.ceil(n / ncol))
-    fig, axes = plt.subplots(nrow, ncol, figsize=(4.3 * ncol, 2.6 * nrow))
-    axes = np.array(axes).reshape(-1)
+    fig, axes = plt.subplots(nrow, ncol, figsize=(2.45 * ncol, 1.48 * nrow),
+                             sharex=True, sharey=True)
+    axes = np.array(axes).reshape(nrow, ncol)
 
-    for ax, p in zip(axes, profs):
-        col = 'tab:green' if p['class'] == 'consistent' else 'tab:red'
+    def pretty(stem):
+        # drop the underscore (cmr10 renders it as a raised dot) and space out "MHz"
+        return stem.replace('_', ' ').replace('MHz', ' MHz')
+
+    for idx, p in enumerate(profs):
+        r, c = divmod(idx, ncol)
+        ax = axes[r, c]
+        flipped = p['class'] == 'FLIPPED'
+        mark = 'tab:red' if flipped else 'tab:blue'   # pick marker; red flags a flip
         win = p['time'] <= args.tdisp
         ax.plot(p['time'][win], norm(p['mean'][win]), color='k', lw=1.2)
         ax.axhline(0, color='0.8', lw=0.7)
         ax.axvspan(0, args.tmeas, color='0.93')
-        ax.axvline(p['t0'], color=col, lw=1.3, ls='--')
+        ax.axvline(p['t0'], color=mark, lw=1.3, ls='--')
         ax.set_ylim(-1.1, 1.1)
-        ax.set_title('{}\nsign {:+d}  ->  {}'.format(p['stem'], p['sign'], p['class']),
-                     fontsize=8, color=col)
-        ax.set_xlabel('two-way time (ns)', fontsize=8)
-        ax.set_ylabel('norm. amplitude', fontsize=8)
+        # profile name only; sign/classification go in the console table + caption
+        ax.set_title(pretty(p['stem']), fontsize=8,
+                     color='tab:red' if flipped else 'black')
         ax.tick_params(labelsize=7)
         ax.grid(True, alpha=0.3)
+        if c == 0:                          # shared axes: label the outer edges only
+            ax.set_ylabel('norm. amplitude', fontsize=8)
+        if idx + ncol >= n:                 # bottom-most filled panel in this column
+            ax.set_xlabel('two-way time (ns)', fontsize=8)
+            ax.tick_params(labelbottom=True)
 
-    for ax in axes[n:]:
-        ax.axis('off')
+    for idx in range(n, nrow * ncol):       # blank the unused cells
+        r, c = divmod(idx, ncol)
+        axes[r, c].axis('off')
 
     fig.suptitle('First-break polarity convention -- mean trace per profile '
                  '(grey = scoring window)', fontsize=12)
