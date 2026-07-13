@@ -77,8 +77,8 @@ EVENTS = [
     # (label, t_ns, colour, polarity, real?)
     ('P  ceiling primary', t_ceil,  C_CEIL,  '+', True),
     ('F  floor reflection', t_floor, C_FLOOR, '-', True),
-    ('Mc ceiling multiple', t_mc,    C_MULT,  '',  False),
-    ('Mv cavity multiple',  t_mv,    C_CAV,   '',  False),
+    ('Mc ceiling multiple', t_mc,    C_MULT,  '+', False),
+    ('Mv cavity multiple',  t_mv,    C_CAV,   '-', False),
 ]
 
 
@@ -99,7 +99,7 @@ def draw_geometry(ax):
     x_label = 5.6
     ax.text(x_label, D_CEIL / 2, 'rock', ha='center', va='center',
             fontsize=8, style='italic', color='#7a5c3a')
-    ax.text(x_label, (D_CEIL + D_FLOOR) / 2, 'air-filled tube', ha='center',
+    ax.text(x_label+1, (D_CEIL + D_FLOOR) / 2, 'air-filled tube', ha='center',
             va='center', fontsize=8, style='italic', color='gray')
     ax.text(0.2, 0 - 0.55, 'surface', ha='left', va='bottom', fontsize=7)
     ax.text(0.2, D_CEIL - 0.35, 'ceiling', ha='left', va='bottom', fontsize=7)
@@ -149,13 +149,28 @@ def draw_geometry(ax):
     bounce(xc + 0.5*s, 0, C_MULT)         # bounce off the underside of surface
     bounce(xc + 1.5*s, D_CEIL, C_MULT)
 
-    # Mv : surface -> ceiling -> floor -> ceiling -> floor -> ceiling -> surface
+    # Mv : surface -> (through ceiling) -> floor -> ceiling -> floor -> (through
+    #      ceiling) -> surface. Only 3 of the 5 marked points are true
+    # reflections (floor, then ceiling hit from the AIR side, then floor); the
+    # first/last "ceiling" points are transmissions (crossing into/out of the
+    # cave, direction unchanged) -- drawn open, like F's transmission dots.
     xc = 10.2
     xs = [xc - 1.2*s, xc - 0.8*s, xc - 0.4*s, xc, xc + 0.4*s, xc + 0.8*s, xc + 1.2*s]
     zs = [0, D_CEIL, D_FLOOR, D_CEIL, D_FLOOR, D_CEIL, 0]
     ray(xs, zs, C_CAV)
-    for xx, zz in zip(xs[1:-1], zs[1:-1]):
-        bounce(xx, zz, C_CAV)
+    fills = [False, True, True, True, False]   # transmit, reflect x3, transmit
+    for (xx, zz), f in zip(zip(xs[1:-1], zs[1:-1]), fills):
+        bounce(xx, zz, C_CAV, fill=f)
+
+    # D / H dimension arrows, in the clear margin right of the Mv ray family
+    # (text sits to the LEFT of its arrow)
+    x_dim = 11.5
+    ax.text(x_dim - 0.2, D_CEIL / 2, '$D$', ha='right', va='center', fontsize=8)
+    ax.annotate('', xy=(x_dim, D_CEIL), xytext=(x_dim, 0),
+               arrowprops=dict(arrowstyle='<->', color='k', lw=0.9))
+    ax.text(x_dim - 0.2, (D_CEIL + D_FLOOR) / 2, '$H$', ha='right', va='center', fontsize=8)
+    ax.annotate('', xy=(x_dim, D_FLOOR), xytext=(x_dim, D_CEIL),
+               arrowprops=dict(arrowstyle='<->', color='k', lw=0.9))
 
     ax.set_xlim(0, xmax)
     ax.set_ylim(z_bottom, -1.7)   # depth down, a little headroom for surface label
@@ -221,6 +236,15 @@ def draw_chart(ax, hd_max=10.0, n_rock=2, n_cav=2):
     ax.grid(True, alpha=0.3)
     ax.legend(fontsize=6, loc='lower right', framealpha=0.9, handlelength=1.4,
              labelspacing=0.3, borderpad=0.4)
+
+    # floor reflection meets the first overburden multiple at (H/D, t/t_ceil) =
+    # (k, 2) = (2.4, 2) -- opposite polarities (F is '-', the overburden
+    # multiple is '+') arriving simultaneously, so they cancel: destructive
+    # interference, not just a crossing.
+    ax.annotate('destructive\ninterference', xy=(k, 2.0), xytext=(4.6, 0.45),
+               fontsize=6, color='0.3', ha='left', va='center',
+               arrowprops=dict(arrowstyle='->', color='0.3', lw=0.8))
+
     ax.set_title('c)', loc='left', fontsize=10)
 
     # right-hand twin: apparent-depth-over-overburden. d_app/D = t/t_ceil exactly
