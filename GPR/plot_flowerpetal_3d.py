@@ -46,6 +46,7 @@ import plotly.graph_objects as go
 sys.path.insert(0, str(Path(__file__).parent))
 from gpr_constants import V_DEFAULT
 from gpr_processing import display_gain
+from profile_geometry import reconcile_geometry
 
 # ---- PATHS -------------------------------------------------------------------
 HERE       = Path(__file__).parent
@@ -172,17 +173,6 @@ def load_velocity(profile_key):
     return V_DEFAULT
 
 
-def load_flip(profile_key):
-    """Read flip_x from the saved params. flip_x is a 2D North-left DISPLAY
-    convention baked into _processed.npz; the 3D scene is in true E/N coordinates,
-    so it must be undone here (otherwise the profile drapes backward)."""
-    params_path = PROC_DIR / (profile_key + '_params.json')
-    if params_path.exists():
-        with open(str(params_path), encoding='utf-8') as f:
-            return bool(json.load(f).get('flip_x', False))
-    return False
-
-
 def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity):
     """
     Load a processed radargram and drape it on the real surface.
@@ -200,18 +190,15 @@ def drape_curtain(prof, east_fn, north_fn, elev_fn, velocity):
         dist_axis = f['dist_axis'].astype(np.float64)   # (n_tr,)
         time_axis = f['time_axis'].astype(np.float64)   # (n_samp,)
 
-    # Undo the 2D North-left flip: dist_axis (and thus the GNSS mapping below) is in
-    # acquisition order, so a flipped profile's columns must be reversed to realign.
-    if load_flip(prof['key']):
-        data = data[:, ::-1]
-
     sfreq = 1000.0 / float(time_axis[1] - time_axis[0])  # MHz (samples per us)
 
-    # Map dist_axis to GNSS metre coordinate (start offset + midpoint offset)
+    # Map dist_axis to GNSS metre coordinate (start offset + midpoint offset).
+    # dist_axis is in acquisition order regardless of flip_x (only the DATA
+    # columns were reversed at bake time), so the geometry -- not the data --
+    # must be reversed to realign column i with the true track position.
     gnss_m = dist_axis + prof['offset']
-    east   = east_fn(gnss_m)
-    north  = north_fn(gnss_m)
-    elev   = elev_fn(gnss_m)
+    east, north, elev = reconcile_geometry(
+        prof['key'], east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
 
     # Depth below the surface (first sample sits exactly on the surface)
     depth = (time_axis - time_axis[0]) * velocity / 2.0   # (n_samp,)

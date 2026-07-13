@@ -29,6 +29,8 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.ndimage import shift as ndshift
 from scipy.interpolate import interp1d
+sys.path.insert(0, str(Path(__file__).parent))
+from profile_geometry import reconcile_geometry
 
 
 # ---- PATHS -------------------------------------------------------------------
@@ -299,9 +301,7 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
 
     gnss_m     = dist_to_gnss_metre(profile_key, dist_axis)
     elevations = elev_fn(gnss_m)
-
-    if params.get('flip_x', False):
-        elevations = elevations[::-1]
+    (elevations,) = reconcile_geometry(base, elevations)
 
     corrected, shifts, ref_elev = apply_topo_correction(
         data, time_axis, elevations, v

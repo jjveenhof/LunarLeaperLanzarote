@@ -30,6 +30,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from gpr_constants import V_DEFAULT
 from gpr_processing import display_gain
+from profile_geometry import load_flip as _load_flip_canonical
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
 
@@ -104,12 +105,10 @@ def load_gain(line, freq):
 
 
 def load_flip(line, freq):
-    """Read flip_x from params JSON; return False if not found."""
-    p = DATA_GPR / 'Processed' / '{}_{}_params.json'.format(line, freq)
-    if p.exists():
-        with open(str(p), encoding='utf-8') as f:
-            return bool(json.load(f).get('flip_x', False))
-    return False
+    """flip_x for {line}_{freq}, via the canonical load_flip in profile_geometry.
+    Used only to place the 100 MHz x-offset label -- no GNSS geometry is attached
+    here, so reconcile_geometry does not apply."""
+    return _load_flip_canonical('{}_{}'.format(line, freq))
 
 
 def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=None,
