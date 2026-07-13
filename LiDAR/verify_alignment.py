@@ -82,7 +82,7 @@ GENTE_SLICE_N = 3227540.0   # cuts cross at the jameo centre where jameo + tunne
 GENTE_SLICE_E = 649690.0    # (+ drone) all coincide -- the skylight/pit
 GENTE_SLICE_HALF = 2.5
 # focus the check on the pit/jameo/RTK zone (the full tunnel is ~450 m long)
-GENTE_BBOX = (649600.0, 649850.0, 3227420.0, 3227650.0)   # E_min,E_max,N_min,N_max
+GENTE_BBOX = (649575.0, 649875.0, 3227405.0, 3227665.0)   # E_min,E_max,N_min,N_max
 GENTE_CMAP_LABELS = set()   # (elevation-cmap layers; unused -- flat role colours)
 GENTE_BEFORE_PATHS = {      # 'before' (pre-Jameo-move) positions of the movers
     "Jameo":  _DOCS + r"\Clouds to reconstruct transformations\Gente_jameo_before.txt",
@@ -226,7 +226,7 @@ def residual(P, Q, label):
 
 def _compass(ax, left, right):
     """Label the two ends of a cross-section's horizontal axis with compass directions."""
-    kw = dict(transform=ax.transAxes, fontsize=11, fontweight="bold",
+    kw = dict(transform=ax.transAxes, fontsize=8, fontweight="bold",
               va="top", color="0.3")
     ax.text(0.01, 0.97, left, ha="left", **kw)
     ax.text(0.99, 0.97, right, ha="right", **kw)
@@ -237,7 +237,7 @@ def _scatter(ax, label, P, col, cols, sparse, base_s, base_a, cmap_labels=frozen
     (drone) are coloured by elevation, other dense clouds a subsampled flat scatter."""
     x, y = P[:, cols[0]], P[:, cols[1]]
     if label in sparse:
-        return ax.scatter(x, y, s=32, c=col, marker="x", linewidths=1.3,
+        return ax.scatter(x, y, s=6, c=col, marker="x", linewidths=0.6,
                           zorder=6, label=label)
     s = max(1, len(P) // 40000)
     if label in cmap_labels:
@@ -252,32 +252,29 @@ def _legend_handles(layers, sparse):
     from matplotlib.lines import Line2D
     return [Line2D([0], [0], color=col, ls="none",
                    marker=("x" if l in sparse else "o"),
-                   ms=8, mew=(1.8 if l in sparse else 0),
+                   ms=5, mew=(1.5 if l in sparse else 0),
                    label=(l if l in sparse else f"{l} n={len(P)}"))
             for l, P, col in layers]
 
 
 def _plan_panel(ax, layers, sparse, cmap_labels, title, xlim, ylim,
-                cuts=None, legend=False):
+                cuts=None, legend=False, panel_label=None):
     """TOP (XY) plan of the layers, fixed limits so BEFORE/AFTER frame identically."""
     for label, P, col in layers:
-        _scatter(ax, label, P, col, (0, 1), sparse, 2, 0.5, cmap_labels)
+        _scatter(ax, label, P, col, (0, 1), sparse, 0.2, 0.5, cmap_labels)
     if cuts is not None:
-        sn, se, sh = cuts               # se=None -> only the W-E cut is drawn
+        sn, se, _ = cuts                # se=None -> only the W-E cut is drawn
         if sn is not None:
-            ax.axhspan(sn - sh, sn + sh, color="k", alpha=0.10)
             ax.axhline(sn, color="k", lw=1, ls="--")
-            ax.text(xlim[0], sn, f" W-E cut (N={sn:.0f})", va="bottom", ha="left",
-                    fontsize=9)
         if se is not None:
-            ax.axvspan(se - sh, se + sh, color="k", alpha=0.10)
             ax.axvline(se, color="k", lw=1, ls="--")
-            ax.text(se, ylim[1], f"S-N cut (E={se:.0f}) ", va="top", ha="right",
-                    rotation=90, fontsize=9)
     ax.set_xlim(xlim); ax.set_ylim(ylim); ax.set_aspect("equal")
     if legend:
         ax.legend(handles=_legend_handles(layers, sparse), loc="best")
     ax.set_title(title); ax.set_xlabel("E"); ax.set_ylabel("N")
+    if panel_label:
+        ax.text(-0.13, 1.06, panel_label, transform=ax.transAxes,
+                fontweight="bold", fontsize=10, va="bottom", ha="left")
 
 
 def _slab_title(kind, coord, val, half):
@@ -310,10 +307,12 @@ def _section_panel(ax, layers, sparse, cmap_labels, fcol, fval, half, pcols,
     for label, P, col in layers:
         m = np.abs(P[:, fcol] - fval) < half
         if m.any():
-            _scatter(ax, label, P[m], col, pcols, sparse, 4, 0.7, cmap_labels)
+            _scatter(ax, label, P[m], col, pcols, sparse, 0.4, 0.7, cmap_labels)
     ax.set_aspect("equal"); ax.set_title(title)
-    ax.set_xlabel("E" if pcols[0] == 0 else "N"); ax.set_ylabel("Z")
-    _compass(ax, *compass)
+    # labelpad drops the axis word below the auto offset multiplier (else they collide
+    # on the narrow PF section panels)
+    ax.set_xlabel("E" if pcols[0] == 0 else "N", labelpad=10)
+    ax.set_ylabel("Z")
     # force the abbreviated "+6.49e5" offset label (matplotlib's auto threshold misses
     # the ~100 m windows and prints full 6-digit coords, overcrowding the axis)
     fmt = mticker.ScalarFormatter(); fmt.set_useOffset(True); fmt._offset_threshold = 2
@@ -324,8 +323,10 @@ def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HAL
          sparse=frozenset(), cmap_labels=frozenset(), suptitle=None,
          before_layers=None, plan_extent=None, wide_labels=frozenset(),
          section_style="row"):
-    style = {"font.size": 14, "axes.titlesize": 16, "axes.labelsize": 14,
-             "xtick.labelsize": 12, "ytick.labelsize": 12, "legend.fontsize": 12}
+    # authored at ~page width (linewidth 6.1 in) per the supervisor's figure-sizing
+    # rule, so \includegraphics does not shrink the text; fonts are true page pt.
+    style = {"font.size": 8, "axes.titlesize": 9, "axes.labelsize": 8,
+             "xtick.labelsize": 7, "ytick.labelsize": 7, "legend.fontsize": 7}
     with plt.rc_context(style):
         if before_layers is not None:
             xlim, ylim = plan_extent
@@ -333,12 +334,12 @@ def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HAL
             if section_style == "stacked":
                 # Gente: plan row, then FULL-WIDTH W-E and S-N section rows stacked, so
                 # the RTK datum shows in-section. Tight vertical spacing.
-                fig, axs = plt.subplots(3, 2, figsize=(16, 9.5),
-                                        gridspec_kw={"height_ratios": [2.6, 0.7, 0.7]})
+                fig, axs = plt.subplots(3, 2, figsize=(6.1, 4.8),
+                                        gridspec_kw={"height_ratios": [2.6, 0.45, 0.45]})
                 _plan_panel(axs[0, 0], before_layers, sparse, cmap_labels,
-                            "BEFORE  (plan)", xlim, ylim, cuts=cuts)
-                _plan_panel(axs[0, 1], layers, sparse, cmap_labels, "AFTER  (plan)",
-                            xlim, ylim, cuts=cuts, legend=True)
+                            "", xlim, ylim, cuts=cuts, panel_label="a)")
+                _plan_panel(axs[0, 1], layers, sparse, cmap_labels, "",
+                            xlim, ylim, cuts=cuts, legend=True, panel_label="b)")
                 _section_panel(axs[1, 0], before_layers, sparse, cmap_labels, 1,
                                slice_n, slice_half, (0, 2), "W-E", ("W", "E"))
                 _section_panel(axs[1, 1], layers, sparse, cmap_labels, 1, slice_n,
@@ -347,23 +348,31 @@ def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HAL
                                slice_e, slice_half, (1, 2), "N-S", ("N", "S"))
                 _section_panel(axs[2, 1], layers, sparse, cmap_labels, 0, slice_e,
                                slice_half, (1, 2), "N-S", ("N", "S"))
+                # anchor W-E content to the BOTTOM of its cell and N-S to the TOP, so the
+                # two sections sit close together while the map<->W-E gap opens up.
                 for row, xwin in ((1, xlim), (2, ylim)):   # full-width sections
                     zlo = min(axs[row, 0].get_ylim()[0], axs[row, 1].get_ylim()[0])
                     zhi = max(axs[row, 0].get_ylim()[1], axs[row, 1].get_ylim()[1])
                     for a in (axs[row, 0], axs[row, 1]):
-                        a.set_xlim(xwin); a.set_ylim(zlo, zhi); a.set_anchor("N")
+                        a.set_xlim(xwin); a.set_ylim(zlo, zhi)
+                        a.set_anchor("S" if row == 1 else "N")
+                axs[0, 0].set_anchor("N"); axs[0, 1].set_anchor("N")   # lift maps up
                 axs[2, 0].invert_xaxis(); axs[2, 1].invert_xaxis()   # N-S: N on the left
+                for left, right in ((axs[1, 0], axs[1, 1]), (axs[2, 0], axs[2, 1])):
+                    right.sharey(left)   # before/after share Z
+                    right.tick_params(labelleft=False); right.set_ylabel("")
             else:
                 # PF: plans span 2 cols; the four sections in one row, framed tight to
                 # the cave (not the full plan width).
-                fig = plt.figure(figsize=(16, 9))
-                gs = fig.add_gridspec(2, 4, height_ratios=[2.0, 1])
+                fig = plt.figure(figsize=(6.1, 4.0))
+                gs = fig.add_gridspec(2, 4, height_ratios=[1.4, 1])
                 axpb = fig.add_subplot(gs[0, 0:2])
                 axpa = fig.add_subplot(gs[0, 2:4])
-                _plan_panel(axpb, before_layers, sparse, cmap_labels, "BEFORE  (plan)",
-                            xlim, ylim, cuts=cuts)
-                _plan_panel(axpa, layers, sparse, cmap_labels, "AFTER  (plan)",
-                            xlim, ylim, cuts=cuts, legend=True)
+                _plan_panel(axpb, before_layers, sparse, cmap_labels, "",
+                            xlim, ylim, cuts=cuts, panel_label="a)")
+                _plan_panel(axpa, layers, sparse, cmap_labels, "",
+                            xlim, ylim, cuts=cuts, legend=True, panel_label="b)")
+                axpb.set_anchor("S"); axpa.set_anchor("S")   # sink plans toward sections
                 axbWE, axbSN = fig.add_subplot(gs[1, 0]), fig.add_subplot(gs[1, 1])
                 axaWE, axaSN = fig.add_subplot(gs[1, 2]), fig.add_subplot(gs[1, 3])
                 _section_panel(axbWE, before_layers, sparse, cmap_labels, 1, slice_n,
@@ -388,9 +397,22 @@ def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HAL
                 zhi = max(a.get_ylim()[1] for a in secax)
                 for a in secax:
                     a.set_ylim(zlo, zhi); a.set_anchor("N")
+                for a in (axaWE, axbSN, axaSN):      # all sections share one Z axis
+                    a.sharey(axbWE)
+                for a in (axbSN, axaSN):             # Z ticks only at each pair's start
+                    a.tick_params(labelleft=False); a.set_ylabel("")
             if suptitle:
-                fig.suptitle(suptitle, fontsize=17, fontweight="bold")
+                fig.suptitle(suptitle, fontsize=10, fontweight="bold")
             fig.tight_layout(h_pad=0.25)
+            if section_style == "row":       # PF: each W-E/N-S pair spans its map width
+                gap = 0.035                   # small gap between the two sections
+                for plan, we, ns in ((axpb, axbWE, axbSN), (axpa, axaWE, axaSN)):
+                    pp = plan.get_position()
+                    band = we.get_subplotspec().get_position(fig)   # section row y-band
+                    w = (pp.width - gap) / 2.0
+                    we.set_position([pp.x0, band.y0, w, band.height])
+                    ns.set_position([pp.x0 + w + gap, band.y0, w, band.height])
+                    we.set_anchor("N"); ns.set_anchor("N")
         else:
             fig, axs = plt.subplots(2, 2, figsize=(16, 13))
             if suptitle:
@@ -414,9 +436,9 @@ def plot(layers, out_png, slice_n=SLICE_N, slice_e=SLICE_E, slice_half=SLICE_HAL
                            slice_half), ("S", "N"))
             fig.tight_layout()
 
-        fig.savefig(out_png, dpi=130, bbox_inches="tight")
+        fig.savefig(out_png, dpi=450, bbox_inches="tight")
         save_figure(fig, os.path.splitext(os.path.basename(out_png))[0],
-                    "Appendices/Lidar reregistering", vector=False, dpi=300)  # thesis PNG
+                    "Appendices/Lidar reregistering", vector=False, dpi=450)  # thesis PNG
         print("saved", os.path.abspath(out_png))
 
 
