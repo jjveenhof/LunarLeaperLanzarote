@@ -14,17 +14,21 @@ Right panel : the synthetic zero-offset trace -- where each event lands in
 
 All geometry/velocity parameters are at the top -- edit to match a real crossing.
 
-A second figure (--mode chart) is the dimensionless companion: a lookup chart of
-where every arrival lands as a function of the cave-height-to-overburden ratio
-H/D.  Times are normalised by the ceiling two-way time t_rock = 2D/v_rock, so the
-ceiling sits at 1 and the whole pattern collapses onto one parameter -- the
-velocity ratio sets the slopes, nothing else.  Use it to read off, for a given
-H/D, whether the floor arrives before or after the first ceiling multiple.
+Third panel : the dimensionless companion -- a lookup chart of where every
+              arrival lands as a function of the cave-height-to-overburden
+              ratio H/D.  Times are normalised by the ceiling two-way time
+              t_rock = 2D/v_rock, so the ceiling sits at 1 and the whole
+              pattern collapses onto one parameter -- the velocity ratio sets
+              the slopes, nothing else.  Use it to read off, for a given H/D,
+              whether the floor arrives before or after the first ceiling
+              multiple.
+
+All three panels are combined into a single figure (one thesis-ready output);
+titles are dropped (captioned in LaTeX instead) and v_rock/v_air/k should be
+stated in that caption.
 
 Usage:
-    python plot_multiples_schematic.py                 # both figures
-    python plot_multiples_schematic.py --mode schematic
-    python plot_multiples_schematic.py --mode chart
+    python plot_multiples_schematic.py
 """
 
 import sys
@@ -34,6 +38,12 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from pathlib import Path
+
+# Import BEFORE any plotting: sets the thesis (Computer Modern) font via rcParams
+# on import, so both the local browse PNG and the thesis PDF match -- a call-site
+# import here (after the panels are drawn) left the browse PNG in default fonts.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+from plot_utils import save_figure
 
 # ---- PARAMETERS (edit to taste) ----------------------------------------------
 D_CEIL = 5    # rock thickness, surface to cave ceiling (m)
@@ -84,21 +94,27 @@ def draw_geometry(ax):
     ax.axhline(D_CEIL,  color='k', lw=1.5)
     ax.axhline(D_FLOOR, color='k', lw=1.5)
 
-    ax.text(xmax - 0.2, D_CEIL / 2, 'rock', ha='right', va='center',
-            fontsize=9, style='italic', color='#7a5c3a')
-    ax.text(xmax - 0.2, (D_CEIL + D_FLOOR) / 2, 'air-filled cave', ha='right',
-            va='center', fontsize=9, style='italic', color='gray')
-    ax.text(0.2, 0 - 0.4, 'surface (antenna)', ha='left', va='bottom', fontsize=9)
-    ax.text(0.2, D_CEIL - 0.2, 'ceiling', ha='left', va='bottom', fontsize=8)
-    ax.text(0.2, D_FLOOR - 0.2, 'floor', ha='left', va='bottom', fontsize=8)
+    # placed in the gap between the F and Mc ray families -- the only clear
+    # stretch wide enough that the label text doesn't cross any ray
+    x_label = 5.6
+    ax.text(x_label, D_CEIL / 2, 'rock', ha='center', va='center',
+            fontsize=8, style='italic', color='#7a5c3a')
+    ax.text(x_label, (D_CEIL + D_FLOOR) / 2, 'air-filled tube', ha='center',
+            va='center', fontsize=8, style='italic', color='gray')
+    ax.text(0.2, 0 - 0.55, 'surface', ha='left', va='bottom', fontsize=7)
+    ax.text(0.2, D_CEIL - 0.35, 'ceiling', ha='left', va='bottom', fontsize=7)
+    ax.text(0.2, D_FLOOR - 0.35, 'floor', ha='left', va='bottom', fontsize=7)
 
     def ray(xs, zs, colour):
-        ax.plot(xs, zs, color=colour, lw=1.6, zorder=3)
-        # arrowheads along segments
+        ax.plot(xs, zs, color=colour, lw=1.0, zorder=3)
+        # arrowhead centred on each segment's midpoint (not its endpoint) --
+        # a short stub spanning 42-58% of the segment, same direction as travel
         for i in range(len(xs) - 1):
-            ax.annotate('', xy=(xs[i+1], zs[i+1]),
-                        xytext=(xs[i], zs[i]),
-                        arrowprops=dict(arrowstyle='-|>', color=colour, lw=1.6))
+            x0, z0, x1, z1 = xs[i], zs[i], xs[i+1], zs[i+1]
+            xt, zt = x0 + 0.42 * (x1 - x0), z0 + 0.42 * (z1 - z0)
+            xh, zh = x0 + 0.58 * (x1 - x0), z0 + 0.58 * (z1 - z0)
+            ax.annotate('', xy=(xh, zh), xytext=(xt, zt),
+                        arrowprops=dict(arrowstyle='-|>', color=colour, lw=1.0))
 
     def bounce(x, z, colour, fill=True):
         ax.plot([x], [z], marker='o', ms=6, color=colour,
@@ -142,13 +158,10 @@ def draw_geometry(ax):
         bounce(xx, zz, C_CAV)
 
     ax.set_xlim(0, xmax)
-    ax.set_ylim(z_bottom, -1.2)   # depth down, a little headroom for surface label
-    ax.set_xlabel('Horizontal position (schematic, m)')
-    ax.set_ylabel('True depth below surface (m)')
-    ax.set_title('Ray paths (true geometry)\n'
-                 r'$v_\mathrm{rock}=' + '{:.3f}'.format(V_ROCK) + r'$, '
-                 r'$v_\mathrm{air}=' + '{:.2f}'.format(V_AIR) + r'$ m/ns',
-                 fontsize=10)
+    ax.set_ylim(z_bottom, -1.7)   # depth down, a little headroom for surface label
+    ax.set_xlabel('Position (m)')
+    ax.set_ylabel('Depth (m)')
+    ax.set_title('a)', loc='left', fontsize=10)
 
 
 def draw_trace(ax):
@@ -165,82 +178,76 @@ def draw_trace(ax):
             amp = -amp
         tt = np.linspace(t - 6, t + 6, 100)
         wig = amp * np.exp(-((tt - t) / 2.5) ** 2) * np.cos((tt - t) / 2.0)
-        ax.plot(wig, tt, color=colour, lw=1.8)
+        ax.plot(wig, tt, color=colour, lw=1.2)
         ax.axhline(t, color=colour, lw=0.8, ls=':', alpha=0.7)
 
     ax.set_xticks([])
-    ax.set_ylabel(r'Two-way time $t$ (ns)')
-    ax.set_title('Synthetic trace\n'
-                 r'(apparent depth uses $v_\mathrm{rock}$)', fontsize=10)
+    ax.set_ylabel('TWT (ns)')
+    ax.set_title('b)', loc='left', fontsize=10)
 
     # apparent-depth axis on the right
     ax2 = ax.twinx()
     ax2.set_ylim(app_depth(t_max), 0)
-    ax2.set_ylabel(r'Apparent depth (m) $=t\,v_\mathrm{rock}/2$')
+    ax2.set_ylabel('Apparent depth (m)')
 
 
-def draw_chart(ax, hd_max=10.0, n_rock=3, n_cav=3):
+def draw_chart(ax, hd_max=10.0, n_rock=2, n_cav=2):
     """Dimensionless arrival chart: normalised two-way time (t / t_ceil) versus
     the cave-height-to-overburden ratio H/D.  Only the velocity ratio matters."""
     k = V_AIR / V_ROCK                     # floor slope is 1/k; crossover at H/D = k
     hd = np.linspace(0, hd_max, 400)
 
     # Ceiling family (positive polarity): horizontal lines y = n
-    ax.plot([0, hd_max], [1, 1], color=C_CEIL, lw=2.2,
-            label='Ceiling primary (pol. = +)')
+    ax.plot([0, hd_max], [1, 1], color=C_CEIL, lw=1.4, label='Ceiling primary')
     for n in range(2, n_rock + 1):
-        ax.plot([0, hd_max], [n, n], color=C_MULT, lw=1.3,
-                label='Overburden multiples (pol. = +)' if n == 2 else None)
+        ax.plot([0, hd_max], [n, n], color=C_MULT, lw=0.9,
+                label='Overburden multiple' if n == 2 else None)
 
     # Floor family (negative polarity): y = 1 + n*(H/D)/k
-    ax.plot(hd, 1 + hd / k, color=C_FLOOR, lw=2.2,
-            label='Floor reflection (pol. = -)')
+    ax.plot(hd, 1 + hd / k, color=C_FLOOR, lw=1.4, label='Floor reflection')
     for n in range(2, n_cav + 1):
-        ax.plot(hd, 1 + n * hd / k, color=C_CAV, lw=1.3,
-                label='Cavity reverberations (pol. = -)' if n == 2 else None)
+        ax.plot(hd, 1 + n * hd / k, color=C_CAV, lw=0.9,
+                label='Tube multiple' if n == 2 else None)
 
-    # Floor meets the first ceiling multiple (y = 2) at H/D = k
-    x_cross = k
-    if x_cross <= hd_max:
-        ax.axvline(x_cross, color='0.5', lw=1.0, ls=':')
-        ax.annotate(r'$H/D = k$',
-                    xy=(x_cross, 0), xytext=(x_cross, -0.05),
-                    xycoords=('data', 'axes fraction'),
-                    textcoords=('data', 'axes fraction'),
-                    ha='center', va='top', fontsize=10, color='0.3',
-                    arrowprops=dict(arrowstyle='-', color='0.5', lw=1.0))
+    # marker for the floor / first-ceiling-multiple crossover region (fixed at
+    # x=2 rather than the exact H/D=k value -- a clean reference line, no label)
+    ax.axvline(2.0, color='0.5', lw=1.0, ls=':')
 
     y_max = 6.0
     ax.set_xlim(0, hd_max)
     ax.set_ylim(y_max, 0)                   # time increases downward, ceiling near top
     ax.set_xlabel(r'$H/D$')
-    ax.set_ylabel(r'$z_\mathrm{app}/D = t\,/\,t_\mathrm{ceil}$')
+    ax.set_ylabel(r'$t\,/\,t_\mathrm{ceil}$')
     ax.grid(True, alpha=0.3)
-    ax.legend(fontsize=8, loc='lower right', framealpha=0.9)
+    ax.legend(fontsize=6, loc='lower right', framealpha=0.9, handlelength=1.4,
+             labelspacing=0.3, borderpad=0.4)
+    ax.set_title('c)', loc='left', fontsize=10)
 
-    title = (r'Arrival chart' + '\n'
-             + r'$v_\mathrm{rock}=' + '{:.3f}'.format(V_ROCK) + r'$, '
-             + r'$v_\mathrm{air}=' + '{:.2f}'.format(V_AIR) + r'$ m/ns,  '
-             + r'$k=v_\mathrm{air}/v_\mathrm{rock}=' + '{:.1f}'.format(k) + r'$')
-    ax.set_title(title, fontsize=10)
+    # right-hand twin: apparent-depth-over-overburden. d_app/D = t/t_ceil exactly
+    # (d_app = t*v_rock/2, t_ceil = 2D/v_rock -- D and v_rock cancel), so this is
+    # the same y-value under a second, dimensioned-adjacent label -- same axis
+    # convention as panel (b)'s Apparent depth twin.
+    ax_r = ax.twinx()
+    ax_r.set_ylim(ax.get_ylim())
+    ax_r.set_ylabel(r'$d_\mathrm{app}/D$')
 
 
-def make_schematic():
-    fig, (axL, axR) = plt.subplots(
-        1, 2, figsize=(13, 7), gridspec_kw={'width_ratios': [2.0, 1.0]})
+def make_combined():
+    # figsize width vs thesis \linewidth (6.1 in, see plot_utils sizing rule): a bit
+    # wider than native so 3 dense panels + labels don't collide (rule exception for
+    # dense multi-panel figures -- same tradeoff as the appendix polarity/intersection
+    # figures). constrained_layout (not tight_layout) handles the twinx panel cleanly.
+    fig, (axL, axM, axR) = plt.subplots(
+        1, 3, figsize=(8.0, 3.3),
+        gridspec_kw={'width_ratios': [1.55, 0.85, 1.15]},
+        constrained_layout=True)
     draw_geometry(axL)
-    draw_trace(axR)
-
-    fig.suptitle('GPR events over an air-filled lava tube: primaries and multiples',
-                 fontsize=12)
-    fig.tight_layout(rect=[0, 0, 1, 0.96])
+    draw_trace(axM)
+    draw_chart(axR)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out = OUT_DIR / 'multiples_schematic.png'
+    out = OUT_DIR / 'gpr_arrivals_schematic.png'
     fig.savefig(str(out), dpi=170)
-    import sys as _sys, pathlib as _pl
-    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
-    from plot_utils import save_figure
     save_figure(fig, out.stem, "GPR", vector=True)   # title-free thesis PDF
     plt.close(fig)
     print('Saved: {}'.format(out.resolve()))
@@ -249,32 +256,11 @@ def make_schematic():
         print('  {:<22} {:6.1f} ns   {:5.2f} m'.format(label, t, app_depth(t)))
 
 
-def make_chart():
-    fig, ax = plt.subplots(figsize=(8.5, 7))
-    draw_chart(ax)
-    fig.tight_layout()
-
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out = OUT_DIR / 'arrival_chart.png'
-    fig.savefig(str(out), dpi=170)
-    import sys as _sys, pathlib as _pl
-    _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
-    from plot_utils import save_figure
-    save_figure(fig, out.stem, "GPR", vector=True)   # title-free thesis PDF
-    plt.close(fig)
-    print('Saved: {}'.format(out.resolve()))
-
-
 def main():
-    ap = argparse.ArgumentParser(description='Multiples schematic and arrival chart.')
-    ap.add_argument('--mode', choices=['schematic', 'chart', 'both'], default='both',
-                    help='which figure(s) to make (default: both)')
-    args = ap.parse_args()
-
-    if args.mode in ('schematic', 'both'):
-        make_schematic()
-    if args.mode in ('chart', 'both'):
-        make_chart()
+    ap = argparse.ArgumentParser(description='Combined GPR arrivals schematic '
+                                              '(geometry + trace + arrival chart).')
+    ap.parse_args()
+    make_combined()
 
 
 if __name__ == '__main__':
