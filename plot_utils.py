@@ -33,6 +33,27 @@ crops clean with no leftover band.
     saves the figure's own layout verbatim (like a plain savefig), matching the PNG.
     The reserved title margin then shows as a little whitespace, which is harmless.
 
+FIGURE-SIZING RULE (text size, on top of the font fix above): matplotlib text is set in
+ABSOLUTE points, but \includegraphics[width=L]{...} scales the WHOLE figure -- text
+included -- by L / W, where W is the figsize width in inches. So:
+
+    on-page text size (pt) = matplotlib fontsize (pt) x (L / W)
+
+Author a figure at W=14 and place it at L=6 and every label shrinks to 0.43x -- that is
+the "why is the text tiny" bug, and it has nothing to do with dpi or fontsize alone.
+THE RULE: author each figure at roughly the width it will occupy on the page.
+  1. This thesis's \linewidth = 6.1 in (single-column A4, normal margins). If a figure
+     is placed at 0.8\linewidth, L = 0.8 x 6.1 = 4.9 in.
+  2. Set figsize WIDTH W ~= L (height is whatever aspect you want -- only the width
+     ratio drives text scaling).
+  3. Fine-tune: W < L makes text bigger, W > L makes it smaller. Our full-\linewidth GPR
+     radargrams use W = 5.3 in -> 6.1/5.3 = 1.15x native -- a deliberate slight enlargement.
+  4. NEVER author at 12-15 in and lean on \includegraphics to shrink -- that is exactly
+     what makes text 2-2.5x too small.
+  5. Dense multi-panel figures need a minimum width per panel for their labels; if W~=L
+     makes labels collide, split the figure or accept smaller text (appendix-OK) rather
+     than forcing it.
+
 Which titles get hidden is set by `titles=`:
   * "auto" (default) -- hide the figure suptitle always; hide axes titles ONLY when
     the figure has a single data panel. So a lone plot loses its (caption-like) title,
