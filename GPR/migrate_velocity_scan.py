@@ -219,10 +219,10 @@ def main():
             '{} -- Stolt migrated  |  v = {:.4f} m/ns{}'.format(args.line, v, gain_str),
             fontsize=10, loc='left')
 
-        axes[1].text(0.01, 0.99, 'N', transform=axes[1].transAxes,
-                     ha='left', va='top', fontsize=11, fontweight='bold', color='black')
-        axes[1].text(0.99, 0.99, 'S', transform=axes[1].transAxes,
-                     ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+        axes[1].text(0.01, 0.03, 'N', transform=axes[1].transAxes, ha='left',
+                     va='bottom', fontsize=11, fontweight='bold', color='black')
+        axes[1].text(0.99, 0.03, 'S', transform=axes[1].transAxes, ha='right',
+                     va='bottom', fontsize=11, fontweight='bold', color='black')
 
         MIGRATED_DIR.mkdir(parents=True, exist_ok=True)
         out_png = MIGRATED_DIR / (args.line + '_migrated.png')
@@ -250,8 +250,8 @@ def main():
         pretty = '{} -- {}'.format(_p[0], _p[1].replace('MHz', ' MHz')) \
             if len(_p) == 2 else args.line
 
-        fig2, ax2 = plt.subplots(2, 1, figsize=(8, 5.1), sharex=True,
-                                 gridspec_kw={'hspace': 0.14})
+        fig2, ax2 = plt.subplots(2, 1, figsize=(5.3, 3.4), sharex=True,
+                                 gridspec_kw={'hspace': 0.22})
         ax2[0].imshow(before, aspect='auto', cmap='seismic', vmin=-clip_b, vmax=clip_b,
                       extent=ext_ba, interpolation='nearest')
         ax2[0].set_title('{} -- before migration (topo-corrected input)'.format(pretty),
@@ -268,9 +268,9 @@ def main():
             _a.fill_between(x, 0.0, surf_depth, color='0.85', zorder=2, linewidth=0)
             _a.plot(x, surf_depth, color='k', linewidth=1.1, zorder=3)
             _a.set_ylim(ba_depth_max, 0.0)
-            _a.text(0.01, 0.99, 'N', transform=_a.transAxes, ha='left', va='top',
+            _a.text(0.01, 0.03, 'N', transform=_a.transAxes, ha='left', va='bottom',
                     fontsize=11, fontweight='bold', color='black')
-            _a.text(0.99, 0.99, 'S', transform=_a.transAxes, ha='right', va='top',
+            _a.text(0.99, 0.03, 'S', transform=_a.transAxes, ha='right', va='bottom',
                     fontsize=11, fontweight='bold', color='black')
 
         # right-hand axes: TWT (ns) on the before panel, elevation (m asl) on the after

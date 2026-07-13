@@ -29,6 +29,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 import topo_correction as tc
 from gpr_processing import apply_processing
+import segment_tzero as seg_tz
 
 HERE       = Path(__file__).parent
 STITCH_DIR = HERE / '../../Data/GPR/Stitched'
@@ -85,8 +86,19 @@ def main():
     print('Variant:  {}'.format(var_stem))
     print('Overrides:', overrides)
 
+    # match run_pipeline: block-wise time-zero pre-alignment for stitched/patched
+    # lines before processing (no-op for single-file profiles)
+    data = seg_tz.align_segments(data, info, verbose=False)
+
     sfreq = info['samples'] / info['Total_time_window'] * 1000   # MHz
     processed, time_axis_out = apply_processing(data, time_axis, sfreq, params_var)
+
+    # flip_x is a 2D North-left display convention baked into the NPZ; apply it here
+    # exactly as run_pipeline does, so a variant of a flipped line (e.g. Line3) stays
+    # consistent with its flip_x param (topo_correction reverses elevations to match).
+    if params_var.get('flip_x', False):
+        processed = processed[:, ::-1]
+        print('    flip_x: variant reversed (North on left)')
 
     PROC_DIR.mkdir(parents=True, exist_ok=True)
     out_proc   = PROC_DIR / (var_stem + '_processed.npz')

@@ -192,8 +192,8 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # scale (metres per pixel) is the same in both panels.
     ratio    = disp50 / disp100 if disp100 > 0 else 1.0
 
-    fig_width  = 8.0
-    panel_h    = 2.0          # height in inches for 100 MHz panel
+    fig_width  = 5.3
+    panel_h    = 1.3          # height in inches for 100 MHz panel
     fig_height = panel_h * ratio + panel_h + 0.8   # top + bottom + spacing
 
     fig = plt.figure(figsize=(fig_width, fig_height))
@@ -204,7 +204,7 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
         2, 1,
         figure=fig,
         height_ratios=[ratio, 1.0],
-        hspace=0.08,
+        hspace=0.16,          # room for the bottom panel's title (no top overlap)
     )
 
     ax50  = fig.add_subplot(gs[0, 0])
@@ -285,12 +285,12 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     ax50.set_title('50 MHz', fontsize=10, loc='left')
     ax100.set_title('100 MHz', fontsize=10, loc='left')
 
-    # N/S endpoint labels inside both panels at top corners
+    # N/S endpoint labels in the (usually quiet) bottom corners.
     for ax in (ax50, ax100):
-        ax.text(0.01, 0.99, 'N', transform=ax.transAxes,
-                ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
-        ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
-                ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+        ax.text(0.01, 0.03, 'N', transform=ax.transAxes,
+                ha='left',  va='bottom', fontsize=11, fontweight='bold', color='black')
+        ax.text(0.99, 0.03, 'S', transform=ax.transAxes,
+                ha='right', va='bottom', fontsize=11, fontweight='bold', color='black')
 
     # --- save ---
     out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR

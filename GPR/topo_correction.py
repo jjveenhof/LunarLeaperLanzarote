@@ -248,10 +248,10 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
     # the straight lines -- the flower petals curve through many azimuths (acquired
     # clockwise), so N/S is dropped there (orientation is read from the 3D plan view).
     if annotate_ns:
-        ax.text(0.01, 0.99, 'N', transform=ax.transAxes,
-                ha='left',  va='top', fontsize=11, fontweight='bold', color='black')
-        ax.text(0.99, 0.99, 'S', transform=ax.transAxes,
-                ha='right', va='top', fontsize=11, fontweight='bold', color='black')
+        ax.text(0.01, 0.03, 'N', transform=ax.transAxes, ha='left', va='bottom',
+                fontsize=11, fontweight='bold', color='black')
+        ax.text(0.99, 0.03, 'S', transform=ax.transAxes, ha='right', va='bottom',
+                fontsize=11, fontweight='bold', color='black')
 
     # right-hand axis: depth below datum (m) = ref_elev - elevation = TWT * v / 2
     tax = ax.twinx()

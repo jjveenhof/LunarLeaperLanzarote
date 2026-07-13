@@ -39,7 +39,8 @@ from scipy.signal import hilbert
 
 sys.path.insert(0, str(Path(__file__).parent))
 from plot_flowerpetal_3d import (PROFILES, PROC_DIR, GNSS_FP, GNSS_LINES,
-                                 load_gnss_fp, load_gnss_lines, build_track_interps)
+                                 load_gnss_fp, load_gnss_lines, build_track_interps,
+                                 load_flip)
 from gpr_processing import display_gain
 
 OUT_DIR = Path(__file__).parent / '../../Results/GPR/PolarityCheck'
@@ -62,9 +63,16 @@ def get_profile(key, gnss):
         dist = f['dist_axis'].astype(np.float64)
         time = f['time_axis'].astype(np.float64)
     gnss_m = dist + prof['offset']
+    east, north = east_fn(gnss_m), north_fn(gnss_m)
+    # flip_x reverses the trace columns for a North-left 2D display, but the GNSS
+    # track is in acquisition order. Reverse the GNSS referencing (not the data) so
+    # E/N[i] lines up with the flipped data column i. This matches topo_correction,
+    # which reverses `elevations` the same way -- the data stays as baked.
+    if load_flip(key):
+        east, north = east[::-1], north[::-1]
     return {
         'key': key, 'label': prof['label'], 'colour': prof['colours'][0],
-        'E': east_fn(gnss_m), 'N': north_fn(gnss_m),
+        'E': east, 'N': north,
         'data': data, 'time': time,
     }
 
