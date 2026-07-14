@@ -76,9 +76,27 @@ def read_picks():
         return list(reader)
 
 
-def annotate_pick(ax, x_pick, y_pick, label, x_span, place_left):
-    """Horizontal arrow pointing at (x_pick, y_pick), text beside it."""
-    dx = 0.14 * x_span * (-1 if place_left else 1)
+def pick_entries(row):
+    """Short (x, depth_below_surface, label) tuples for a tube_picks.csv row.
+    Labels are deliberately terse -- the apparent/real distinction and the
+    'below surface' reference belong in the figure caption, not on the panel."""
+    entries = []
+    if row.get('ceiling_depth_m') and row.get('x_ceiling_m'):
+        entries.append((float(row['x_ceiling_m']), float(row['ceiling_depth_m']),
+                        'ceiling {} m'.format(row['ceiling_depth_m'])))
+    if row.get('floor_depth_app_m') and row.get('x_floor_m'):
+        entries.append((float(row['x_floor_m']), float(row['floor_depth_app_m']),
+                        'floor {} m'.format(row['floor_depth_app_m'])))
+    return entries
+
+
+def annotate_pick(ax, x_pick, y_pick, label, x_lo, x_hi):
+    """Horizontal arrow pointing at (x_pick, y_pick), text beside it. Prefers the
+    LEFT side (usually the quieter North end); falls back to the right only if the
+    text would run off the left edge."""
+    dx_mag = 0.14 * (x_hi - x_lo)
+    place_left = (x_pick - dx_mag) >= x_lo
+    dx = -dx_mag if place_left else dx_mag
     ax.annotate(label,
                 xy=(x_pick, y_pick), xytext=(x_pick + dx, y_pick),
                 ha='right' if place_left else 'left', va='center',
@@ -371,14 +389,7 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # surface curve at the pick x.
     if stage50 == 'migrated':
         row = next((r for r in read_picks() if r['line'] == line), None)
-        picks = []
-        if row:
-            if row.get('ceiling_depth_m') and row.get('x_ceiling_m'):
-                picks.append((float(row['x_ceiling_m']), float(row['ceiling_depth_m']),
-                              'ceiling {} m below surface'.format(row['ceiling_depth_m'])))
-            if row.get('floor_depth_app_m') and row.get('x_floor_m'):
-                picks.append((float(row['x_floor_m']), float(row['floor_depth_app_m']),
-                              'floor {} m below surface (apparent)'.format(row['floor_depth_app_m'])))
+        picks = pick_entries(row) if row else []
         for _ax, _xd, _xoff, _refe, _elevs, _dmax in [
             (ax50,  x50,  0.0,      ref_elev50,  elevs50,  disp50),
             (ax100, x100, x_offset, ref_elev100, elevs100, disp100),
@@ -392,8 +403,7 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
                 y = float(np.interp(xp, _xs, _refe - _elevs)) + d_bs
                 if y > _dmax:
                     continue   # below the displayed depth crop
-                annotate_pick(_ax, xp, y, label, x_max - x_min,
-                              place_left=(xp > 0.5 * (x_min + x_max)))
+                annotate_pick(_ax, xp, y, label, x_min, x_max)
 
     # --- save ---
     out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR
