@@ -225,10 +225,14 @@ def draw_chart(ax, hd_max=10.0, n_rock=2, n_cav=2):
                 label='Tube multiple' if n == 2 else None)
 
     # marker for the floor / first-ceiling-multiple crossover region (fixed at
-    # x=2 rather than the exact H/D=k value -- a clean reference line, no label)
+    # x=2 rather than the exact H/D=k value -- a clean reference line, no label).
+    # x=2 is also exactly H_CAVE/D_CEIL for the geometry used in panels (a)/(b),
+    # so this line doubles as "here is that specific example on the general chart".
     ax.axvline(2.0, color='0.5', lw=1.0, ls=':')
+    ax.text(1.95, 3.45, 'slice shown in (b)', rotation=90, fontsize=6,
+           color='0.5', ha='right', va='center')
 
-    y_max = 6.0
+    y_max = 4.0
     ax.set_xlim(0, hd_max)
     ax.set_ylim(y_max, 0)                   # time increases downward, ceiling near top
     ax.set_xlabel(r'$H/D$')
