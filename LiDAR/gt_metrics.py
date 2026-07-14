@@ -88,7 +88,13 @@ def beat3_internal_fit(name, mover_a, ref_a, thr=1.0):
 
 def vertical_offset_to_plane(query_xyz, surface_xyz, radius=5.0, minpts=6):
     """Signed vertical distance query_z - (local plane through surface points within
-    `radius`). Removes the horizontal-spacing floor of a plain 3-D NN."""
+    `radius`). Removes the horizontal-spacing floor of a plain 3-D NN.
+
+    ONLY valid where `surface_xyz` is a locally smooth, near-horizontal SHEET (the La
+    Gente drone ground surface). Do NOT use it against a cave edge/wall: at the Puerta
+    Falsa jameo the RTK trace is the lip of a vertical shaft, the 'nearby' cave points
+    are the shaft walls, and the plane fit is meaningless (returns ~4-5 m). For a sharp
+    feature like that, use vertical_offset_at_feature() instead."""
     tree = cKDTree(surface_xyz[:, :2])
     resid = []
     for p in query_xyz:
@@ -99,6 +105,16 @@ def vertical_offset_to_plane(query_xyz, surface_xyz, radius=5.0, minpts=6):
         c, *_ = lstsq(np.c_[S[:, 0], S[:, 1], np.ones(len(S))], S[:, 2], rcond=None)
         resid.append(p[2] - (c[0] * p[0] + c[1] * p[1] + c[2]))
     return np.asarray(resid)
+
+
+def vertical_offset_at_feature(query_xyz, feature_xyz):
+    """Vertical component of the nearest-neighbour offset from each query point to a
+    sharp feature (e.g. RTK rim trace -> LiDAR shaft edge). Use where no local plane
+    exists. The 3-D NN there is dominated by along-feature point spacing, so its
+    VERTICAL component is the honest datum residual."""
+    d, i = cKDTree(feature_xyz).query(query_xyz)
+    dz = query_xyz[:, 2] - feature_xyz[i, 2]
+    return d, dz
 
 
 # ---------------------------------------------------------------- Puerta Falsa
@@ -116,9 +132,12 @@ def puerta_falsa():
     beat1_how_far_off("tube idx1", bt, at, R, t)
 
     rtk = load_cols(os.path.join(REREG, "PuertaFalsa_edge_RTK.xyz"), [0, 1, 2])
-    da = nnd(rtk, np.vstack([A["ref"], A["stitch"], A["tube"]]))
-    print(f"  [2] TIE TO CONTROL (RTK rim {len(rtk)} pts -> nearest cave point)")
-    print(f"      median {np.median(da):.3f} m, mean {da.mean():.3f} m")
+    cave = np.vstack([A["ref"], A["stitch"], A["tube"]])
+    d, dz = vertical_offset_at_feature(rtk, cave)   # rim is a shaft edge, not a plane
+    print(f"  [2] TIE TO CONTROL (RTK rim {len(rtk)} pts -> LiDAR shaft edge)")
+    print(f"      3-D NN: median {np.median(d):.3f} m (mostly along-rim spacing)")
+    print(f"      vertical: |median| {np.median(np.abs(dz)):.3f} m, "
+          f"bias {np.median(dz):+.3f} m, std {dz.std():.3f} m")
 
     beat3_internal_fit("tube->stitch", A["tube"], A["stitch"])
 
