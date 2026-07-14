@@ -46,6 +46,8 @@ FIG_DIR    = HERE / '../../Results/GPR/Topo'
 OFFSET_50MHZ  = 1.10    # 2.2 m rig
 OFFSET_100MHZ = 0.425   # 0.85 m rig
 
+CLIP_FALLBACK = 99.5   # QC-PNG clip percentile if the params JSON has no clip_percentile
+
 from gpr_constants import V_DEFAULT as V_FALLBACK   # m/ns used if not stored in params file
 from gpr_processing import display_gain             # display-only gain for the QC PNG
 # ------------------------------------------------------------------------------
@@ -209,7 +211,7 @@ def apply_topo_correction(data, time_axis, elevations, v):
 
 def save_figure(out_path, profile_key, dist_axis, time_axis,
                 corrected, elevations, v, ref_elev, gain_exp=0.0, flip_x=False,
-                annotate_ns=True):
+                annotate_ns=True, clip_pct=CLIP_FALLBACK):
     """Single-panel topographic section: the radargram is drawn on an absolute
     elevation axis (m asl) so the surface relief sits inside the plot. The data is
     referenced to a flat datum (= max elevation) by the static shift, so the real
@@ -229,7 +231,7 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
     t_max      = float(time_axis[-1])
     elev_bot   = ref_elev - t_max * v / 2.0
 
-    clip_val = np.percentile(np.abs(disp), 99.5)
+    clip_val = np.percentile(np.abs(disp), clip_pct)
     im = ax.imshow(disp, aspect='auto', cmap='seismic',
                    vmin=-clip_val, vmax=clip_val,
                    extent=[dist_axis[0], dist_axis[-1], elev_bot, ref_elev])
@@ -243,8 +245,13 @@ def save_figure(out_path, profile_key, dist_axis, time_axis,
     ax.set_ylim(elev_bot, ref_elev)
     ax.set_xlabel('Distance (m)')
     ax.set_ylabel('Elevation (m asl)')
-    ax.set_title('{} | v = {:.3f} m/ns | topo corrected{}'.format(
-        profile_key, v, gain_note))
+    # pretty label: "Line3_50MHz" -> "Line3 -- 50 MHz" (avoids the raw underscore,
+    # which renders as a raised mark in Computer Modern)
+    _p = profile_key.split('_')
+    pretty = '{} -- {}'.format(_p[0], _p[1].replace('MHz', ' MHz')) \
+        if len(_p) == 2 else profile_key
+    ax.set_title('{} | v = {:.3f} m/ns{} | clip {:.1f}%'.format(
+        pretty, v, gain_note, clip_pct))
 
     # N/S endpoint labels inside the section at top corners. Only meaningful for
     # the straight lines -- the flower petals curve through many azimuths (acquired
@@ -329,7 +336,8 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
                 corrected, elevations, v, ref_elev,
                 gain_exp=float(params.get('gain_exponent', 0.0)),
                 flip_x=bool(params.get('flip_x', False)),
-                annotate_ns=(PROFILE_CONFIG[profile_key]['type'] != 'flowerpetal'))
+                annotate_ns=(PROFILE_CONFIG[profile_key]['type'] != 'flowerpetal'),
+                clip_pct=float(params.get('clip_percentile', CLIP_FALLBACK)))
 
     # --- sidecar JSON: topo info + processing params + raw instrument header ---
     def _serial(v):

@@ -111,8 +111,9 @@ def main():
     ap.add_argument('--dv',   type=float, default=0.005, help='velocity step m/ns')
     ap.add_argument('--gain', type=float, default=0.0,
                     help='display-only gdp linear gain exponent (0 = off, ungained)')
-    ap.add_argument('--clip', type=float, default=99.5,
-                    help='initial percentile clip (0..100), applied to current view')
+    ap.add_argument('--clip', type=float, default=None,
+                    help='percentile clip (0..100) override; default reads the '
+                         'per-profile clip_percentile from the params JSON (99.5 fallback)')
     ap.add_argument('--pick-velocity', type=float, default=None, metavar='V',
                     help='migrate at single velocity V (m/ns) and save _migrated.npz; skips scan HTML')
     ap.add_argument('--no-live-taper', action='store_true',
@@ -141,6 +142,17 @@ def main():
     with np.load(str(topo_path)) as f:
         ref_elev   = float(f['ref_elev'])
         elevations = f['elevations'].astype(np.float64)
+
+    # per-profile report settings from the params JSON; CLI --clip overrides
+    params_path = PROC_DIR / (args.line + '_params.json')
+    prof_params = {}
+    if params_path.exists():
+        with open(str(params_path), encoding='utf-8') as f:
+            prof_params = json.load(f)
+    clip_pct  = args.clip if args.clip is not None \
+        else float(prof_params.get('clip_percentile', 99.5))
+    depth_max = float(prof_params.get('depth_max', 25.0))
+
     dt = float(t[1] - t[0])
     dx = float(x[1] - x[0])
     nt, nx = data0.shape
@@ -195,7 +207,7 @@ def main():
             dz = float(depth[1] - depth[0])
             sfreq_eq = 1000.0 * v / (2.0 * dz)   # equivalent MHz for depth gain
             plot_data = display_gain(plot_data, sfreq_eq, gain_exp)
-        clip = float(np.percentile(np.abs(plot_data), args.clip))
+        clip = float(np.percentile(np.abs(plot_data), clip_pct))
         if clip <= 0:
             clip = 1.0
 
@@ -238,10 +250,10 @@ def main():
         # and the surface topography drawn inside both (air overburden shaded).
         before = display_gain(section, 1000.0 / dt, gain_exp) if gain_exp > 0 else section
         after  = display_gain(mig,     1000.0 / dt, gain_exp) if gain_exp > 0 else mig
-        clip_b = float(np.percentile(np.abs(before), args.clip)) or 1.0
-        clip_a = float(np.percentile(np.abs(after),  args.clip)) or 1.0
+        clip_b = float(np.percentile(np.abs(before), clip_pct)) or 1.0
+        clip_a = float(np.percentile(np.abs(after),  clip_pct)) or 1.0
         ext_ba = [float(x[0]), float(x[-1]), float(depth[-1]), float(depth[0])]
-        ba_depth_max = min(25.0, float(depth[-1]))   # nothing of interest below ~25 m
+        ba_depth_max = min(depth_max, float(depth[-1]))   # per-profile crop (params depth_max)
         surf_depth   = ref_elev - elevations         # surface depth below datum (per trace)
 
         # pretty label: "Line3_50MHz" -> "Line3 -- 50 MHz" (avoids the raw
@@ -254,13 +266,13 @@ def main():
                                  gridspec_kw={'hspace': 0.22})
         ax2[0].imshow(before, aspect='auto', cmap='seismic', vmin=-clip_b, vmax=clip_b,
                       extent=ext_ba, interpolation='nearest')
-        ax2[0].set_title('{} -- before migration (topo-corrected input)'.format(pretty),
-                         fontsize=10, loc='left')
+        ax2[0].set_title('{} -- before migration | clip {:.1f}%'.format(pretty, clip_pct),
+                         fontsize=9, loc='left')
         ax2[0].set_ylabel('Depth (m)', fontsize=9)
         ax2[1].imshow(after, aspect='auto', cmap='seismic', vmin=-clip_a, vmax=clip_a,
                       extent=ext_ba, interpolation='nearest')
-        ax2[1].set_title('after Stolt migration  |  v = {:.3f} m/ns{}'.format(v, gain_str),
-                         fontsize=10, loc='left')
+        ax2[1].set_title('after Stolt migration | v = {:.3f} m/ns{} | clip {:.1f}%'.format(
+            v, gain_str, clip_pct), fontsize=9, loc='left')
         ax2[1].set_ylabel('Depth (m)', fontsize=9)
         ax2[1].set_xlabel('Distance (m)', fontsize=9)
 
@@ -315,11 +327,11 @@ def main():
     if len(gain_vals) == 0:
         gain_vals = [0.0]
     if len(clip_vals) == 0:
-        clip_vals = [float(args.clip)]
+        clip_vals = [clip_pct]
 
     i0 = len(vels) // 2
     g0 = int(np.argmin(np.abs(np.asarray(gain_vals, dtype=float) - float(args.gain))))
-    c0 = int(np.argmin(np.abs(np.asarray(clip_vals, dtype=float) - float(args.clip))))
+    c0 = int(np.argmin(np.abs(np.asarray(clip_vals, dtype=float) - clip_pct)))
 
     # Payload: the MIGRATED panel is a per-velocity stack. The top (unmigrated,
     # topo-corrected) panel is rebuilt in JS from a SINGLE pre-topo array by rolling

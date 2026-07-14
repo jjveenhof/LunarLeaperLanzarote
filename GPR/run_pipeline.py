@@ -167,7 +167,10 @@ def regenerate_downstream(stems, do_scans):
         run(['migrate_velocity_scan.py', '--line', s,
              '--pick-velocity', str(mv), '--gain', str(mg)], 'migrate ' + s)
 
-    # 2b. migrated dual-freq where BOTH freqs of a line are flagged migrate
+    # 2b. migrated dual-freq where BOTH freqs of a line are flagged migrate.
+    # Clip comes from each profile's params (clip_percentile); the depth crops
+    # come from each profile's params depth_max (50 MHz sets --depth-max, 100 MHz
+    # sets --depth-max-100).
     for L in lines:
         p50, p100 = _load_params(L + '_50MHz'), _load_params(L + '_100MHz')
         if p50.get('migrate') and p100.get('migrate'):
@@ -175,7 +178,8 @@ def regenerate_downstream(stems, do_scans):
             mg = p50.get('migration_gain', 0.0)
             run(['plot_dual_freq.py', L, '--stage', 'migrated',
                  '--velocity', str(mv), '--gain', str(mg),
-                 '--depth-max', '25', '--depth-max-100', '15'],
+                 '--depth-max', str(p50.get('depth_max', 25.0)),
+                 '--depth-max-100', str(p100.get('depth_max', 15.0))],
                 'dual-freq migrated ' + L)
 
     # 3. flowerpetal 3D (HTML) -- always refresh so the browser shows current data

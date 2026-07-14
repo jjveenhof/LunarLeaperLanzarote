@@ -6,6 +6,12 @@ vertically at the same spatial and depth scale.
 The 100 MHz profile is positioned at its correct metre location on the line
 so the two panels are spatially aligned.
 
+The migrated stage annotates the tube ceiling/floor picks from
+Data/GPR/Migration/tube_picks.csv on both panels, and defaults gain to
+migration_gain and the depth crops to depth_max from the params JSONs -- so a
+bare `plot_dual_freq.py <line> --stage migrated` reproduces the pipeline's
+thesis figure. Fast pick iteration: edit the CSV, re-run that command.
+
 Usage:
     python plot_dual_freq.py Line2
     python plot_dual_freq.py Line3
@@ -19,12 +25,14 @@ Usage:
 
 import argparse
 import sys
+import csv
 import json
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+import matplotlib.patheffects as pe
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -51,7 +59,32 @@ X_OFFSET_100MHZ = {
 }
 
 CMAP = 'seismic'
+
+# tube ceiling/floor picks (annotated on migrated sections)
+PICKS_CSV = DATA_GPR / 'Migration' / 'tube_picks.csv'
+# white halo behind annotation text/arrow for contrast against the radargram
+HALO = [pe.withStroke(linewidth=2.5, foreground='white')]
 # ------------------------------------------------------------------------------
+
+
+def read_picks():
+    """Rows of tube_picks.csv (comment lines skipped); [] if the file is absent."""
+    if not PICKS_CSV.exists():
+        return []
+    with open(str(PICKS_CSV), encoding='utf-8') as f:
+        reader = csv.DictReader(r for r in f if not r.lstrip().startswith('#'))
+        return list(reader)
+
+
+def annotate_pick(ax, x_pick, y_pick, label, x_span, place_left):
+    """Horizontal arrow pointing at (x_pick, y_pick), text beside it."""
+    dx = 0.14 * x_span * (-1 if place_left else 1)
+    ax.annotate(label,
+                xy=(x_pick, y_pick), xytext=(x_pick + dx, y_pick),
+                ha='right' if place_left else 'left', va='center',
+                fontsize=8, color='black', path_effects=HALO,
+                arrowprops=dict(arrowstyle='->', color='black', lw=1.2,
+                                shrinkA=2, shrinkB=1))
 
 
 def find_npz(line, freq, stage):
@@ -104,6 +137,25 @@ def load_gain(line, freq):
     return 0.0
 
 
+def load_clip(line, freq):
+    """Per-profile report clip percentile from params JSON (`clip_percentile`);
+    99.5 if missing. CLI --clip overrides both panels."""
+    p = DATA_GPR / 'Processed' / '{}_{}_params.json'.format(line, freq)
+    if p.exists():
+        with open(str(p), encoding='utf-8') as f:
+            return float(json.load(f).get('clip_percentile', 99.5))
+    return 99.5
+
+
+def load_param(line, freq, key, default=None):
+    """Read an arbitrary field from the profile's params JSON."""
+    p = DATA_GPR / 'Processed' / '{}_{}_params.json'.format(line, freq)
+    if p.exists():
+        with open(str(p), encoding='utf-8') as f:
+            return json.load(f).get(key, default)
+    return default
+
+
 def load_flip(line, freq):
     """flip_x for {line}_{freq}, via the canonical load_flip in profile_geometry.
     Used only to place the 100 MHz x-offset label -- no GNSS geometry is attached
@@ -136,9 +188,27 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     d50,  x50,  t50,  depth50_precomputed,  v50,  ref_elev50,  elevs50  = load_npz(p50)
     d100, x100, t100, depth100_precomputed, v100, ref_elev100, elevs100 = load_npz(p100)
 
-    # --- display gain: use per-profile params JSON, CLI --gain overrides both ---
-    gain50  = gain_exp if gain_exp is not None else load_gain(line, '50MHz')
-    gain100 = gain_exp if gain_exp is not None else load_gain(line, '100MHz')
+    # --- display gain: per-profile params JSON, CLI --gain overrides both.
+    # Migrated stage uses migration_gain (matching the pipeline's migrated PNGs);
+    # other stages use gain_exponent.
+    def _default_gain(freq):
+        if stage50 == 'migrated':
+            return float(load_param(line, freq, 'migration_gain', 0.0))
+        return load_gain(line, freq)
+    gain50  = gain_exp if gain_exp is not None else _default_gain('50MHz')
+    gain100 = gain_exp if gain_exp is not None else _default_gain('100MHz')
+
+    # --- migrated stage: default depth caps from params depth_max, so a bare
+    # `plot_dual_freq.py <line> --stage migrated` reproduces the pipeline figure ---
+    if stage50 == 'migrated':
+        if depth_max is None:
+            depth_max = load_param(line, '50MHz', 'depth_max')
+        if depth_max_100 is None:
+            depth_max_100 = load_param(line, '100MHz', 'depth_max')
+
+    # --- clip: per-profile params JSON (clip_percentile), CLI --clip overrides both ---
+    clip50_pct  = clip_pct if clip_pct is not None else load_clip(line, '50MHz')
+    clip100_pct = clip_pct if clip_pct is not None else load_clip(line, '100MHz')
     # For time-domain data: sfreq = 1000/dt_ns.
     # For depth-domain (migrated): equivalent sfreq = 1000*v/(2*dz) to match time-domain gain.
     if gain50 > 0:
@@ -175,8 +245,8 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     x_max = max(float(x50[-1]), x_offset + float(x100[-1]))
 
     # --- colour limits (independent per panel) ---
-    clip50  = np.percentile(np.abs(d50),  clip_pct)
-    clip100 = np.percentile(np.abs(d100), clip_pct)
+    clip50  = np.percentile(np.abs(d50),  clip50_pct)
+    clip100 = np.percentile(np.abs(d100), clip100_pct)
 
     # --- displayed depth per panel (optionally capped; HF can cap tighter) ---
     depth50  = float(z50[-1])
@@ -279,10 +349,13 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     ax100.set_xlabel('Distance (m)', fontsize=9)
     plt.setp(ax50.get_xticklabels(), visible=False)
 
-    # Short per-panel labels only (frequency); stage/gain/offset live in the
-    # LaTeX caption. Kept via titles="auto" in the thesis save below.
-    ax50.set_title('50 MHz', fontsize=10, loc='left')
-    ax100.set_title('100 MHz', fontsize=10, loc='left')
+    # Per-panel labels: line, frequency, gain, clip -- self-contained enough to
+    # read on its own if a panel is cropped out for a report. Kept via
+    # titles="auto" in the thesis save below.
+    ax50.set_title('{} -- 50 MHz | gain {:.1f} | clip {:.1f}%'.format(
+        line, gain50, clip50_pct), fontsize=9, loc='left')
+    ax100.set_title('{} -- 100 MHz | gain {:.1f} | clip {:.1f}%'.format(
+        line, gain100, clip100_pct), fontsize=9, loc='left')
 
     # N/S endpoint labels in the (usually quiet) bottom corners.
     for ax in (ax50, ax100):
@@ -290,6 +363,37 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
                 ha='left',  va='bottom', fontsize=11, fontweight='bold', color='black')
         ax.text(0.99, 0.03, 'S', transform=ax.transAxes,
                 ha='right', va='bottom', fontsize=11, fontweight='bold', color='black')
+
+    # --- tube picks (migrated stage only): annotate ceiling/floor on both panels.
+    # CSV x is in the displayed 50 MHz coordinate; the 100 MHz panel is plotted at
+    # its offset position on that same axis, so no remapping is needed here. CSV
+    # depths are below LOCAL SURFACE -> convert to below-datum via each panel's
+    # surface curve at the pick x.
+    if stage50 == 'migrated':
+        row = next((r for r in read_picks() if r['line'] == line), None)
+        picks = []
+        if row:
+            if row.get('ceiling_depth_m') and row.get('x_ceiling_m'):
+                picks.append((float(row['x_ceiling_m']), float(row['ceiling_depth_m']),
+                              'ceiling {} m below surface'.format(row['ceiling_depth_m'])))
+            if row.get('floor_depth_app_m') and row.get('x_floor_m'):
+                picks.append((float(row['x_floor_m']), float(row['floor_depth_app_m']),
+                              'floor {} m below surface (apparent)'.format(row['floor_depth_app_m'])))
+        for _ax, _xd, _xoff, _refe, _elevs, _dmax in [
+            (ax50,  x50,  0.0,      ref_elev50,  elevs50,  disp50),
+            (ax100, x100, x_offset, ref_elev100, elevs100, disp100),
+        ]:
+            if _refe is None or _elevs is None:
+                continue
+            _xs = _xoff + _xd
+            for xp, d_bs, label in picks:
+                if not (float(_xs[0]) <= xp <= float(_xs[-1])):
+                    continue   # pick x outside this panel's data extent
+                y = float(np.interp(xp, _xs, _refe - _elevs)) + d_bs
+                if y > _dmax:
+                    continue   # below the displayed depth crop
+                annotate_pick(_ax, xp, y, label, x_max - x_min,
+                              place_left=(xp > 0.5 * (x_min + x_max)))
 
     # --- save ---
     out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR
@@ -320,8 +424,9 @@ def main():
                         help='Processing stage to load (default: best available; migrated must be explicit)')
     parser.add_argument('--velocity', type=float, default=V_DEFAULT,
                         help='Wave velocity in m/ns (default: {})'.format(V_DEFAULT))
-    parser.add_argument('--clip', type=float, default=99.5,
-                        help='Amplitude clip percentile (default: 99.5)')
+    parser.add_argument('--clip', type=float, default=None,
+                        help='Amplitude clip percentile override for BOTH panels '
+                             '(default: per-profile clip_percentile from params JSON)')
     parser.add_argument('--gain', type=float, default=None,
                         help='Display gain exponent override (default: read from params JSON)')
     parser.add_argument('--out', type=str, default=None,
