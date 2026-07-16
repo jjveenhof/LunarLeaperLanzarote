@@ -18,6 +18,7 @@ import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
 from pathlib import Path
@@ -29,6 +30,13 @@ from plot_utils import save_figure
 
 PICKS = [(5, 0), (3, 17), (5, 28), (5, 1)]      # (line, station), left -> right
 OUT = sd.BASE / "Results/Grav/Decay fitting/decay_examples.png"
+
+# Author the figure at the width it occupies on the page: \includegraphics[width=L]
+# scales the WHOLE figure (text included) by L/W. Thesis \linewidth = 6.1 in, placed
+# full-width -> W = 6.1. LARGER W -> text shrinks on the page; SMALLER W -> text grows.
+FIG_W_IN = 6.1
+FIG_H_IN = 5.4      # figure height (in); SMALLER -> shorter figure (avoids spilling onto its own page)
+NROWS, NCOLS = 2, 2   # panel grid; PICKS fills it row-major (reading order)
 
 
 def draw_panel(ax, grp):
@@ -68,32 +76,44 @@ def draw_panel(ax, grp):
 
     display_g = g_wmean if settled else g_inf
     display_se = se_wmean if settled else se_g_inf
-    status = "settled" if settled else rf"$\tau$={tau:.1f}m"
     line_id, station = int(grp["Line"].iloc[0]), int(grp["Station"].iloc[0])
-    ax.set_title(f"L{line_id} S{station}  {status}\n"
-                 f"g={display_g:.3f} $\\pm$ {display_se:.3f} mGal",
-                 fontsize=8, color=label_color, pad=4)
-    ax.set_xlabel("min", fontsize=7)
-    ax.tick_params(labelsize=6)
-    ax.yaxis.set_major_formatter(plt.matplotlib.ticker.FormatStrFormatter("%.3f"))
+    # No explicit fontsizes: inherit the rcParams defaults so titles / ticks / labels
+    # match the axis offset text (which the thesis width renders at the right size).
+    ax.set_title(f"L{line_id} S{station}\n"
+                 f"$g_\\infty$={display_g:.3f} $\\pm$ {display_se:.3f} mGal",
+                 color=label_color, pad=4)
+    ax.set_xlabel("t (minutes)")
+    # Shorten y-ticks: pull the repeated integer part into one offset label so the
+    # ticks show only the deviation. FORCE the offset to this panel's rounded mean so
+    # EVERY panel offsets (matplotlib's auto-offset skipped the ~5468 one).
+    fmt = mticker.ScalarFormatter()
+    fmt.set_useOffset(round(float(grav.mean())))
+    ax.yaxis.set_major_formatter(fmt)
+    ax.yaxis.set_major_locator(mticker.MaxNLocator(nbins=5))
     ax.margins(y=0.18)
 
 
 def main():
     df = pd.read_csv(sd.FILT_FILE, dtype={"Time": str, "Date": str})
-    fig, axes = plt.subplots(1, len(PICKS), figsize=(len(PICKS) * 3.0, 3.4))
+    fig, axes = plt.subplots(NROWS, NCOLS, figsize=(FIG_W_IN, FIG_H_IN))
+    axflat = axes.flat
 
-    for ax, (line, station) in zip(axes, PICKS):
+    for ax, (line, station) in zip(axflat, PICKS):
         grp = df[(df["Line"] == line) & (df["Station"] == station)]
         if grp.empty:
             raise SystemExit(f"no readings for L{line} S{station}")
         draw_panel(ax, grp)
 
     # Same y-span for all panels, each centred on its own data (as in plot_line).
-    span = max(ax.get_ylim()[1] - ax.get_ylim()[0] for ax in axes)
-    for ax in axes:
+    span = max(ax.get_ylim()[1] - ax.get_ylim()[0] for ax in axes.flat)
+    for ax in axes.flat:
         mid = sum(ax.get_ylim()) / 2
         ax.set_ylim(mid - span / 2, mid + span / 2)
+
+    # y-axis label on the left column only (shared meaning across the row).
+    for i, ax in enumerate(axes.flat):
+        if i % NCOLS == 0:
+            ax.set_ylabel("g (mGal)")
 
     legend_elements = [
         Line2D([0], [0], marker="o", color="steelblue", linestyle="None",
@@ -112,9 +132,19 @@ def main():
         mpatches.Patch(color="darkorange", alpha=0.3,
                        label="+/- SE(mean) (settled)"),
     ]
-    plt.tight_layout(rect=[0, 0.13, 1, 1.0], w_pad=1.4)
-    fig.legend(handles=legend_elements, loc="lower center", ncol=4, fontsize=7,
-               frameon=True, bbox_to_anchor=(0.5, 0.01))
+    # rect bottom = space reserved for the legend; smaller -> plots extend lower,
+    # closer to the legend (reduces the legend-to-plot gap).
+    # h_pad: vertical gap between the two plot rows (SMALLER -> rows closer).
+    # rect bottom: band reserved for the legend (SMALLER -> plots drop lower, closer
+    # to the legend). Both tightened to keep the figure off its own page.
+    plt.tight_layout(rect=[0, 0.13, 1, 1.0], w_pad=1.4, h_pad=0.6)
+    # Pin the legend to the plot block's width (columns expand to fill it) so the
+    # legend overhang no longer sets the figure width -- the axes do. 2 columns so
+    # the long labels don't overlap (4 would collide at this width).
+    left = min(ax.get_position().x0 for ax in axes.flat)
+    right = max(ax.get_position().x1 for ax in axes.flat)
+    fig.legend(handles=legend_elements, loc="lower center", ncol=2, frameon=True,
+               mode="expand", bbox_to_anchor=(left, 0.01, right - left, 0.15))
     fig.savefig(OUT, dpi=150, bbox_inches="tight")            # titled browse PNG
     thesis_path, _ = save_figure(fig, OUT.stem, "Grav", vector=True)  # title-free PDF
     print(f"saved browse -> {OUT.relative_to(sd.BASE)}")
