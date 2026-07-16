@@ -138,6 +138,22 @@ Scripts add this to sys.path at runtime; do not move it.
   This positioning IS the topo correction -- equivalent to topo_correction.py's static
   shift but it keeps real surface relief, so it uses `_processed.npz`, not topo data.
 
+## Plot tuning: generate once, then ask -- never self-iterate
+Claude CANNOT reliably judge whether a figure looks nice, is aligned, well spaced,
+or the right text size. So do NOT try, and do NOT loop on appearance.
+When making or adjusting a thesis plot:
+  1. Generate the plot ONCE.
+  2. STOP. Do not regenerate to chase a better look, and do not spend effort
+     guessing what "should" be tuned -- you are bad at judging that.
+  3. ASK the user what they want to tune (clip, aspect, text size, colours,
+     spacing, ...).
+  4. Add knobs for EXACTLY what the user names (module constant or CLI flag, with
+     an inline comment on effect direction), regenerate ONCE, hand back.
+Do NOT pre-expose every possible parameter -- add a knob only when asked. Re-run a
+plot on your own ONLY for correctness (crash, wrong data, a value the user changed),
+never to evaluate appearance. Processing is fast; the cost to avoid is Claude
+deciding what to tune and iterating on its own taste.
+
 ## Current Focus
 
 Processing pipeline, topo correction, draped 3D viz, and Stolt migration are all

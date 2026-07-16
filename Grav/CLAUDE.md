@@ -79,6 +79,22 @@ Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual
   GNSS projected onto the same straight profile axis), true scale, auto-overlays
   `lidar_line{N}.csv` ground truth. Station styling matches the other grav plots.
 
+## Plot tuning: generate once, then ask -- never self-iterate
+Claude CANNOT reliably judge whether a figure looks nice, is aligned, well spaced,
+or the right text size. So do NOT try, and do NOT loop on appearance.
+When making or adjusting a thesis plot:
+  1. Generate the plot ONCE.
+  2. STOP. Do not regenerate to chase a better look, and do not spend effort
+     guessing what "should" be tuned -- you are bad at judging that.
+  3. ASK the user what they want to tune (clip, aspect, text size, colours,
+     spacing, ...).
+  4. Add knobs for EXACTLY what the user names (module constant or CLI flag, with
+     an inline comment on effect direction), regenerate ONCE, hand back.
+Do NOT pre-expose every possible parameter -- add a knob only when asked. Re-run a
+plot on your own ONLY for correctness (crash, wrong data, a value the user changed),
+never to evaluate appearance. Processing is fast; the cost to avoid is Claude
+deciding what to tune and iterating on its own taste.
+
 ## Current Focus
 - Inversion built + uncertainty budget complete; **LiDAR-validated** (FINAL GPR geom):
   L3 untruncated ellipse 188+/-23 vs LiDAR 203 m^2 (~7%); L5 circle 196+/-36 vs 182 (~8%).
