@@ -72,8 +72,8 @@ Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual
   half-width a). Uncertainty budget combined in quadrature: data (chi2-rescaled
   grid interval) + GPR picks (analytic propagation) + velocity (systematic depth
   scaling) + detrend slope (from `detrend_trend_params_*.csv`); truncation kept
-  separate as a systematic bracket. GPR inputs FINAL (2026-07-01, per-line velocity):
-  L3 v 0.125, ceiling 3.5/floor 14.3 m (air-gap corrected); L5 v 0.11, ceiling 10.5 m
+  separate as a systematic bracket. GPR inputs FINAL (2026-07-16, BOTH lines migrated
+  at v 0.125): L3 ceiling 3.8/floor 14.6 m (air-gap corrected); L5 ceiling 8.6 m
   (no floor -> circle-only). No placeholders left.
 - `plot_model_terrain.py` -- best-fit tube under the measured surface (GPR-line
   GNSS projected onto the same straight profile axis), true scale, auto-overlays
@@ -96,11 +96,14 @@ never to evaluate appearance. Processing is fast; the cost to avoid is Claude
 deciding what to tune and iterating on its own taste.
 
 ## Current Focus
-- Inversion built + uncertainty budget complete; **LiDAR-validated** (FINAL GPR geom):
-  L3 untruncated ellipse 188+/-23 vs LiDAR 203 m^2 (~7%); L5 circle 196+/-36 vs 182 (~8%).
-  Both inside 1 SE; model roofs align with the LiDAR void tops. Ground truth favors the
-  UNTRUNCATED 2-D model -- the pit-truncation correction overshoots. Frame as model
-  selection, not input tuning (no inverse crime).
+- Inversion built + uncertainty budget complete; **LiDAR-validated** (FINAL GPR geom
+  2026-07-16): L3 untruncated ellipse 193+/-23 vs LiDAR 203 m^2 (~5%); L5 circle
+  167+/-30 vs 182 (~8% low, chi2_red 1.9). Both inside 1 SE. L3 roof aligns with the
+  LiDAR void top; NB the L5 8.6 m ceiling sits ~6 m above the LiDAR roof (~14.5 m) --
+  area validates but the L5 roof-alignment argument is weaker (flagged to GPR).
+  Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
+  overshoots (truncated L3: 210-320). Frame as model selection, not input tuning
+  (no inverse crime).
 - All profile plots read N (left) -> S (right) to match the GPR sections.
 
 ### Remaining uncertainty / sensitivity work (planned 2026-07-07)
