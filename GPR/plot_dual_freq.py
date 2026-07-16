@@ -32,7 +32,6 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
-import matplotlib.patheffects as pe
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -62,8 +61,36 @@ CMAP = 'seismic'
 
 # tube ceiling/floor picks (annotated on migrated sections)
 PICKS_CSV = DATA_GPR / 'Migration' / 'tube_picks.csv'
-# white halo behind annotation text/arrow for contrast against the radargram
-HALO = [pe.withStroke(linewidth=2.5, foreground='white')]
+V_AIR = 0.3   # m/ns, for the air-gap floor-depth correction (see cave_geometry)
+
+# --- pick-annotation layout (tune these to move the labels) -------------------
+# The default arrow is a dogleg: a diagonal leg from the label up to a corner
+# just beside the pick, then a short horizontal leg into the pick -- a "_/-"
+# shape with the arrowhead landing horizontally on the pick.
+LABEL_DX_FRAC = 0.175    # default horizontal label offset, fraction of section width
+LABEL_DROP_M  = 6.5     # default vertical drop of the label below the pick (m)
+LABEL_HLEG_M  = 9.0     # length (m) of the horizontal leg arriving at the pick
+LABEL_STUB_M  = 5.0     # length (m) of the horizontal stub next to the label
+LABEL_GAP_M   = 1.5     # gap (m) between the label text and the start of the stub
+
+# Per-panel overrides keyed by (line, freq). Any omitted key uses the default.
+#   dogleg  : True = angled "_/-" arrow (default); False = straight arrow
+#   drop_m  : label depth below the pick, metres (default LABEL_DROP_M)
+#   dx_frac : horizontal label offset, fraction of axis width (default LABEL_DX_FRAC)
+#   hleg_m  : horizontal-leg length at the pick, metres (default LABEL_HLEG_M)
+#   stub_m  : horizontal-stub length next to the label, metres (default LABEL_STUB_M)
+#   gray    : 'left' | 'right' | True -> park the label in that gray margin
+#             (straight arrow, label at pick depth against the data edge). True
+#             auto-picks the wider margin. Overrides dogleg/drop_m/dx_frac.
+# Optional per-pick nudge: add label_dx_m / label_dy_m (+ _floor_ variants)
+# columns to tube_picks.csv to move a single label on top of the panel default
+# (blank/absent -> panel default). Normally left out -- tune the panel here.
+PICK_PANEL_CFG = {
+    ('Line3', '50MHz'):  dict(drop_m=LABEL_DROP_M + 2.0, stub_m = 3.0),
+    ('Line3', '100MHz'): dict(gray=True),
+    ('Line5', '50MHz'):  dict(dx_frac=0.3),
+    ('Line5', '100MHz'): dict(gray='left'),
+}
 # ------------------------------------------------------------------------------
 
 
@@ -76,33 +103,101 @@ def read_picks():
         return list(reader)
 
 
+def _opt_float(row, key):
+    """Optional numeric CSV field -> float, or None if the column is absent/blank."""
+    v = row.get(key)
+    return float(v) if v not in (None, '') else None
+
+
+def cave_geometry(ceiling, floor_app, v_rock, v_air=V_AIR):
+    """Air-gap-corrected floor depth and cave height from the picks. The floor
+    reflection travels through air below the ceiling, so its apparent depth
+    (migrated at v_rock throughout) is stretched; rescale that segment by
+    v_air/v_rock. Returns (floor_depth_real, cave_height_real) in metres."""
+    floor_real = ceiling + (floor_app - ceiling) * v_air / v_rock
+    return floor_real, floor_real - ceiling
+
+
 def pick_entries(row):
-    """Short (x, depth_below_surface, label) tuples for a tube_picks.csv row.
-    Labels are deliberately terse -- the apparent/real distinction and the
-    'below surface' reference belong in the figure caption, not on the panel."""
+    """Short (x, depth_below_surface, label, label_dx, label_dy) tuples for a
+    tube_picks.csv row. Labels are deliberately terse -- the apparent/real
+    distinction and the 'below surface' reference belong in the figure caption.
+    label_dx / label_dy are optional per-pick label offsets (None -> use the
+    module defaults) read from label_dx_m / label_dy_m CSV columns if present."""
     entries = []
     if row.get('ceiling_depth_m') and row.get('x_ceiling_m'):
         entries.append((float(row['x_ceiling_m']), float(row['ceiling_depth_m']),
-                        'ceiling {} m'.format(row['ceiling_depth_m'])))
+                        'ceiling {} m'.format(row['ceiling_depth_m']),
+                        _opt_float(row, 'label_dx_m'), _opt_float(row, 'label_dy_m')))
     if row.get('floor_depth_app_m') and row.get('x_floor_m'):
         entries.append((float(row['x_floor_m']), float(row['floor_depth_app_m']),
-                        'floor {} m'.format(row['floor_depth_app_m'])))
+                        'floor {} m'.format(row['floor_depth_app_m']),
+                        _opt_float(row, 'label_dx_floor_m'), _opt_float(row, 'label_dy_floor_m')))
     return entries
 
 
-def annotate_pick(ax, x_pick, y_pick, label, x_lo, x_hi):
-    """Horizontal arrow pointing at (x_pick, y_pick), text beside it. Prefers the
-    LEFT side (usually the quieter North end); falls back to the right only if the
-    text would run off the left edge."""
-    dx_mag = 0.14 * (x_hi - x_lo)
+def annotate_pick(ax, x_pick, y_pick, label, x_lo, x_hi, data_lo, data_hi,
+                  cfg=None, label_dx=None, label_dy=None):
+    """Arrow from a label to the pick at (x_pick, y_pick). Behaviour per the
+    panel config `cfg` (see PICK_PANEL_CFG):
+
+      * gray -> park the label in the left/right gray margin against the data
+        edge, straight horizontal arrow at the pick depth.
+      * otherwise a dogleg ('_/-'): horizontal leg at the pick, angled leg down
+        to a label dropped drop_m below it, offset dx_frac to the quieter side.
+
+    x_lo/x_hi are the full axis limits; data_lo/data_hi the panel's data extent
+    (they differ where a sub-line leaves gray margins). label_dx / label_dy
+    (metres) are optional per-pick nudges applied on top."""
+    cfg = cfg or {}
+
+    gray = cfg.get('gray')
+    if gray:
+        left_room, right_room = data_lo - x_lo, x_hi - data_hi
+        side = gray if gray in ('left', 'right') else \
+            ('left' if left_room >= right_room else 'right')
+        m = 0.01 * (x_hi - x_lo)
+        xt, ha = (data_lo - m, 'right') if side == 'left' else (data_hi + m, 'left')
+        ax.annotate(label,
+                    xy=(x_pick, y_pick), xytext=(xt, y_pick),
+                    ha=ha, va='center', fontsize=8, color='black',
+                    arrowprops=dict(arrowstyle='->', color='black', lw=1.2,
+                                    shrinkA=2, shrinkB=3, connectionstyle='arc3,rad=0'))
+        return
+
+    dx_mag = cfg.get('dx_frac', LABEL_DX_FRAC) * (x_hi - x_lo)
     place_left = (x_pick - dx_mag) >= x_lo
-    dx = -dx_mag if place_left else dx_mag
-    ax.annotate(label,
-                xy=(x_pick, y_pick), xytext=(x_pick + dx, y_pick),
-                ha='right' if place_left else 'left', va='center',
-                fontsize=8, color='black', path_effects=HALO,
-                arrowprops=dict(arrowstyle='->', color='black', lw=1.2,
-                                shrinkA=2, shrinkB=1))
+    dx = (-dx_mag if place_left else dx_mag) + (label_dx or 0.0)
+    dy = cfg.get('drop_m', LABEL_DROP_M) + (label_dy or 0.0)
+
+    label_x, label_y = x_pick + dx, y_pick + dy
+    ha = 'right' if place_left else 'left'
+
+    if cfg.get('dogleg', True):
+        # True dogleg with SHARP corners, "_/-": a horizontal stub out of the
+        # label (after a small gap), a diagonal leg up, then a horizontal leg
+        # into the pick with the arrowhead. stub_m and hleg_m size the two
+        # horizontal legs independently.
+        hleg = cfg.get('hleg_m', LABEL_HLEG_M)
+        stub = cfg.get('stub_m', LABEL_STUB_M)
+        sgn  = 1.0 if place_left else -1.0      # toward the pick
+        stub_x0  = label_x + sgn * LABEL_GAP_M  # stub start (gap off the text)
+        stub_x1  = stub_x0 + sgn * stub         # stub end / diagonal start
+        corner_x = x_pick - sgn * hleg          # diagonal end / pick-leg start
+        ax.plot([stub_x0, stub_x1, corner_x], [label_y, label_y, y_pick],
+                color='black', lw=1.2, solid_joinstyle='miter', zorder=5)
+        ax.annotate('', xy=(x_pick, y_pick), xytext=(corner_x, y_pick),
+                    zorder=5,
+                    arrowprops=dict(arrowstyle='->', color='black', lw=1.2,
+                                    shrinkA=0, shrinkB=3))
+        ax.text(label_x, label_y, label, ha=ha, va='center',
+                fontsize=8, color='black', zorder=5)
+    else:
+        ax.annotate(label,
+                    xy=(x_pick, y_pick), xytext=(label_x, label_y),
+                    ha=ha, va='center', fontsize=8, color='black', zorder=5,
+                    arrowprops=dict(arrowstyle='->', color='black', lw=1.2,
+                                    shrinkA=2, shrinkB=3, connectionstyle='arc3,rad=0'))
 
 
 def find_npz(line, freq, stage):
@@ -182,7 +277,7 @@ def load_flip(line, freq):
 
 
 def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=None,
-                depth_max=None, depth_max_100=None):
+                depth_max=None, depth_max_100=None, annotate=True, name_suffix=''):
     # --- find files ---
     if stage_override:
         p50  = find_npz(line, '50MHz',  stage_override)
@@ -387,29 +482,38 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
     # its offset position on that same axis, so no remapping is needed here. CSV
     # depths are below LOCAL SURFACE -> convert to below-datum via each panel's
     # surface curve at the pick x.
-    if stage50 == 'migrated':
+    if stage50 == 'migrated' and annotate:
         row = next((r for r in read_picks() if r['line'] == line), None)
         picks = pick_entries(row) if row else []
-        for _ax, _xd, _xoff, _refe, _elevs, _dmax in [
-            (ax50,  x50,  0.0,      ref_elev50,  elevs50,  disp50),
-            (ax100, x100, x_offset, ref_elev100, elevs100, disp100),
+        # derived cave geometry (not stored in the CSV) -- print for traceability
+        if row and row.get('floor_depth_app_m') and v50 is not None:
+            fr, ch = cave_geometry(float(row['ceiling_depth_m']),
+                                   float(row['floor_depth_app_m']), v50)
+            print('  {}: floor_real {:.1f} m, cave height {:.1f} m '
+                  '(v_rock={:.3f}, v_air={})'.format(line, fr, ch, v50, V_AIR))
+        for _ax, _xd, _xoff, _refe, _elevs, _dmax, _freq in [
+            (ax50,  x50,  0.0,      ref_elev50,  elevs50,  disp50,  '50MHz'),
+            (ax100, x100, x_offset, ref_elev100, elevs100, disp100, '100MHz'),
         ]:
             if _refe is None or _elevs is None:
                 continue
             _xs = _xoff + _xd
-            for xp, d_bs, label in picks:
+            cfg = PICK_PANEL_CFG.get((line, _freq), {})
+            for xp, d_bs, label, ldx, ldy in picks:
                 if not (float(_xs[0]) <= xp <= float(_xs[-1])):
                     continue   # pick x outside this panel's data extent
                 y = float(np.interp(xp, _xs, _refe - _elevs)) + d_bs
                 if y > _dmax:
                     continue   # below the displayed depth crop
-                annotate_pick(_ax, xp, y, label, x_min, x_max)
+                annotate_pick(_ax, xp, y, label, x_min, x_max,
+                              float(_xs[0]), float(_xs[-1]),
+                              cfg=cfg, label_dx=ldx, label_dy=ldy)
 
     # --- save ---
     out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR
     out_root.mkdir(parents=True, exist_ok=True)
     if save_path is None:
-        save_path = out_root / '{}_dual_freq_{}.png'.format(line, stage50)
+        save_path = out_root / '{}_dual_freq_{}{}.png'.format(line, stage50, name_suffix)
     save_path = Path(save_path).resolve()
     print('Saving to: ' + str(save_path))
     plt.savefig(str(save_path), dpi=180, bbox_inches='tight')   # titled browse PNG
@@ -446,14 +550,32 @@ def main():
     parser.add_argument('--depth-max-100', type=float, default=None,
                         help='Tighter depth cap (m) for the 100 MHz panel only '
                              '(default: same as --depth-max)')
+    parser.add_argument('--annotate', choices=['both', 'on', 'off'], default='both',
+                        help='migrated stage: emit both the plain and the picks-'
+                             'annotated figure (both, default), or just one')
     args = parser.parse_args()
 
     lines    = [args.line] if args.line else ['Line2', 'Line3', 'Line5']
     out_path = Path(args.out) if args.out else None
-    for line in lines:
+
+    def _emit(line, annotate, suffix):
         make_figure(line, args.stage, args.velocity, args.clip, out_path,
                     gain_exp=args.gain, depth_max=args.depth_max,
-                    depth_max_100=args.depth_max_100)
+                    depth_max_100=args.depth_max_100,
+                    annotate=annotate, name_suffix=suffix)
+
+    for line in lines:
+        # Only the migrated stage carries pick annotations. Default 'both' writes
+        # the plain figure ({line}_dual_freq_migrated) and the annotated thesis
+        # figure ({line}_dual_freq_migrated_picks). A fixed --out disables the
+        # split (single file). Non-migrated stages are always unannotated.
+        if args.stage == 'migrated' and out_path is None:
+            if args.annotate in ('both', 'off'):
+                _emit(line, False, '')
+            if args.annotate in ('both', 'on'):
+                _emit(line, True, '_picks')
+        else:
+            _emit(line, args.annotate == 'on', '')
 
 
 if __name__ == '__main__':

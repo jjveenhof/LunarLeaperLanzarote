@@ -34,7 +34,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from gpr_processing import display_gain
-from plot_dual_freq import (X_OFFSET_100MHZ, PICKS_CSV, load_flip,
+from plot_dual_freq import (X_OFFSET_100MHZ, PICKS_CSV, PICK_PANEL_CFG, load_flip,
                             read_picks, annotate_pick, pick_entries)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
@@ -122,7 +122,8 @@ def plot_line(row, freq):
 
     # --- picks: CSV depths are below LOCAL SURFACE; convert to depth below datum.
     # CSV x positions are in the 50 MHz displayed coordinate; remap for 100 MHz.
-    for xp_50, d_bs, label in pick_entries(row):
+    cfg = PICK_PANEL_CFG.get((row['line'], freq), {})
+    for xp_50, d_bs, label, ldx, ldy in pick_entries(row):
         xp = pick_x_to_local(row['line'], freq, xp_50)
         if not (float(x[0]) <= xp <= float(x[-1])):
             print('    [note] {}: pick x={} maps outside this section -- skipped'.format(
@@ -133,7 +134,8 @@ def plot_line(row, freq):
             print('    [note] {}: pick at {:.1f} m below datum is below the {:.0f} m '
                   'crop -- skipped'.format(stem, y, dmax))
             continue
-        annotate_pick(ax, xp, y, label, float(x[0]), float(x[-1]))
+        annotate_pick(ax, xp, y, label, float(x[0]), float(x[-1]),
+                      float(x[0]), float(x[-1]), cfg=cfg, label_dx=ldx, label_dy=ldy)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     out = OUT_DIR / (stem + '_picks.png')
