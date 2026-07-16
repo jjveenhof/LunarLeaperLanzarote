@@ -63,15 +63,19 @@ FIG.mkdir(parents=True, exist_ok=True)
 # ---- per-line presets: GPR picks + which shapes are fittable ----------------
 # Override any of these from the command line (see parse_args / module docstring).
 LINE_PRESETS = {
-    # GPR-derived geometry + migration velocity per line (2026-07-01). Depths in m
+    # GPR-derived geometry + migration velocity per line (2026-07-16). Depths in m
     # below surface (floors air-gap corrected). Velocity feeds the velocity-
-    # uncertainty channel and DIFFERS per line (L3 0.125, L5 0.11 m/ns).
-    # L3 re-pick: ceiling 3.5, floor 14.3 (from apparent 8.0). Supersedes 4.0/14.6.
-    3: dict(ceiling=3.5, floor=14.3, modes=("circle", "ellipse"),
+    # uncertainty channel; BOTH lines now migrated at 0.125 m/ns (L5 remigrated
+    # from 0.11 -- diffraction collapse admits 0.10-0.13, single value settled).
+    # Picks live in Data/GPR/Migration/tube_picks.csv (ceiling + apparent floor);
+    # floor here = air-gap corrected: ceiling + (floor_app - ceiling)*0.3/v_rock.
+    # L3 refined pick: ceiling 3.8, floor 14.6 (apparent 8.3). Supersedes 3.5/14.3.
+    3: dict(ceiling=3.8, floor=14.6, modes=("circle", "ellipse"),
             velocity=0.125, velocity_sigma=0.010),
-    # L5: no floor reflector -> circle-only. velocity_sigma assumed (GPR gave none).
-    5: dict(ceiling=10.5, floor=None, modes=("circle",),
-            velocity=0.11, velocity_sigma=0.010),
+    # L5: no floor reflector -> circle-only. Ceiling re-picked on the v=0.125
+    # remigration: 8.6 (was 10.5 at v=0.11). velocity_sigma assumed (GPR gave none).
+    5: dict(ceiling=8.6, floor=None, modes=("circle",),
+            velocity=0.125, velocity_sigma=0.010),
 }
 
 # ---- fixed constants --------------------------------------------------------
@@ -87,7 +91,7 @@ WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 
 # ---- runtime config (set by parse_args in main; defaults = Line 3 preset) ---
 LINE = 3
-CEILING0, FLOOR0 = 3.5, 14.3
+CEILING0, FLOOR0 = 3.8, 14.6
 MODES = ("circle", "ellipse")
 SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
 # GPR migration velocity: picks are time picks, so velocity scales ALL depths

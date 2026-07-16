@@ -266,8 +266,8 @@ def main():
                                  gridspec_kw={'hspace': 0.22})
         ax2[0].imshow(before, aspect='auto', cmap='seismic', vmin=-clip_b, vmax=clip_b,
                       extent=ext_ba, interpolation='nearest')
-        ax2[0].set_title('{} -- before migration | clip {:.1f}%'.format(pretty, clip_pct),
-                         fontsize=9, loc='left')
+        ax2[0].set_title('{} -- before migration{} | clip {:.1f}%'.format(
+            pretty, gain_str, clip_pct), fontsize=9, loc='left')
         ax2[0].set_ylabel('Depth (m)', fontsize=9)
         ax2[1].imshow(after, aspect='auto', cmap='seismic', vmin=-clip_a, vmax=clip_a,
                       extent=ext_ba, interpolation='nearest')

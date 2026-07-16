@@ -2,8 +2,8 @@
 Forest plot: gravimetric tube cross-sectional area for every inversion config
 (line x shape x truncation) against the LiDAR ground truth.
 
-Values are from invert_tube.py with the FINAL GPR geometry (2026-07-01):
-L3 ceiling 3.5 / floor 14.3 m (v 0.125); L5 ceiling 10.5 m (v 0.11, circle-only).
+Values are from invert_tube.py with the FINAL GPR geometry (2026-07-16, both lines
+migrated at v 0.125): L3 ceiling 3.8 / floor 14.6 m; L5 ceiling 8.6 m (circle-only).
 Areas are 1-SE totals (data + picks + velocity + detrend in quadrature).
 If the inversion is re-run, update RESULTS below.
 """
@@ -23,13 +23,13 @@ FIG = BASE / "Results/Grav/Inversion"
 
 # (line, shape, truncation, area m^2, 1-SE m^2)
 RESULTS = [
-    (3, "ellipse", "inf", 188, 23),
-    (3, "circle",  "inf", 216, 30),
-    (3, "ellipse", "15",  205, 27),
-    (3, "circle",  "15",  260, 47),
-    (3, "ellipse", "10",  221, 32),
-    (3, "circle",  "10",  308, 57),
-    (5, "circle",  "inf", 196, 36),
+    (3, "ellipse", "inf", 193, 23),
+    (3, "circle",  "inf", 227, 32),
+    (3, "ellipse", "15",  210, 28),
+    (3, "circle",  "15",  278, 48),
+    (3, "ellipse", "10",  227, 33),
+    (3, "circle",  "10",  320, 58),
+    (5, "circle",  "inf", 167, 30),
 ]
 LIDAR = {3: 203, 5: 182}                        # ground-truth area per line (m^2)
 

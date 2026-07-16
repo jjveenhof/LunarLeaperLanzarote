@@ -63,7 +63,11 @@ def display_gain(data, sfreq, exponent):
     return gained
 
 
-def apply_processing(data, time_axis, sfreq, params):
+def apply_processing(data, time_axis, sfreq, params, capture=None):
+    """See module docstring. If `capture` is a list, a ('step label', data copy,
+    time-axis copy) snapshot is appended for the raw input and after each step
+    that actually RAN (skipped steps leave no entry) -- used by
+    plot_processing_steps.py to show the pipeline stage by stage."""
     from gdp.preprocessing.filtering import dewow as _dewow, filter_data
     from gdp.preprocessing.normalizing import normalize_data
 
@@ -71,9 +75,16 @@ def apply_processing(data, time_axis, sfreq, params):
     n_orig        = processed.shape[0]
     time_axis_out = time_axis.copy()
 
+    def _cap(label):
+        if capture is not None:
+            capture.append((label, processed.copy(), time_axis_out.copy()))
+
+    _cap('raw')
+
     # 0. polarity convention (Tx/Rx swap): global sign, recorded per profile
     if float(params.get('polarity', 1.0)) < 0:
         processed = -processed
+        _cap('polarity')
 
     # 1. tracewise-RMS normalisation
     if params.get('normalize', False):
@@ -85,9 +96,11 @@ def apply_processing(data, time_axis, sfreq, params):
         end_idx   = min(max(end_idx, start_idx + 1), n_orig)
         processed = normalize_data(processed, typ='tracewise-rms-window',
                                    window=(start_idx, end_idx))
+        _cap('normalize')
 
     # 2. dewow
     processed = _dewow(processed, window_length=int(params['dewow_window']))
+    _cap('dewow')
 
     # 3. time-zero shift + trailing-zero trim
     tzero = float(params.get('tzero_shift', 0.0))
@@ -97,6 +110,7 @@ def apply_processing(data, time_axis, sfreq, params):
         if trim > 0:
             processed     = processed[:n_orig - trim, :]
             time_axis_out = time_axis_out[:n_orig - trim]
+        _cap('tzero')
 
     # 4. max-time crop
     max_time_ns = params.get('max_time_ns', None)
@@ -104,6 +118,7 @@ def apply_processing(data, time_axis, sfreq, params):
         mask          = time_axis_out <= float(max_time_ns)
         processed     = processed[mask, :]
         time_axis_out = time_axis_out[mask]
+        _cap('crop')
 
     # 5. spectral whitening (before bandpass)
     whiten_window = int(params.get('whiten_window', 0))
@@ -115,17 +130,20 @@ def apply_processing(data, time_axis, sfreq, params):
         processed  = np.fft.irfft(
             spec / np.maximum(amp_smooth, 1e-15),
             n=n_s, axis=0)
+        _cap('whiten')
 
     # 6. bandpass
     processed = filter_data(
         processed,
         (float(params['bandpass_low']), float(params['bandpass_high'])),
         sfreq, 'bandpass', N=4)
+    _cap('bandpass')
 
     # 7. SVD removal
     n_svd = int(params.get('n_svd', 0))
     if n_svd > 0:
         from gdp.preprocessing.image_processing import remove_svd
         processed, _ = remove_svd(processed, low_s=0, high_s=n_svd)
+        _cap('svd')
 
     return processed, time_axis_out

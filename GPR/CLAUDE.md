@@ -66,7 +66,9 @@ The interactive GPRProcessing.ipynb and the standalone multiples schematic
 | `gpr_processing.py` | Core `apply_processing` function -- shared by notebook + run_pipeline |
 | `run_pipeline.py` | Batch re-process all profiles using saved `_params.json` |
 | `topo_correction.py` | Static topo correction using GNSS; reads `_processed.npz` |
-| `plot_dual_freq.py` | Side-by-side comparison of 50 MHz vs 100 MHz for the same line; gain read from params JSON per panel |
+| `plot_dual_freq.py` | Stacked 50/100 MHz figure per line; migrated stage emits plain + `_picks`-annotated versions (tube_picks.csv; layout via `PICK_PANEL_CFG`); gain/clip/depth from params JSON |
+| `plot_picks.py` | Single-frequency migrated sections with pick annotations (imports helpers from plot_dual_freq) |
+| `plot_processing_steps.py` | Stacked one-panel-per-step figure (apply_processing `capture=`); default Line3_50MHz |
 | `migrate_velocity_scan.py` | Stolt migration velocity scan; outputs interactive HTML with N/S annotations |
 | `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo) |
 | `check_polarity.py` | Per-profile polarity convention check (mean-trace first break) |
@@ -104,8 +106,10 @@ Scripts add this to sys.path at runtime; do not move it.
   `velocity`. The picking itself is manual (read the velocity-scan HTML); once you
   settle a velocity, set `velocity` to it and add `migrate: true` + `migration_gain`.
   Currently flagged on Line3_50/100MHz and Line5_50/100MHz (gain 2.5). Depth-below-
-  surface picks are recorded in `Data/GPR/Migration/tube_picks.csv` (air-gap corrected
-  for the floor; L5 is ceiling-only, no floor reflector). Line 2 is intentionally not
+  surface picks live in `Data/GPR/Migration/tube_picks.csv` -- PICK-ONLY columns
+  (line, ceiling, x_ceiling, floor_app, x_floor, notes); derived floor_real/cave
+  height are computed by `plot_dual_freq.cave_geometry()` (v_air 0.3) and printed,
+  not stored. L5 is ceiling-only, no floor reflector. Line 2 is intentionally not
   flagged (see Current Focus). Flower-petal migration is planned on straight
   sub-segments only. The notebook merges on save, so these pipeline-managed keys
   survive a re-save of the params from GPRProcessing.ipynb.
@@ -157,9 +161,13 @@ deciding what to tune and iterating on its own taste.
 ## Current Focus
 
 Processing pipeline, topo correction, draped 3D viz, and Stolt migration are all
-stable. Velocity determination is DONE: picked blind from diffraction collapse
-(L3 0.125, L5 0.11 m/ns), validated against the LiDAR afterwards, and handed to the
-gravity inversion. Picks recorded in `Data/GPR/Migration/tube_picks.csv`.
+stable. Velocity determination is DONE and SETTLED at v = 0.125 m/ns for BOTH lines
+(L5 remigrated from its earlier 0.11 on 2026-07-16; diffraction collapse admits
+0.10-0.13, one value chosen). Final picks: L3 ceiling 3.8 / floor_app 8.3 (real
+14.6), L5 ceiling 8.6, in `tube_picks.csv`. Handed to the gravity inversion
+(LINE_PRESETS updated 2026-07-16; Grav instructed via QandA to re-run everything).
+NB: LiDAR may NOT be used to justify the velocity pick (blind-pick constraint) --
+diffraction collapse is the only admissible evidence.
 
 Active work: migrate the flower petals. Plan -- take reasonably straight sub-segments
 of each petal and run them through the existing Stolt code, then 3D-plot the migrated
