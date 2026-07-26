@@ -114,12 +114,30 @@ def line_profile(df, line_id):
     d = df[(df["Line"] == line_id) & (df["StationType"] != "base")]
     g = (d.groupby("loc_id")
            .agg(Easting=("Easting", "mean"), Northing=("Northing", "mean"),
-                CBA=("CBA", "mean"), SE=("SE_SBA", "mean"))
+                CBA=("CBA", "mean"), SE=("SE_SBA", "mean"),
+                StationType=("StationType", "first"))  # for tie-station markers
            .dropna(subset=["Easting", "Northing", "CBA"])
            .reset_index())
     g["Station"] = g["loc_id"]
     g = along_profile_distance(g).sort_values("dist").reset_index(drop=True)
     return g
+
+
+TIE_MARKER = "v"   # tie stations drawn as down-triangles; regular stations as circles
+
+
+def plot_points(ax, x, y, se, stype, color, ms=6, capsize=3, elinewidth=1.2,
+                label=None):
+    """Errorbar scatter splitting tie stations (triangles) from regular (circles)."""
+    x, y, se, stype = (np.asarray(a) for a in (x, y, se, stype))
+    is_tie = stype == "tie"
+    # Regular points (carry the legend label); ties as marginally larger triangles.
+    for mask, marker, size, lab in ((~is_tie, "o", ms, label),
+                                    (is_tie, TIE_MARKER, ms + 1, None)):
+        if mask.any():
+            ax.errorbar(x[mask], y[mask], yerr=se[mask], fmt=marker, color=color,
+                        capsize=capsize, markersize=size, elinewidth=elinewidth,
+                        zorder=3, label=lab)
 
 
 def main():
@@ -176,16 +194,16 @@ def main():
         g["CBA_detrended"] = resid
         g["Line"] = line_id
         out_rows.append(g[["Line", "loc_id", "Easting", "Northing", "dist",
-                           "CBA", "SE", "trend", "CBA_detrended"]])
+                           "CBA", "SE", "trend", "CBA_detrended", "StationType"]])
 
         # -- Plot: CBA + robust trend (top), detrended residual (bottom) -------
         color = LINE_COLORS[line_id]
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7), sharex=True,
                                        gridspec_kw={"height_ratios": [2, 1]})
 
-        ax1.errorbar(x, y, yerr=g["SE"].values, fmt="o", color=color,
-                     capsize=3, markersize=6, elinewidth=1.2, zorder=3,
-                     label=r"CBA $\pm$ SE")
+        stype = g["StationType"].values
+        plot_points(ax1, x, y, g["SE"].values, stype, color,
+                    label=r"CBA $\pm$ SE")
         ax1.plot(x, trend, "--", color="0.35", linewidth=1.6, zorder=2,
                  label="robust trend")
         # Slope-CI fan: rotate the trend about the profile mid-point by +/-1.96 SE.
@@ -209,26 +227,29 @@ def main():
 
         # Keep the fit ingredients for the combined "all fits" figure built below.
         fit_panels.append(dict(line_id=line_id, x=x, y=y, se=g["SE"].values,
-                               trend=trend, xm=xm, ym=ym, lo_km=lo_km,
+                               stype=stype, trend=trend, xm=xm, ym=ym, lo_km=lo_km,
                                hi_km=hi_km, color=color, info=info))
 
         ax1.set_ylabel("CBA (mGal)")
         ax1.set_title(rf"Line {line_id} $-$ regional de-trend (robust weighted)",
                       fontweight="bold", fontsize=12)
-        ax1.legend(fontsize=8, loc="upper right", framealpha=0.85)
+        h, l = ax1.get_legend_handles_labels()
+        h.append(Line2D([], [], marker=TIE_MARKER, color=color, linestyle="None",
+                        markersize=7))
+        l.append("tie station")
+        ax1.legend(h, l, fontsize=8, loc="upper right", framealpha=0.85)
         ax1.grid(True, alpha=0.25, linestyle="--")
-        ax1.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        ax1.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
         # Headroom so the info box (top-left) and legend (top-right) clear the data.
         ylo, yhi = ax1.get_ylim()
         ax1.set_ylim(ylo, yhi + 0.42 * (yhi - ylo))
 
         ax2.axhline(0, color="0.35", linewidth=1.0)
-        ax2.errorbar(x, resid, yerr=g["SE"].values, fmt="o", color=color,
-                     capsize=3, markersize=6, elinewidth=1.2, zorder=3)
+        plot_points(ax2, x, resid, g["SE"].values, stype, color)
         ax2.set_xlabel("Distance along profile (m)")
-        ax2.set_ylabel("Detrended (mGal)")
+        ax2.set_ylabel("Detrended CBA (mGal)")
         ax2.grid(True, alpha=0.25, linestyle="--")
-        ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
         # Plot N->S (N on the left) to match the GPR sections; dist stays S->N.
         # dist increases N->S from 0 (grav_utils) -> N already on the left
         ax2.text(0.006, 0.96, "N", transform=ax2.transAxes, ha="left", va="top",
@@ -255,18 +276,17 @@ def main():
 
     # Clean combined figure of the detrended residuals -- the exact data the
     # tube inversion fits (one panel per line, SE bars, S->N orientation).
-    fig, axes = plt.subplots(len(LINES), 1,
+    fig, axes = plt.subplots(len(LINES), 1, sharey=True,   # shared y -> lines directly comparable
                              figsize=(COMBINED_W_IN, COMBINED_PANEL_H_IN * len(LINES)))
     for ax, line_id in zip(np.atleast_1d(axes), LINES):
         g = out[out["Line"] == line_id].sort_values("dist")
         ax.axhline(0, color="0.6", lw=0.8, zorder=1)
-        ax.errorbar(g["dist"], g["CBA_detrended"], yerr=g["SE"], fmt="o",
-                    color=LINE_COLORS[line_id], capsize=2, markersize=3,
-                    elinewidth=1.0, zorder=3)
-        ax.set_ylabel("Detrended (mGal)")
+        plot_points(ax, g["dist"], g["CBA_detrended"], g["SE"], g["StationType"],
+                    LINE_COLORS[line_id], ms=3, capsize=2, elinewidth=1.0)
+        ax.set_ylabel("Detrended CBA (mGal)")
         ax.set_title(f"Line {line_id}", fontweight="bold", loc="left")
         ax.grid(True, alpha=0.25, linestyle="--")
-        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
         # dist increases N->S from 0 (grav_utils) -> N already on the left
         ax.text(0.006, 0.96, "N", transform=ax.transAxes, ha="left", va="top",
                 fontweight="bold", fontsize=11, color="0.3")
@@ -274,9 +294,12 @@ def main():
                 fontweight="bold", fontsize=11, color="0.3")
     np.atleast_1d(axes)[-1].set_xlabel("Distance along profile (m)")
     # One shared legend (all panels identical); neutral marker, colour = line.
-    fig.legend(handles=[Line2D([0], [0], marker="o", color="0.3", linestyle="None",
-                               markersize=4, label=r"detrended CBA $\pm$ SE (colour = line)")],
-               loc="lower center", ncol=1, frameon=True, bbox_to_anchor=(0.5, 0.0))
+    fig.legend(handles=[
+        Line2D([0], [0], marker="o", color="0.3", linestyle="None", markersize=4,
+               label=r"detrended CBA $\pm$ SE (colour = line)"),
+        Line2D([0], [0], marker=TIE_MARKER, color="0.3", linestyle="None",
+               markersize=5, label="tie station"),
+    ], loc="lower center", ncol=2, frameon=True, bbox_to_anchor=(0.5, 0.0))
     fig.suptitle("Detrended CBA residual (per line)", fontweight="bold")
     fig.tight_layout(rect=[0, 0.05, 1, 0.97])
     combo = FIG_DIR / "detrended_residuals.png"
@@ -286,13 +309,13 @@ def main():
 
     # Combined figure of the regional fits (the top panels of the per-line figures,
     # stacked): CBA + robust trend + 95% CI, one row per line.
-    figf, axesf = plt.subplots(len(LINES), 1,
+    figf, axesf = plt.subplots(len(LINES), 1, sharey=True,   # shared y -> lines directly comparable
                                figsize=(COMBINED_W_IN, COMBINED_PANEL_H_IN * len(LINES)))
     for ax, p in zip(np.atleast_1d(axesf), fit_panels):
         x, y, se = p["x"], p["y"], p["se"]
         xm = p["xm"]
-        ax.errorbar(x, y, yerr=se, fmt="o", color=p["color"], capsize=2,
-                    markersize=3, elinewidth=1.0, zorder=3)
+        plot_points(ax, x, y, se, p["stype"], p["color"], ms=3, capsize=2,
+                    elinewidth=1.0)
         ax.plot(x, p["trend"], "--", color="0.35", lw=1.6, zorder=2)
         ax.fill_between(x, p["ym"] + (p["lo_km"] / 1000.0) * (x - xm),
                         p["ym"] + (p["hi_km"] / 1000.0) * (x - xm),
@@ -301,7 +324,7 @@ def main():
         ax.set_ylabel("CBA (mGal)")
         ax.set_title(f"Line {p['line_id']}", fontweight="bold", loc="left")
         ax.grid(True, alpha=0.25, linestyle="--")
-        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
         # dist increases N->S from 0 (grav_utils) -> N already on the left
         ax.text(0.006, 0.96, "N", transform=ax.transAxes, ha="left", va="top",
                 fontweight="bold", fontsize=11, color="0.3")
@@ -312,9 +335,11 @@ def main():
     figf.legend(handles=[
         Line2D([0], [0], marker="o", color="0.3", linestyle="None", markersize=4,
                label=r"CBA $\pm$ SE (colour = line)"),
+        Line2D([0], [0], marker=TIE_MARKER, color="0.3", linestyle="None",
+               markersize=5, label="tie station"),
         Line2D([0], [0], color="0.35", linestyle="--", lw=1.6, label="robust trend"),
         mpatches.Patch(color="0.35", alpha=0.15, label="95% CI"),
-    ], loc="lower center", ncol=3, frameon=True, bbox_to_anchor=(0.5, 0.0))
+    ], loc="lower center", ncol=4, frameon=True, bbox_to_anchor=(0.5, 0.0))
     figf.suptitle("Regional de-trend fits (per line)", fontweight="bold")
     figf.tight_layout(rect=[0, 0.05, 1, 0.97])
     fitscombo = FIG_DIR / "detrend_fits.png"

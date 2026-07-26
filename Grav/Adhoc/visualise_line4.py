@@ -220,7 +220,7 @@ ax.text(p15_dist, ymax, "L3 P15", ha="center", va="bottom", fontsize=8, color="g
 ax.set_xlabel("Distance from P4 (m)")
 ax.set_ylabel(YLABEL)
 ax.set_title("Cave signature comparison -- Lines 3 and 4", fontweight="bold", fontsize=12)
-ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.2f"))
 ax.grid(True, alpha=0.25, linestyle="--")
 def mk_handle(face, edge, label):
     return mlines.Line2D([], [], marker=MARKER, color=edge, linestyle="None",
