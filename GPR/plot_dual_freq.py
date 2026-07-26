@@ -32,6 +32,7 @@ import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from matplotlib.patches import Ellipse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -63,6 +64,14 @@ CMAP = 'seismic'
 PICKS_CSV = DATA_GPR / 'Migration' / 'tube_picks.csv'
 V_AIR = 0.3   # m/ns, for the air-gap floor-depth correction (see cave_geometry)
 
+# free-form interpretive annotations (points/ellipses) -- NOT picks, do not feed
+# the inversion; see the CSV header for the point/ellipse column layout
+ANNOTATIONS_CSV = DATA_GPR / 'Migration' / 'annotations.csv'
+# NOTE: point annotations reuse PICK_PANEL_CFG for their panel (not a separate
+# config) -- guarantees identical dogleg geometry/side to the tube picks, so a
+# point annotation and a tube pick at the same x never cross, just offset by
+# their own depth.
+
 # --- pick-annotation layout (tune these to move the labels) -------------------
 # The default arrow is a dogleg: a diagonal leg from the label up to a corner
 # just beside the pick, then a short horizontal leg into the pick -- a "_/-"
@@ -88,7 +97,7 @@ LABEL_GAP_M   = 1.5     # gap (m) between the label text and the start of the st
 PICK_PANEL_CFG = {
     ('Line3', '50MHz'):  dict(drop_m=LABEL_DROP_M + 2.0, stub_m = 3.0),
     ('Line3', '100MHz'): dict(gray=True),
-    ('Line5', '50MHz'):  dict(dx_frac=0.3),
+    ('Line5', '50MHz'):  dict(dx_frac=0.28),
     ('Line5', '100MHz'): dict(gray='left'),
 }
 # ------------------------------------------------------------------------------
@@ -99,6 +108,15 @@ def read_picks():
     if not PICKS_CSV.exists():
         return []
     with open(str(PICKS_CSV), encoding='utf-8') as f:
+        reader = csv.DictReader(r for r in f if not r.lstrip().startswith('#'))
+        return list(reader)
+
+
+def read_annotations():
+    """Rows of annotations.csv (comment lines skipped); [] if the file is absent."""
+    if not ANNOTATIONS_CSV.exists():
+        return []
+    with open(str(ANNOTATIONS_CSV), encoding='utf-8') as f:
         reader = csv.DictReader(r for r in f if not r.lstrip().startswith('#'))
         return list(reader)
 
@@ -144,7 +162,8 @@ def annotate_pick(ax, x_pick, y_pick, label, x_lo, x_hi, data_lo, data_hi,
       * gray -> park the label in the left/right gray margin against the data
         edge, straight horizontal arrow at the pick depth.
       * otherwise a dogleg ('_/-'): horizontal leg at the pick, angled leg down
-        to a label dropped drop_m below it, offset dx_frac to the quieter side.
+        to a label dropped drop_m below it, offset dx_frac to the quieter side
+        (or forced via cfg['side'] = 'left'/'right').
 
     x_lo/x_hi are the full axis limits; data_lo/data_hi the panel's data extent
     (they differ where a sub-line leaves gray margins). label_dx / label_dy
@@ -166,7 +185,8 @@ def annotate_pick(ax, x_pick, y_pick, label, x_lo, x_hi, data_lo, data_hi,
         return
 
     dx_mag = cfg.get('dx_frac', LABEL_DX_FRAC) * (x_hi - x_lo)
-    place_left = (x_pick - dx_mag) >= x_lo
+    side = cfg.get('side')   # force 'left'/'right'; default: auto (whichever fits)
+    place_left = (side == 'left') if side else ((x_pick - dx_mag) >= x_lo)
     dx = (-dx_mag if place_left else dx_mag) + (label_dx or 0.0)
     dy = cfg.get('drop_m', LABEL_DROP_M) + (label_dy or 0.0)
 
@@ -508,6 +528,41 @@ def make_figure(line, stage_override, velocity, clip_pct, save_path, gain_exp=No
                 annotate_pick(_ax, xp, y, label, x_min, x_max,
                               float(_xs[0]), float(_xs[-1]),
                               cfg=cfg, label_dx=ldx, label_dy=ldy)
+
+            # --- free-form interpretive annotations (points/ellipses; not picks) ---
+            for r in read_annotations():
+                if r['line'] != line or r['freq'] != _freq:
+                    continue
+                x1 = float(r['x1_m'])
+                d1 = float(r['depth1_m'])
+                if r['type'] == 'point':
+                    if not (float(_xs[0]) <= x1 <= float(_xs[-1])):
+                        continue
+                    y = float(np.interp(x1, _xs, _refe - _elevs)) + d1
+                    if y > _dmax:
+                        continue
+                    # SAME cfg as the tube picks on this panel (not ANNOTATION_CFG):
+                    # identical dogleg geometry/side, offset only by this point's own
+                    # depth, so a point pick and a tube pick at the same x can never cross.
+                    annotate_pick(_ax, x1, y, r['label'], x_min, x_max,
+                                  float(_xs[0]), float(_xs[-1]), cfg=cfg)
+                elif r['type'] == 'ellipse':
+                    x2 = float(r['x2_m'])
+                    d2 = float(r['depth2_m'])
+                    cx = 0.5 * (x1 + x2)
+                    if not (float(_xs[0]) <= cx <= float(_xs[-1])):
+                        continue
+                    # single topo offset at the ellipse's lateral centre -- a
+                    # rough region marker, not a topo-following outline
+                    surf_c = float(np.interp(cx, _xs, _refe - _elevs))
+                    y1, y2 = surf_c + d1, surf_c + d2
+                    if 0.5 * (y1 + y2) > _dmax:
+                        continue
+                    _ax.add_patch(Ellipse((cx, 0.5 * (y1 + y2)), abs(x2 - x1), abs(y2 - y1),
+                                          edgecolor='black', facecolor='none',
+                                          linestyle='dashed', linewidth=1.3, zorder=5))
+                    _ax.text(cx, y2 + 0.4, r['label'], ha='center', va='top',
+                             fontsize=8, color='black', zorder=5)
 
     # --- save ---
     out_root = MIGRATED_DIR if stage50 == 'migrated' else OUT_DIR
