@@ -38,9 +38,6 @@ MARKERS     = {"base": "s", "tie": "^", "regular": "o"}
 MARKERSIZES = {"base": 8,   "tie": 8,   "regular": 6}
 LABELS      = {"base": "Base", "tie": "Tie", "regular": "Regular"}
 
-# Lines whose profile x-axis should be flipped
-INVERT_LINES = {4}
-
 
 
 # -- Plot ----------------------------------------------------------------------
@@ -93,8 +90,7 @@ def plot_line(ax, line_df, line_id):
     ax.grid(True, alpha=0.25, linestyle="--")
     ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
 
-    if line_id in INVERT_LINES:
-        ax.invert_xaxis()
+    # dist increases N->S from 0 (grav_utils) -> N already on the left
 
     # -- Legend: loops by colour, types by marker ------------------------------
     loop_handles = []

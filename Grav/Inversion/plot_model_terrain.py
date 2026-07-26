@@ -15,12 +15,14 @@ along the profile azimuth would give. We draw:
 Axes are equal-aspect so shapes are undistorted for direct comparison.
 
 LiDAR overlay: drop a CSV next to this script named  lidar_line{LINE}.csv  with
-columns  x,z  where
-    x = distance along the gravity profile (m), same origin as our 'dist'
+columns  x,z,easting,northing  where
+    easting,northing = absolute REGCAN95 coords of each cave-outline vertex
     z = elevation (m, REGCAN95 orthometric height)
-i.e. the cave outline sampled in the vertical plane of the gravity line. It is
-then plotted directly on top. (Ask the LiDAR expert to slice along the line; the
-line's station coordinates are in the detrended CSV / corrections file.)
+    x = legacy along-profile distance (no longer used; we project E,N ourselves)
+i.e. the cave outline sampled in the vertical plane of the gravity line. The E,N
+are projected onto the same profile axis as the gravity 'dist', so the overlay is
+co-registered regardless of the distance-origin convention. (Ask the LiDAR expert
+to slice along the line and include easting/northing per vertex.)
 
 Run:  python plot_model_terrain.py --line 3 [--truncate 10] [--modes circle ellipse]
 """
@@ -268,7 +270,11 @@ def main():
 
         # LiDAR ground-truth overlay.
         if Ld is not None:
-            lx, lz = Ld["x"], Ld["z"]
+            # Project the LiDAR vertices onto the SAME profile axis as the gravity
+            # 'dist' (proj applied to the CSV's easting/northing), exactly as the GPR
+            # surface is projected -- co-registered regardless of distance convention,
+            # with no baked distance coordinate to go stale.
+            lx, lz = proj(Ld["easting"], Ld["northing"]), Ld["z"]
             area_lidar = 0.5 * abs(np.dot(lx, np.roll(lz, -1))
                                    - np.dot(lz, np.roll(lx, -1)))
             ax.plot(lx, lz, color=LIDAR_COLOR, lw=2.6, zorder=8,
@@ -308,8 +314,7 @@ def main():
         ax.legend(handles, labels, fontsize=8, loc="lower right",
                   handler_map={tuple: HandlerTuple(ndivide=None)})
         ax.grid(True, alpha=0.25, ls="--")
-        # Plot N->S (N on the left) to match the GPR sections.
-        ax.invert_xaxis()
+        # dist increases N->S from 0 (grav_utils) -> N already on the left, matching GPR.
         ax.text(0.006, 0.97, "N", transform=ax.transAxes, ha="left", va="top",
                 fontweight="bold", fontsize=13, color="0.3")
         ax.text(0.994, 0.97, "S", transform=ax.transAxes, ha="right", va="top",

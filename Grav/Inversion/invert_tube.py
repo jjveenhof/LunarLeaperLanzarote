@@ -335,9 +335,7 @@ def run_mode(mode, sx, d, se):
     a2.set_title(rf"Line {LINE} {mode} fit ($\chi^2_\nu$={chi2red:.1f})")
     a2.legend(fontsize=8)
     a2.grid(True, alpha=0.25, ls="--")
-    # Plot N->S (N on the left) to match the GPR sections; dist stays S->N.
-    a1.invert_xaxis()
-    a2.invert_xaxis()
+    # dist increases N->S from 0 (grav_utils) -> N already on the left, matching GPR.
     a2.text(0.006, 0.97, "N", transform=a2.transAxes, ha="left", va="top",
             fontweight="bold", fontsize=11, color="0.3")
     a2.text(0.994, 0.97, "S", transform=a2.transAxes, ha="right", va="top",

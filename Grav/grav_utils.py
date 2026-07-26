@@ -79,7 +79,13 @@ def along_profile_distance(df):
     axis     = eigvecs[:, eigvals.argmax()]   # unit vector along line
 
     proj = Ec * axis[0] + Nc * axis[1]
-    proj -= proj.min()                         # shift so origin = 0
+    # Pin the sign so 'dist' increases toward the SOUTH, i.e. origin (0) at the
+    # NORTHERN end. Plots then read N->S left->right WITHOUT inverting the x-axis,
+    # matching the GPR sections, and the coordinate is deterministic (the PCA
+    # eigenvector sign is otherwise arbitrary and differed line to line).
+    if np.corrcoef(proj, N)[0, 1] > 0:         # proj grows northward -> flip
+        proj = -proj
+    proj -= proj.min()                         # origin (0) at the northern end
 
     df.loc[gnss.index, "dist"] = proj
 

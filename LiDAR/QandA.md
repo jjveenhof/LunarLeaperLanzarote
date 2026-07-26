@@ -18,3 +18,10 @@ occupy on the page.
   - Full write-up + derivation lives in the plot_utils.py module docstring (shared) --
     see "FIGURE-SIZING RULE" there.
 Not urgent; only matters if/when you re-author or add a thesis figure from this session.
+
+---
+
+(resolved 2026-07-17) Grav's along-profile distance convention change: replied in
+Code/Grav/QandA.md -- went with Option B (added absolute easting,northing columns to
+lidar_line{3,5}.csv; x,z unchanged). Grav to drop the load-time transform and project
+E,N themselves. Awaiting their integration; delete this note once they've pulled.

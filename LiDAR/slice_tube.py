@@ -9,9 +9,12 @@ model is. We project the slab points onto (dist-along-line, absolute elevation),
 then trace a closed outline by angular binning about the centroid (median wall
 radius per bin -- robust to the slab's scatter) and integrate its area (shoelace).
 
-Output: Code/Grav/Inversion/lidar_line{N}.csv  with columns  x,z
-  x = distance from the dist=0 end of the gravity line (m)
+Output: Code/Grav/Inversion/lidar_line{N}.csv  with columns  x,z,easting,northing
+  x = distance from the dist=0 end of the gravity line (m; slice-internal origin)
   z = absolute REGCAN95 orthometric elevation (m)
+  easting,northing = absolute EPSG:4083 coords of the vertex. A consumer can project
+    these onto any profile-axis / distance-origin convention itself, so no baked
+    distance coordinate can go stale (see QandA.md, Grav 2026-07-17).
 plus the printed cross-sectional area (m^2).
 
 Slice geometry (EPSG:4083 / REGCAN95 UTM 28N), from QandA.md:
@@ -31,6 +34,25 @@ LINE_GEOM = {
     3: dict(origin=(650620.7, 3227095.7), azimuth=353.6),
     5: dict(origin=(649766.8, 3227446.2), azimuth=358.3),
 }
+
+
+def load_xyz(path):
+    """E,N,Z from cols 0,1,2 of an ASCII cloud, skipping a CloudCompare '//' header
+    line and the lone point-count line (np.loadtxt chokes on both)."""
+    rows = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("//"):
+                continue
+            parts = line.split()
+            if len(parts) < 3:
+                continue
+            try:
+                rows.append((float(parts[0]), float(parts[1]), float(parts[2])))
+            except ValueError:
+                continue
+    return np.asarray(rows)
 
 
 def project_to_line(E, N, origin, azimuth_deg):
@@ -81,7 +103,7 @@ def main():
     args = p.parse_args()
 
     geom = LINE_GEOM[args.line]
-    d = np.loadtxt(args.xyz, usecols=(0, 1, 2))
+    d = load_xyz(args.xyz)
     dist, perp = project_to_line(d[:, 0], d[:, 1], geom["origin"], geom["azimuth"])
     m = np.abs(perp) < args.halfwidth
     x, z = dist[m], d[m, 2]
@@ -97,9 +119,15 @@ def main():
         # close the polygon for a clean drawn loop
         cx = np.append(ox, ox[0])
         cz = np.append(oz, oz[0])
+        # absolute EPSG:4083 coords of each vertex: it lies in the line's vertical
+        # plane (perp offset ~0), so E,N = origin + dist * along-line unit vector.
+        az = np.deg2rad(geom["azimuth"])
+        u = np.array([np.sin(az), np.cos(az)])
+        cE = geom["origin"][0] + cx * u[0]
+        cN = geom["origin"][1] + cx * u[1]
         out = GRAV_INV / f"lidar_line{args.line}.csv"
-        np.savetxt(out, np.column_stack([cx, cz]), delimiter=",",
-                   header="x,z", comments="", fmt="%.4f")
+        np.savetxt(out, np.column_stack([cx, cz, cE, cN]), delimiter=",",
+                   header="x,z,easting,northing", comments="", fmt="%.4f")
         print(f"    wrote -> {out.relative_to(BASE)}")
 
 

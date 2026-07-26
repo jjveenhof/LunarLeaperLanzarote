@@ -35,7 +35,6 @@ from grav_utils import BASE, PROC_DIR, along_profile_distance
 DEFAULT   = PROC_DIR / "lsq_drift_decay.csv"
 
 LOOP_CMAP   = plt.cm.tab10
-INVERT_LINES = {4}
 
 
 # -- Per-location mean GNSS position -------------------------------------------
@@ -68,9 +67,6 @@ def plot_line(ax, line_df, line_id):
 
     plot_df["dist"] = plot_df["loc_id"].map(dist_map)
 
-    if line_id in INVERT_LINES:
-        max_dist = plot_df["dist"].max()
-        plot_df["dist"] = max_dist - plot_df["dist"]
 
     loops    = sorted(plot_df["loop_id"].dropna().unique())
     loop_map = {l: i for i, l in enumerate(loops)}
