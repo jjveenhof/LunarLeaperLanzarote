@@ -137,7 +137,10 @@ def main():
     # h_pad: vertical gap between the two plot rows (SMALLER -> rows closer).
     # rect bottom: band reserved for the legend (SMALLER -> plots drop lower, closer
     # to the legend). Both tightened to keep the figure off its own page.
-    plt.tight_layout(rect=[0, 0.13, 1, 1.0], w_pad=1.4, h_pad=0.6)
+    # rect bottom (0.20) sits ABOVE the legend's top (~0.16) so the bottom-row
+    # x-axis labels are no longer covered by the legend. Lower it toward the legend
+    # to tighten the gap, but not below ~0.17 or the labels collide again.
+    plt.tight_layout(rect=[0, 0.20, 1, 1.0], w_pad=1.4, h_pad=0.6)
     # Pin the legend to the plot block's width (columns expand to fill it) so the
     # legend overhang no longer sets the figure width -- the axes do. 2 columns so
     # the long labels don't overlap (4 would collide at this width).

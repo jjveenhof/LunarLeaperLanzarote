@@ -27,6 +27,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
+import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 from pathlib import Path
 import sys as _sys, pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
@@ -37,6 +39,12 @@ from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, rho_str, along_profile_dista
 
 LINES = [2, 3, 5]                                   # Line 4 skipped on purpose
 LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}   # QGIS map palette
+
+# Combined (multi-panel) figures are authored at the width they occupy on the page
+# so text renders at the intended thesis size (\includegraphics[width=L] scales the
+# whole figure by L/W; thesis \linewidth = 6.1 in). LARGER width -> text shrinks.
+COMBINED_W_IN = 6.1        # thesis full-text width
+COMBINED_PANEL_H_IN = 2.0  # per-line panel height (in); raise for taller panels
 
 # Regional gradient read off the island-scale Bouguer map (Camacho et al. 2001):
 # the direction in which gravity INCREASES and its magnitude. Each 1-D profile
@@ -131,6 +139,7 @@ def main():
 
     chi2_by_line = {}
     param_rows = []                                    # per-line trend params
+    fit_panels = []                                    # ingredients for the combined fits figure
     for line_id in LINES:
         g = line_profile(df, line_id)
         x, y, se = g["dist"].values, g["CBA"].values, g["SE"].values
@@ -198,6 +207,11 @@ def main():
                  fontsize=9, bbox=dict(boxstyle="round", fc="white", ec="0.7",
                                        alpha=0.85))
 
+        # Keep the fit ingredients for the combined "all fits" figure built below.
+        fit_panels.append(dict(line_id=line_id, x=x, y=y, se=g["SE"].values,
+                               trend=trend, xm=xm, ym=ym, lo_km=lo_km,
+                               hi_km=hi_km, color=color, info=info))
+
         ax1.set_ylabel("CBA (mGal)")
         ax1.set_title(rf"Line {line_id} $-$ regional de-trend (robust weighted)",
                       fontweight="bold", fontsize=12)
@@ -216,7 +230,7 @@ def main():
         ax2.grid(True, alpha=0.25, linestyle="--")
         ax2.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
         # Plot N->S (N on the left) to match the GPR sections; dist stays S->N.
-        ax2.invert_xaxis()                                 # sharex -> flips ax1 too
+        # dist increases N->S from 0 (grav_utils) -> N already on the left
         ax2.text(0.006, 0.96, "N", transform=ax2.transAxes, ha="left", va="top",
                  fontweight="bold", fontsize=11, color="0.3")
         ax2.text(0.994, 0.96, "S", transform=ax2.transAxes, ha="right", va="top",
@@ -241,29 +255,72 @@ def main():
 
     # Clean combined figure of the detrended residuals -- the exact data the
     # tube inversion fits (one panel per line, SE bars, S->N orientation).
-    fig, axes = plt.subplots(len(LINES), 1, figsize=(11, 3.3 * len(LINES)))
+    fig, axes = plt.subplots(len(LINES), 1,
+                             figsize=(COMBINED_W_IN, COMBINED_PANEL_H_IN * len(LINES)))
     for ax, line_id in zip(np.atleast_1d(axes), LINES):
         g = out[out["Line"] == line_id].sort_values("dist")
         ax.axhline(0, color="0.6", lw=0.8, zorder=1)
         ax.errorbar(g["dist"], g["CBA_detrended"], yerr=g["SE"], fmt="o",
-                    color=LINE_COLORS[line_id], capsize=3, markersize=5,
-                    elinewidth=1.2, zorder=3, label=r"detrended CBA $\pm$ SE")
+                    color=LINE_COLORS[line_id], capsize=2, markersize=3,
+                    elinewidth=1.0, zorder=3)
         ax.set_ylabel("Detrended (mGal)")
         ax.set_title(f"Line {line_id}", fontweight="bold", loc="left")
         ax.grid(True, alpha=0.25, linestyle="--")
         ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
-        ax.legend(fontsize=8, loc="lower right")
-        ax.invert_xaxis()          # plot N->S (N left) to match the GPR sections
+        # dist increases N->S from 0 (grav_utils) -> N already on the left
         ax.text(0.006, 0.96, "N", transform=ax.transAxes, ha="left", va="top",
                 fontweight="bold", fontsize=11, color="0.3")
         ax.text(0.994, 0.96, "S", transform=ax.transAxes, ha="right", va="top",
                 fontweight="bold", fontsize=11, color="0.3")
     np.atleast_1d(axes)[-1].set_xlabel("Distance along profile (m)")
+    # One shared legend (all panels identical); neutral marker, colour = line.
+    fig.legend(handles=[Line2D([0], [0], marker="o", color="0.3", linestyle="None",
+                               markersize=4, label=r"detrended CBA $\pm$ SE (colour = line)")],
+               loc="lower center", ncol=1, frameon=True, bbox_to_anchor=(0.5, 0.0))
     fig.suptitle("Detrended CBA residual (per line)", fontweight="bold")
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.05, 1, 0.97])
     combo = FIG_DIR / "detrended_residuals.png"
     fig.savefig(combo, dpi=150, bbox_inches="tight")
+    save_figure(fig, combo.stem, "Grav", vector=True)          # title-free thesis PDF
     print(f"Residual figure    -> {combo.relative_to(BASE)}")
+
+    # Combined figure of the regional fits (the top panels of the per-line figures,
+    # stacked): CBA + robust trend + 95% CI, one row per line.
+    figf, axesf = plt.subplots(len(LINES), 1,
+                               figsize=(COMBINED_W_IN, COMBINED_PANEL_H_IN * len(LINES)))
+    for ax, p in zip(np.atleast_1d(axesf), fit_panels):
+        x, y, se = p["x"], p["y"], p["se"]
+        xm = p["xm"]
+        ax.errorbar(x, y, yerr=se, fmt="o", color=p["color"], capsize=2,
+                    markersize=3, elinewidth=1.0, zorder=3)
+        ax.plot(x, p["trend"], "--", color="0.35", lw=1.6, zorder=2)
+        ax.fill_between(x, p["ym"] + (p["lo_km"] / 1000.0) * (x - xm),
+                        p["ym"] + (p["hi_km"] / 1000.0) * (x - xm),
+                        color="0.35", alpha=0.15, zorder=1)
+        # Numbers (slope / CI / azimuth / chi2) live in the trend table, not here.
+        ax.set_ylabel("CBA (mGal)")
+        ax.set_title(f"Line {p['line_id']}", fontweight="bold", loc="left")
+        ax.grid(True, alpha=0.25, linestyle="--")
+        ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
+        # dist increases N->S from 0 (grav_utils) -> N already on the left
+        ax.text(0.006, 0.96, "N", transform=ax.transAxes, ha="left", va="top",
+                fontweight="bold", fontsize=11, color="0.3")
+        ax.text(0.994, 0.96, "S", transform=ax.transAxes, ha="right", va="top",
+                fontweight="bold", fontsize=11, color="0.3")
+    np.atleast_1d(axesf)[-1].set_xlabel("Distance along profile (m)")
+    # One shared legend for all panels (neutral marker; colour = line).
+    figf.legend(handles=[
+        Line2D([0], [0], marker="o", color="0.3", linestyle="None", markersize=4,
+               label=r"CBA $\pm$ SE (colour = line)"),
+        Line2D([0], [0], color="0.35", linestyle="--", lw=1.6, label="robust trend"),
+        mpatches.Patch(color="0.35", alpha=0.15, label="95% CI"),
+    ], loc="lower center", ncol=3, frameon=True, bbox_to_anchor=(0.5, 0.0))
+    figf.suptitle("Regional de-trend fits (per line)", fontweight="bold")
+    figf.tight_layout(rect=[0, 0.05, 1, 0.97])
+    fitscombo = FIG_DIR / "detrend_fits.png"
+    figf.savefig(fitscombo, dpi=150, bbox_inches="tight")
+    save_figure(figf, fitscombo.stem, "Grav", vector=True)     # title-free thesis PDF
+    print(f"Fits figure        -> {fitscombo.relative_to(BASE)}")
     plt.show()
 
 

@@ -37,6 +37,9 @@ L4_COLOR   = "#FF4DB8"   # pink   -- Line 4 points
 L3_COLOR   = "#FF5C00"   # orange -- Line 3 points
 PATH_COLOR = "0.6"       # neutral grey for the connecting profile paths
 
+# Author at the page width so text renders at the thesis size (FIGURE-SIZING RULE).
+FIG_W_IN, FIG_H_IN = 6.1, 3.2
+
 # Mode selection:
 #   --cba          Complete Bouguer Anomaly (terrain-corrected) file
 #   --rho X        Simple Bouguer Anomaly file for density X
@@ -52,7 +55,7 @@ if USE_CBA:
     IN_FILE  = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_fmt(rho)}_with_TC.csv"
     G_COL    = "CBA"
     SE_COL   = "SE_CBA"   # may be overridden to SE_SBA after the file is loaded
-    YLABEL   = f"Complete Bouguer Anomaly (mGal)  [rho = {rho} g/cm3]"
+    YLABEL   = "CBA (mGal)"
     SAVE_DIR = BASE / "Results/Grav/Bouguer"
     FILESTEM = f"line4_combined_CBA_rho{rho_fmt(rho)}"
 elif rho_arg is not None:
@@ -176,55 +179,59 @@ print(f"  Interpolated at P15 position = {g_interp:+.4f} mGal")
 print(f"  Residual (P15 - interpolated) = {delta*1000:+.1f} uGal")
 
 # -- Plot ----------------------------------------------------------------------
-fig, ax = plt.subplots(figsize=(13, 5))
+fig, ax = plt.subplots(figsize=(FIG_W_IN, FIG_H_IN))
 
 
-# Marker shape per arm; colour still encodes line membership (pink L4 / orange L3)
-NE_MARKER, NW_MARKER, L3_MARKER = "o", "s", "^"
+# Colour encodes the survey line (pink L4 / orange L3). Line 4's two arms are then
+# split by FILL (NE filled, NW open). ONE circle shape throughout -- the colour+fill
+# split keeps the three groups distinct in this plot's own legend.
+MARKER = "o"
 
 
-def plot_arm(dists, gvals, sevals, src_lines, marker):
-    """Grey connecting path, then per-point error bars: colour=line, shape=arm."""
+def plot_arm(dists, gvals, sevals, src_lines, open_l4=False):
+    """Grey connecting path, then per-point error bars. Colour = line; Line-4 points
+    are OPEN on the NW arm (open_l4=True), filled otherwise; Line-3 points (including
+    the shared P15) are always filled."""
     ax.plot(dists, gvals, "-", color=PATH_COLOR, linewidth=1.4, zorder=2)
     for i, (d, g) in enumerate(zip(dists, gvals)):
         se = sevals[i] if sevals is not None else None
         color = L4_COLOR if src_lines[i] == 4 else L3_COLOR
-        ax.errorbar(d, g, yerr=se, fmt=marker, color=color,
-                    capsize=3, markersize=6, elinewidth=1.4, zorder=3)
+        face  = "none" if (open_l4 and src_lines[i] == 4) else color
+        ax.errorbar(d, g, yerr=se, fmt=MARKER, color=color,
+                    markerfacecolor=face, markeredgecolor=color,
+                    capsize=2, markersize=4, elinewidth=1.0, zorder=3)
 
 
 ne_se = l4_ne[SE_COL].values if SE_COL else None
 l3_se = l3_sub[SE_COL].values if SE_COL else None
 
-plot_arm(ne_dists, l4_ne[G_COL].values, ne_se, [4] * len(ne_dists), NE_MARKER)
-plot_arm(nw_dists, nw_g,                nw_se, nw_lines,            NW_MARKER)
-plot_arm(l3_dists, l3_sub[G_COL].values, l3_se, [3] * len(l3_dists), L3_MARKER)
+plot_arm(ne_dists, l4_ne[G_COL].values, ne_se, [4] * len(ne_dists))
+plot_arm(nw_dists, nw_g,                nw_se, nw_lines,            open_l4=True)
+plot_arm(l3_dists, l3_sub[G_COL].values, l3_se, [3] * len(l3_dists))
 
 # Mark P4 and P15
 ax.axvline(0,         color="k",    linewidth=0.9, linestyle="--", alpha=0.6)
 ax.axvline(p15_dist,  color="grey", linewidth=0.9, linestyle=":",  alpha=0.7)
 
 ymax = ax.get_ylim()[1]
-ax.text(0,        ymax, "P4",  ha="center", va="bottom", fontsize=8, fontweight="bold")
-ax.text(p15_dist, ymax, "P15", ha="center", va="bottom", fontsize=8, color="grey")
+ax.text(0,        ymax, "L4 P4",  ha="center", va="bottom", fontsize=8, fontweight="bold")
+ax.text(p15_dist, ymax, "L3 P15", ha="center", va="bottom", fontsize=8, color="grey")
 
 ax.set_xlabel("Distance from P4 (m)")
 ax.set_ylabel(YLABEL)
 ax.set_title("Cave signature comparison -- Lines 3 and 4", fontweight="bold", fontsize=12)
 ax.yaxis.set_major_formatter(mticker.FormatStrFormatter("%.3f"))
 ax.grid(True, alpha=0.25, linestyle="--")
-def shape_handle(marker, label):
-    return mlines.Line2D([], [], marker=marker, color="black", linestyle="None",
-                         markerfacecolor="none", markersize=7, label=label)
+def mk_handle(face, edge, label):
+    return mlines.Line2D([], [], marker=MARKER, color=edge, linestyle="None",
+                         markerfacecolor=face, markeredgecolor=edge,
+                         markersize=6, label=label)
 
 ax.legend(handles=[
-    # Colour -> survey line
-    mpatches.Patch(color=L4_COLOR, label="Line 4"),
-    mpatches.Patch(color=L3_COLOR, label="Line 3"),
-    # Shape -> arm / map orientation
-    shape_handle(NE_MARKER, "NE arm  (perp. to cave)"),
-    shape_handle(L3_MARKER, "N arm (~45 deg from cave)"),
-    shape_handle(NW_MARKER, "NW arm  (along cave)"),
+    # colour = line, fill = which Line-4 arm
+    mk_handle(L4_COLOR, L4_COLOR, "Line 4, NE arm (perp. to cave)"),
+    mk_handle("none",   L4_COLOR, "Line 4, NW arm (along cave)"),
+    mk_handle(L3_COLOR, L3_COLOR, "Line 3, N arm (~45 deg)"),
 ], fontsize=8, loc="best")
 
 plt.tight_layout()
