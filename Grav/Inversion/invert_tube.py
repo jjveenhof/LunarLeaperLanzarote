@@ -267,6 +267,12 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
     [(size, x0, ceiling, floor), ...]. Uses module globals SIGMA_PICK, VELOCITY,
     VELOCITY_SIGMA, SLOPE_SE, MIN_CEILING -- so it stays in lock-step with the
     analytic budget in size_area_se (one definition of the channels, both here).
+
+    The data-noise draw is inflated by sqrt(max(1, chi2_nu)) -- the SAME chi2-
+    rescaling the analytic data channel uses (invert()'s size interval) -- so the
+    ensemble spread (envelope, x0 SE, MC area SD) reflects the model under-fit and
+    matches the reported analytic SE. Only the DATA channel is rescaled; the pick/
+    velocity/detrend sigmas are external and stay as-is.
     """
     sizes = (np.arange(1.0, 20.0, 0.25) if mode == "circle"
              else np.arange(1.0, 30.0, 0.25))          # coarser than the fit grid
@@ -274,6 +280,9 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
     x0s = np.arange(xmin - 20, xmin + 20, 0.5)
     dv_sig = VELOCITY_SIGMA / VELOCITY
     xm = sx - sx.mean()
+    # Nominal fit -> chi2_nu, to rescale the data noise for the under-fit (as analytic).
+    inflate = np.sqrt(max(1.0, invert(mode, sx, d, se, ceil0, floor0,
+                                      sizes, x0s)["chi2red"]))
     out = []
     for _ in range(n):
         c = ceil0 + rng.normal(0, SIGMA_PICK)
@@ -283,7 +292,7 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
         c = max(c, MIN_CEILING)
         if mode == "ellipse":
             f = max(f, c + 1.0)
-        dd = d + rng.normal(0, SLOPE_SE) * xm + rng.normal(0.0, se)
+        dd = d + rng.normal(0, SLOPE_SE) * xm + rng.normal(0.0, se * inflate)
         res = invert(mode, sx, dd, se, c, f, sizes, x0s)
         out.append((res["size"], res["x0"], c, f))
     return out
@@ -292,7 +301,7 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
 # ============================== run one mode =================================
 def run_mode(mode, sx, d, se):
     sizes = RADIUS_GRID if mode == "circle" else WIDTH_GRID
-    size_lbl = "radius R (m)" if mode == "circle" else "half-width a (m)"
+    size_lbl = "radius r (m)" if mode == "circle" else "half-width a (m)"
     tag = "" if TRUNCATE_D is None else f"_trunc{int(TRUNCATE_D)}"
     ttl = "" if TRUNCATE_D is None else f"  [tube truncated at {TRUNCATE_D:.0f} m]"
     xmin = sx[np.argmin(d)]
@@ -306,8 +315,11 @@ def run_mode(mode, sx, d, se):
           f"(data 1sigma, rescaled: {res['size_lo']:.2f}-{res['size_hi']:.2f}), "
           f"x0={res['x0']:.1f} m, baseline={c_best*1000:.0f} uGal, chi2_red={chi2red:.1f}")
 
-    # ---- Figure 1: chi2 surface + best-fit overlay --------------------------
-    fig, (a1, a2) = plt.subplots(1, 2, figsize=(13, 5))
+    # ---- Figure 1: chi2 misfit surface (standalone, thesis width) ------------
+    # The best-fit anomaly and its posterior spread now live in the combined
+    # anomaly + terrain figure (plot_model_terrain.py). This figure is the misfit
+    # surface on its own, with the joint 68%/95% confidence contours + best-fit star.
+    fig, a1 = plt.subplots(figsize=(6.1, 4.6))         # thesis \linewidth
     chi2 = res["chi2"]
     lev = max(1.0, chi2red)                            # rescale confidence levels
     im = a1.pcolormesh(x0s, sizes, chi2 - chi2.min(), cmap="viridis_r",
@@ -315,34 +327,11 @@ def run_mode(mode, sx, d, se):
     a1.contour(x0s, sizes, chi2 - chi2.min(), levels=[2.30 * lev, 6.17 * lev],
                colors="w", linewidths=1.0)            # joint 68%, 95% (rescaled)
     a1.plot(res["x0"], res["size"], "r*", markersize=14)
-    a1.set_xlabel("tube centre x0 (m)")
+    a1.set_xlabel(r"tube centre $x_0$ (m)")
     a1.set_ylabel(size_lbl)
-    a1.set_title(rf"$\chi^2-\chi^2_{{min}}$ surface (white = 68%, 95%)")
+    a1.set_title(rf"Line {LINE} {mode}: $\chi^2-\chi^2_{{min}}$ surface "
+                 rf"(white = 68%, 95%){ttl}", fontweight="bold")
     fig.colorbar(im, ax=a1, label=r"$\Delta\chi^2$")
-
-    # Evaluate the (smooth analytic) forward on a dense grid for display -- the fit
-    # itself only needs it at the stations, but plotting there gives a jagged curve.
-    xd = np.linspace(sx.min(), sx.max(), 400)
-    g_dense = forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, xd) + c_best
-    a2.errorbar(sx, d, yerr=se, fmt="o", color=LINE_COLORS.get(LINE, "#FF5C00"),
-                capsize=3, markersize=5, label="detrended residual")
-    a2.plot(xd, g_dense, "-", color="k", lw=2,
-            label=f"best fit ({size_lbl.split()[0]}={res['size']:.1f} m)")
-    a2.axhline(c_best, color="0.6", lw=0.8, ls=":",
-               label=f"fitted baseline ({c_best*1000:.0f} uGal)")
-    a2.set_xlabel("distance along profile (m)")
-    a2.set_ylabel("g (mGal)")
-    a2.set_title(rf"Line {LINE} {mode} fit ($\chi^2_\nu$={chi2red:.1f})")
-    a2.legend(fontsize=8)
-    a2.grid(True, alpha=0.25, ls="--")
-    # dist increases N->S from 0 (grav_utils) -> N already on the left, matching GPR.
-    a2.text(0.006, 0.97, "N", transform=a2.transAxes, ha="left", va="top",
-            fontweight="bold", fontsize=11, color="0.3")
-    a2.text(0.994, 0.97, "S", transform=a2.transAxes, ha="right", va="top",
-            fontweight="bold", fontsize=11, color="0.3")
-    fig.suptitle(f"Line {LINE} inversion -- {mode} (ceiling {CEILING0:.1f} m"
-                 + (f", floor {FLOOR0:.1f} m" if mode == "ellipse" else "") + ")" + ttl,
-                 fontweight="bold")
     fig.tight_layout()
     fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
     if not tag:   # untruncated run == the thesis figure

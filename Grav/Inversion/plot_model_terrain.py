@@ -1,10 +1,15 @@
 """
-Best-fit tube cross-section drawn under the REAL measured surface, in true scale,
-ready to overlay a LiDAR cross-section as ground truth.
+Combined inversion figure: the detrended-CBA fit (top) stacked on the best-fit tube
+cross-section under the REAL measured surface (bottom), sharing the along-profile
+x-axis. The bottom panel is true-scale, ready to overlay a LiDAR cross-section as
+ground truth. The SAME posterior ensemble is drawn faintly in both panels -- tube
+outlines below, their forward gravity anomalies above -- so the data-fit spread and
+the geometry spread are visibly one uncertainty. (The chi2 misfit surface is a
+separate figure, invert_tube.py.)
 
 The gravity profile crosses the tube, so the inverted circle/ellipse IS the tube
 cross-section in the vertical plane of the profile -- the same plane a LiDAR slice
-along the profile azimuth would give. We draw:
+along the profile azimuth would give. In the bottom panel we draw:
   - the measured ground surface (GNSS elevations, REGCAN95 orthometric),
   - the best-fit circle and ellipse (from invert_tube), anchored at the local
     surface above the fitted tube centre x0 (the forward model assumes a flat top,
@@ -53,7 +58,7 @@ HERE = Path(__file__).resolve().parent
 # invert_tube best-fit plots, so they read as "model" not "data".
 LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}
 STN_MARKER = {"base": "s", "tie": "v", "regular": "o"}
-STN_SIZE = {"base": 7, "tie": 8, "regular": 5}
+STN_SIZE = {"base": 7, "tie": 5, "regular": 5}   # tie matches regular (was 8: too big, hid error bars)
 FIT_LS = {"circle": "-", "ellipse": "--"}
 LIDAR_COLOR = "#9400D3"        # ground truth: violet, distinct from orange/green
                                # stations, black model curves and grey terrain
@@ -210,19 +215,42 @@ def main():
     lidar = HERE / f"lidar_line{args.line}.csv"
     Ld = np.genfromtxt(lidar, delimiter=",", names=True) if lidar.exists() else None
 
-    # ---- ONE FIGURE PER SHAPE (circle / ellipse), so each stays uncrowded ----
+    # ---- ONE FIGURE PER SHAPE: anomaly (top) + terrain section (bottom), -----
+    # sharing the along-profile x-axis (supervisor's design). The SAME posterior
+    # ensemble is drawn faintly in BOTH panels -- tube outlines below, their forward
+    # gravity anomalies above -- so the data-fit spread and the geometry spread read
+    # as one and the same uncertainty.
+    TOP_H_IN = 1.5                 # anomaly-strip height (in); raise for a taller strip
+    W_IN = 6.1                     # thesis \linewidth; the bottom stays true-scale
+    M_L, M_R, M_B, M_T, GAP = 0.75, 0.72, 0.5, 0.28, 0.12   # margins/gap (inches)
+    YM_TOP, YM_BOT = 4.0, 10.0     # vertical pad above / below the section (m); the
+                                   # extra bottom room clears space for the legend
+    LEG_KW = dict(fontsize=6.5, labelspacing=0.25, handlelength=1.5,   # compact legends
+                  handletextpad=0.5, borderpad=0.35, framealpha=0.9)
     for mode in modes:
         res, u = fits[mode], unc[mode]
         size0, x0, se_tot = res["size"], res["x0"], u["se_tot"]
         surf0 = float(surf(x0))
-        fig, ax = plt.subplots(figsize=(12, 5.0))
+        wts = 1.0 / se ** 2
+        # Best-fit DC offset (relative gravity -> arbitrary datum), fit to the data.
+        c_best = it.fit_offset(it.forward(mode, size0, x0, ceil, floor, sx),
+                               d, wts)[0]
+        xd = np.linspace(float(xs.min()), float(xs.max()), 400)   # dense anomaly x
+
+        # Two stacked axes; positions are finalised after the limits are known so the
+        # bottom panel can stay equal-aspect (true scale) while the top is a strip.
+        fig = plt.figure()
+        ax = fig.add_axes([0.1, 0.1, 0.8, 0.45])                   # terrain (bottom)
+        ax_top = fig.add_axes([0.1, 0.60, 0.8, 0.30], sharex=ax)   # anomaly (top)
+
+        # ================= bottom panel: terrain + tube cross-section ==========
         ax.plot(surf_x, surf_y, "-", color="0.2", lw=1.8, zorder=4,
-                label="surface (GNSS)")
+                label="surface")
         plot_stations()
 
-        # faint posterior ensemble = the family of solutions (neutral grey), and
-        # collect the outlines to build the envelope from the SAME samples.
-        ens = []
+        # faint posterior ensemble = the family of solutions (neutral grey). Collect
+        # the outlines (for the envelope) AND each sample's forward anomaly (top panel).
+        ens, ens_anom = [], []
         if args.ensemble > 0:
             print(f"  sampling {args.ensemble} {mode} tubes ...")
             for (s, xx, cc, ff) in it.sample_ensemble(mode, sx, d, se, ceil, floor,
@@ -230,6 +258,10 @@ def main():
                 ex, ez = outline(mode, s, xx, cc, ff, 160)
                 ax.plot(ex, ez, color="0.3", lw=0.5, alpha=0.06, zorder=2)
                 ens.append((ex, ez))
+                # matching forward anomaly, own DC offset fit to the REAL data, so the
+                # top panel shows the spread of model predictions against fixed data.
+                off = it.fit_offset(it.forward(mode, s, xx, cc, ff, sx), d, wts)[0]
+                ens_anom.append(it.forward(mode, s, xx, cc, ff, xd) + off)
             ax.plot([], [], color="0.35", lw=1.4, alpha=0.7,   # legend proxy
                     label="posterior samples")
 
@@ -239,15 +271,13 @@ def main():
             _, _, dbest = it.shape_params(mode, size0, ceil, floor)
             (ix, iz), (ox, oz) = posterior_envelope(ens, x0, surf0 - dbest)
             ax.plot(ox, oz, color="k", lw=1.0, ls=(0, (4, 3)), zorder=6,
-                    label=r"$\pm1\sigma$ envelope (68%)")
+                    label=r"$\pm$std. dev. envelope")
             ax.plot(ix, iz, color="k", lw=1.0, ls=(0, (4, 3)), zorder=6)
 
-        # best-fit model: solid black on top.
+        # best-fit model outline: solid black on top.
         bxx, bzz = outline(mode, size0, x0, ceil, floor, 240)
-        lbl = "R" if mode == "circle" else "a"
         ax.plot(bxx, bzz, color="k", lw=2.4, zorder=7,
-                label=f"{mode}: {lbl} {size0:.1f} m, "
-                      f"{u['area']:.0f} $\\pm$ {u['area_se_tot']:.0f} m$^2$")
+                label=f"best-fit {mode}")   # size + area now live in the results table
 
         # GPR pick depths (SOLID BLUE) + their own depth-uncertainty band.
         # sigma_d = sqrt(sigma_pick^2 + (d*sigma_v/v)^2) combines picking noise and
@@ -272,13 +302,40 @@ def main():
         if Ld is not None:
             # Project the LiDAR vertices onto the SAME profile axis as the gravity
             # 'dist' (proj applied to the CSV's easting/northing), exactly as the GPR
-            # surface is projected -- co-registered regardless of distance convention,
-            # with no baked distance coordinate to go stale.
+            # surface is projected -- co-registered regardless of distance convention.
             lx, lz = proj(Ld["easting"], Ld["northing"]), Ld["z"]
             area_lidar = 0.5 * abs(np.dot(lx, np.roll(lz, -1))
                                    - np.dot(lz, np.roll(lx, -1)))
             ax.plot(lx, lz, color=LIDAR_COLOR, lw=2.6, zorder=8,
-                    label=f"LiDAR ({area_lidar:.0f} m$^2$)")
+                    label="LiDAR")   # LiDAR area now in the results table
+
+        # ================= top panel: detrended residual + fits ================
+        for ga in ens_anom:
+            ax_top.plot(xd, ga, color="0.3", lw=0.5, alpha=0.06, zorder=2)
+        # data, styled by station type to match the markers directly below it.
+        for t in ("regular", "tie"):
+            sel = typ == t
+            if sel.any():
+                ax_top.errorbar(xs[sel], d[sel], yerr=se[sel], fmt=STN_MARKER[t],
+                                color=col, ms=STN_SIZE[t], mec="0.2", mew=0.5,
+                                ls="none", capsize=2, elinewidth=1.0, zorder=5)
+        ax_top.plot(xd, it.forward(mode, size0, x0, ceil, floor, xd) + c_best,
+                    "-", color="k", lw=2.0, zorder=6, label="best fit")
+        if ens_anom:
+            ax_top.plot([], [], color="0.35", lw=1.4, alpha=0.7,
+                        label="posterior anomalies")
+        ax_top.plot([], [], STN_MARKER["regular"], color=col, mec="0.2", mew=0.5,
+                    ls="none", label=r"detrended CBA $\pm$ SE")
+        ax_top.axhline(c_best, color="0.6", lw=0.8, ls=":", zorder=1)
+        ax_top.set_ylabel("Detrended CBA (mGal)")
+        ax_top.grid(True, alpha=0.25, ls="--")
+        ax_top.tick_params(labelbottom=False)          # x-labels only on the bottom
+        ax_top.legend(loc="lower right", **LEG_KW)
+        # N/S once, on the top panel (the x-axis is shared).
+        ax_top.text(0.006, 0.95, "N", transform=ax_top.transAxes, ha="left",
+                    va="top", fontweight="bold", fontsize=11, color="0.3")
+        ax_top.text(0.994, 0.95, "S", transform=ax_top.transAxes, ha="right",
+                    va="top", fontweight="bold", fontsize=11, color="0.3")
 
         # ---- window: full profile laterally; framed to the section vertically.
         _, bb, depth = it.shape_params(mode, size0, ceil, floor)
@@ -286,12 +343,11 @@ def main():
         fy_top = [surf0, float(surf_y.max())]
         if Ld is not None:
             fy_bot.append(float(Ld["z"].min())); fy_top.append(float(Ld["z"].max()))
-        YM = 4.0
         xlo = min(float(surf_x.min()), float(xs.min()))
         xhi = max(float(surf_x.max()), float(xs.max()))
         xpad = 0.02 * (xhi - xlo)
-        ytop, ybot = max(fy_top) + YM, min(fy_bot) - YM
-        ax.set_xlim(xlo - xpad, xhi + xpad)
+        ytop, ybot = max(fy_top) + YM_TOP, min(fy_bot) - YM_BOT
+        ax.set_xlim(xlo - xpad, xhi + xpad)            # shared -> ax_top follows
         ax.set_ylim(ybot, ytop)
 
         ttl = "" if it.TRUNCATE_D is None else f"  [truncated at {it.TRUNCATE_D:.0f} m]"
@@ -300,38 +356,41 @@ def main():
         ax.set_ylabel("elevation (m)")                 # REGCAN95 on the right
         ax.yaxis.set_label_position("right")
         ax.yaxis.tick_right()
-        secax = ax.secondary_yaxis("left", functions=(lambda e: surf0 - e,
-                                                       lambda dd: surf0 - dd))
-        secax.set_ylabel("depth below surface at tube centre (m)")
-        ax.set_title(f"Line {args.line}: best-fit {mode} in measured terrain{ttl}",
-                     fontweight="bold")
-        # Combined line+band handle for the GPR pick (so the legend shows BOTH the
-        # solid blue line and its translucent uncertainty band as one entry).
+        ax.grid(True, alpha=0.25, ls="--")
+        # Combined line+band handle for the GPR pick (legend shows BOTH the solid
+        # blue line and its translucent uncertainty band as one entry).
         handles, labels = ax.get_legend_handles_labels()
         handles.append((Line2D([], [], color=PICK_C, lw=1.2),
                         mpatches.Patch(color=PICK_C, alpha=0.13)))
-        labels.append(r"GPR pick $\pm\,\sigma_d$")
-        ax.legend(handles, labels, fontsize=8, loc="lower right",
-                  handler_map={tuple: HandlerTuple(ndivide=None)})
-        ax.grid(True, alpha=0.25, ls="--")
-        # dist increases N->S from 0 (grav_utils) -> N already on the left, matching GPR.
-        ax.text(0.006, 0.97, "N", transform=ax.transAxes, ha="left", va="top",
-                fontweight="bold", fontsize=13, color="0.3")
-        ax.text(0.994, 0.97, "S", transform=ax.transAxes, ha="right", va="top",
-                fontweight="bold", fontsize=13, color="0.3")
-        # Size the figure so the equal-aspect axes fill it (no vertical slack).
+        labels.append(r"GPR pick $\pm$ SE")
+        ax.legend(handles, labels, loc="lower right",
+                  handler_map={tuple: HandlerTuple(ndivide=None)}, **LEG_KW)
+
+        # ---- size the canvas so the equal-aspect bottom box fills its width, then
+        # stack the fixed-height anomaly strip above it (both share the x extent).
         xspan = abs(np.subtract(*ax.get_xlim()))
         yspan = abs(np.subtract(*ax.get_ylim()))
-        Lf, Rf, Bf, Tf = 0.09, 0.90, 0.14, 0.88        # axes position (fig fractions)
-        W = 13.0
-        fig.set_size_inches(W, W * (Rf - Lf) * yspan / xspan / (Tf - Bf))
-        fig.subplots_adjust(left=Lf, right=Rf, bottom=Bf, top=Tf)
+        axes_w_in = W_IN - M_L - M_R
+        bot_h_in = axes_w_in * yspan / xspan           # equal-aspect -> box aspect = data
+        H_IN = M_B + bot_h_in + GAP + TOP_H_IN + M_T
+        fig.set_size_inches(W_IN, H_IN)
+        ax.set_position([M_L / W_IN, M_B / H_IN, axes_w_in / W_IN, bot_h_in / H_IN])
+        ax_top.set_position([M_L / W_IN, (M_B + bot_h_in + GAP) / H_IN,
+                             axes_w_in / W_IN, TOP_H_IN / H_IN])
+        # depth axis on the terrain panel, added after positioning so it tracks the box.
+        secax = ax.secondary_yaxis("left", functions=(lambda e: surf0 - e,
+                                                       lambda dd: surf0 - dd))
+        secax.set_ylabel("depth at tube centre (m)")
+        ax_top.set_title(f"Line {args.line}: {mode} fit and cross-section"
+                         rf" ($\chi^2_\nu$ = {res['chi2red']:.1f}){ttl}",
+                         fontweight="bold")
+
         trunc = "" if it.TRUNCATE_D is None else f"_trunc{int(it.TRUNCATE_D)}"
         out = it.FIG / f"terrain_model_line{args.line}_{mode}{trunc}.png"
         fig.savefig(out, dpi=150)
         if not trunc:   # untruncated run == the thesis figure
-            # tight=False: this figure is pre-sized so the equal-aspect box fills
-            # the canvas; bbox_inches="tight" would re-fit it and blow up the page.
+            # tight=False: the figure is pre-sized so the equal-aspect box fills the
+            # canvas; bbox_inches="tight" would re-fit it and blow up the page.
             save_figure(fig, out.stem, "Inversion", vector=True, tight=False)
         plt.close(fig)
         print(f"  saved -> {out.relative_to(it.BASE)}")
