@@ -33,6 +33,8 @@ Run:  python plot_model_terrain.py --line 3 [--truncate 10] [--modes circle elli
 """
 
 import argparse
+import hashlib
+import json
 import numpy as np
 import sys as _sys, pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
@@ -63,6 +65,42 @@ FIT_LS = {"circle": "-", "ellipse": "--"}
 LIDAR_COLOR = "#9400D3"        # ground truth: violet, distinct from orange/green
                                # stations, black model curves and grey terrain
 PICK_C = "#0072B2"             # GPR pick: solid blue line + band (not the dashed envelope)
+
+# Panel letters baked into the figure (LaTeX sees one image; it cannot label the two
+# stacked panels separately). a) = top anomaly panel, b) = bottom cross-section panel.
+PANEL_LETTERS = ("a)", "b)")   # (top, bottom); set to None to switch the letters off
+PANEL_LETTER_XY = (0.014, 0.965)   # axes-fraction pos from top-left; move if it crowds N
+PANEL_LETTER_KW = dict(fontsize=12, fontweight="bold", va="top", ha="left", zorder=10)
+
+# The 300-sample posterior ensemble is deterministic given the seed + inputs, so we
+# cache its (size, x0, ceiling, floor) array to disk. The FIRST regen computes it; any
+# later tweak (letter position, colours, limits...) loads it instantly -- no MC rerun.
+CACHE_DIR = _pl.Path(__file__).resolve().parent / "mc_cache"
+
+
+def cached_ensemble(line, mode, sx, d, se, ceil, floor, n, seed, refresh=False):
+    """sample_ensemble output, cached to an npz keyed on everything that changes the
+    draw (geometry, all four channel sigmas, n, seed, and a hash of the data), so a
+    stale cache is never silently reused. Returns an (n, 4) array of (size,x0,c,f)."""
+    key = dict(line=int(line), mode=mode, ceil=float(ceil), floor=float(floor),
+               sigma_pick=float(it.SIGMA_PICK), v=float(it.VELOCITY),
+               vsig=float(it.VELOCITY_SIGMA), slope_se=float(it.SLOPE_SE),
+               n=int(n), seed=int(seed),
+               dhash=hashlib.md5(np.concatenate([sx, d, se]).tobytes()).hexdigest())
+    tag = hashlib.md5(json.dumps(key, sort_keys=True).encode()).hexdigest()[:16]
+    f = CACHE_DIR / f"ens_line{line}_{mode}_{tag}.npz"
+    if f.exists() and not refresh:
+        arr = np.load(f)["ens"]
+        print(f"  loaded cached {mode} ensemble ({len(arr)} samples) <- {f.name}")
+        return arr
+    # per-mode deterministic RNG so the cache is reproducible independent of run order.
+    rng = np.random.default_rng([seed, 0 if mode == "circle" else 1])
+    arr = np.array(it.sample_ensemble(mode, sx, d, se, ceil, floor, n, rng),
+                   dtype=float)
+    CACHE_DIR.mkdir(exist_ok=True)
+    np.savez(f, ens=arr)
+    print(f"  computed + cached {mode} ensemble ({len(arr)} samples) -> {f.name}")
+    return arr
 
 
 def gravity_profile(line):
@@ -149,6 +187,8 @@ def main():
     p.add_argument("--no-band", action="store_true",
                    help="omit the filled +/-1 SE envelope")
     p.add_argument("--seed", type=int, default=0, help="RNG seed for the ensemble")
+    p.add_argument("--refresh-cache", action="store_true",
+                   help="recompute the posterior ensemble instead of loading the cache")
     args = p.parse_args()
 
     # ---- configure the imported inversion module ----------------------------
@@ -164,7 +204,7 @@ def main():
     # plot must set these, else it.* keeps its Line-3 module defaults).
     it.VELOCITY = pre["velocity"]
     it.VELOCITY_SIGMA = pre["velocity_sigma"]
-    it.SIGMA_PICK = 1.0                               # GPR pick 1-sigma (m)
+    it.SIGMA_PICK = 1.25                              # GPR pick 1-sigma (m); lambda/2 at 50 MHz
     if it.TREND.exists():
         tp = np.genfromtxt(it.TREND, delimiter=",", names=True)
         r = tp[tp["Line"] == args.line]
@@ -204,8 +244,6 @@ def main():
         surf_x, surf_y = xs, zs
         print("  (no GPR topo file; using gravity station elevations only)")
 
-    rng = np.random.default_rng(args.seed)
-
     def outline(mode, size, x0, c, f, npts=200):
         a, b, depth = it.shape_params(mode, size, c, f)
         vv = ellipse_vertices(a, b, x0, depth, n=npts)
@@ -223,8 +261,11 @@ def main():
     TOP_H_IN = 1.5                 # anomaly-strip height (in); raise for a taller strip
     W_IN = 6.1                     # thesis \linewidth; the bottom stays true-scale
     M_L, M_R, M_B, M_T, GAP = 0.75, 0.72, 0.5, 0.28, 0.12   # margins/gap (inches)
-    YM_TOP, YM_BOT = 4.0, 10.0     # vertical pad above / below the section (m); the
-                                   # extra bottom room clears space for the legend
+    YM_TOP = 4.0                   # vertical pad above the section (m)
+    YM_BOT_DEFAULT = 10.0          # pad below the section (m); per-fit overrides below
+    YM_BOT_BY = {(3, "circle"): 8.0,     # per-fit bottom pad (user-tuned, m):
+                 (3, "ellipse"): 12.0,   #   L3 circle -2, L3 ellipse +2,
+                 (5, "circle"): 2.0}     #   L5 circle -10 (deepest point at the edge)
     LEG_KW = dict(fontsize=6.5, labelspacing=0.25, handlelength=1.5,   # compact legends
                   handletextpad=0.5, borderpad=0.35, framealpha=0.9)
     for mode in modes:
@@ -253,8 +294,9 @@ def main():
         ens, ens_anom = [], []
         if args.ensemble > 0:
             print(f"  sampling {args.ensemble} {mode} tubes ...")
-            for (s, xx, cc, ff) in it.sample_ensemble(mode, sx, d, se, ceil, floor,
-                                                      args.ensemble, rng):
+            for (s, xx, cc, ff) in cached_ensemble(args.line, mode, sx, d, se, ceil,
+                                                   floor, args.ensemble, args.seed,
+                                                   refresh=args.refresh_cache):
                 ex, ez = outline(mode, s, xx, cc, ff, 160)
                 ax.plot(ex, ez, color="0.3", lw=0.5, alpha=0.06, zorder=2)
                 ens.append((ex, ez))
@@ -306,7 +348,7 @@ def main():
             lx, lz = proj(Ld["easting"], Ld["northing"]), Ld["z"]
             area_lidar = 0.5 * abs(np.dot(lx, np.roll(lz, -1))
                                    - np.dot(lz, np.roll(lx, -1)))
-            ax.plot(lx, lz, color=LIDAR_COLOR, lw=2.6, zorder=8,
+            ax.plot(lx, lz, color=LIDAR_COLOR, lw=1, zorder=8,
                     label="LiDAR")   # LiDAR area now in the results table
 
         # ================= top panel: detrended residual + fits ================
@@ -331,11 +373,21 @@ def main():
         ax_top.grid(True, alpha=0.25, ls="--")
         ax_top.tick_params(labelbottom=False)          # x-labels only on the bottom
         ax_top.legend(loc="lower right", **LEG_KW)
-        # N/S once, on the top panel (the x-axis is shared).
-        ax_top.text(0.006, 0.95, "N", transform=ax_top.transAxes, ha="left",
+        # N/S once, on the top panel (the x-axis is shared). N is shifted right of
+        # the a) panel letter so the two do not overlap in the top-left corner.
+        ax_top.text(0.075, 0.95, "N", transform=ax_top.transAxes, ha="left",
                     va="top", fontweight="bold", fontsize=11, color="0.3")
         ax_top.text(0.994, 0.95, "S", transform=ax_top.transAxes, ha="right",
                     va="top", fontweight="bold", fontsize=11, color="0.3")
+
+        # panel letters baked in (a) top, b) bottom); white bbox keeps them legible
+        # over the grid. Reference the two panels separately from the LaTeX text.
+        if PANEL_LETTERS:
+            bbx = dict(boxstyle="round,pad=0.15", fc="white", ec="none", alpha=0.8)
+            ax_top.text(*PANEL_LETTER_XY, PANEL_LETTERS[0], transform=ax_top.transAxes,
+                        bbox=bbx, **PANEL_LETTER_KW)
+            ax.text(*PANEL_LETTER_XY, PANEL_LETTERS[1], transform=ax.transAxes,
+                    bbox=bbx, **PANEL_LETTER_KW)
 
         # ---- window: full profile laterally; framed to the section vertically.
         _, bb, depth = it.shape_params(mode, size0, ceil, floor)
@@ -346,7 +398,8 @@ def main():
         xlo = min(float(surf_x.min()), float(xs.min()))
         xhi = max(float(surf_x.max()), float(xs.max()))
         xpad = 0.02 * (xhi - xlo)
-        ytop, ybot = max(fy_top) + YM_TOP, min(fy_bot) - YM_BOT
+        ym_bot = YM_BOT_BY.get((args.line, mode), YM_BOT_DEFAULT)
+        ytop, ybot = max(fy_top) + YM_TOP, min(fy_bot) - ym_bot
         ax.set_xlim(xlo - xpad, xhi + xpad)            # shared -> ax_top follows
         ax.set_ylim(ybot, ytop)
 
@@ -381,9 +434,7 @@ def main():
         secax = ax.secondary_yaxis("left", functions=(lambda e: surf0 - e,
                                                        lambda dd: surf0 - dd))
         secax.set_ylabel("depth at tube centre (m)")
-        ax_top.set_title(f"Line {args.line}: {mode} fit and cross-section"
-                         rf" ($\chi^2_\nu$ = {res['chi2red']:.1f}){ttl}",
-                         fontweight="bold")
+        ax_top.set_title(f"Line {args.line}, {mode}{ttl}", fontweight="bold")
 
         trunc = "" if it.TRUNCATE_D is None else f"_trunc{int(it.TRUNCATE_D)}"
         out = it.FIG / f"terrain_model_line{args.line}_{mode}{trunc}.png"

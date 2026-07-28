@@ -151,7 +151,7 @@ def main():
     out_rows = []
     print(f"Map regional: {MAP_GRAD_MAG:.1f} mGal/km toward "
           f"{compass16(MAP_GRAD_AZ)} ({MAP_GRAD_AZ:.0f} deg)\n")
-    print(f"{'Line':>4}  {'fit slope':>10}  {'95% CI':>20}  "
+    print(f"{'Line':>4}  {'slope':>8}  {'+/-SE':>8}  "
           f"{'map proj':>9}  {'agree?':>7}  {'chi2_red':>8}  resid range (uGal)")
     print("-" * 92)
 
@@ -170,10 +170,13 @@ def main():
         # slope_se is in mGal/m; xm anchors the tilt for downstream propagation.
         param_rows.append((line_id, slope, slope_se, intercept, x.mean(), chi2_red))
 
-        # Signed slope (mGal/km) with 95% CI from the weighted covariance.
+        # Signed slope (mGal/km). +/-1 sigma (se_km) is the uncertainty the inversion
+        # actually propagates; the 95% CI (1.96 sigma) is kept ONLY for the
+        # significance ("flat"?) and map-agreement checks, not for reporting.
         slope_km = slope * 1000
-        lo_km, hi_km = (slope - 1.96 * slope_se) * 1000, (slope + 1.96 * slope_se) * 1000
-        straddles = lo_km < 0 < hi_km   # direction undetermined if CI spans 0
+        se_km = slope_se * 1000
+        lo_km, hi_km = slope_km - 1.96 * se_km, slope_km + 1.96 * se_km
+        straddles = lo_km < 0 < hi_km   # direction not resolved at 95% if CI spans 0
 
         # Map direction of increasing 'dist' = from first to last station.
         p0 = g[["Easting", "Northing"]].iloc[0].values
@@ -186,7 +189,7 @@ def main():
         map_slope = float(map_vec @ ddir)             # mGal/km
         agree = "yes" if lo_km <= map_slope <= hi_km else "NO"
 
-        print(f"{line_id:>4}  {slope_km:>+10.3f}  [{lo_km:+7.3f},{hi_km:+7.3f}]"
+        print(f"{line_id:>4}  {slope_km:>+8.2f}  {se_km:>8.2f}"
               f"  {map_slope:>+9.3f}  {agree:>7}  {chi2_red:>8.2f}  "
               f"[{resid.min()*1000:+.0f}, {resid.max()*1000:+.0f}]")
 
@@ -206,19 +209,19 @@ def main():
                     label=r"CBA $\pm$ SE")
         ax1.plot(x, trend, "--", color="0.35", linewidth=1.6, zorder=2,
                  label="robust trend")
-        # Slope-CI fan: rotate the trend about the profile mid-point by +/-1.96 SE.
+        # +/-1 sigma fan (the uncertainty the inversion propagates): rotate the trend
+        # about the profile mid-point by +/- slope_se.
         xm = x.mean()
         ym = slope * xm + intercept
-        ax1.fill_between(x, ym + (lo_km / 1000.0) * (x - xm),
-                         ym + (hi_km / 1000.0) * (x - xm),
-                         color="0.35", alpha=0.15, zorder=1, label="95% CI")
+        ax1.fill_between(x, ym + (slope - slope_se) * (x - xm),
+                         ym + (slope + slope_se) * (x - xm),
+                         color="0.35", alpha=0.15, zorder=1, label=r"$\pm$ SE")
 
         # Compact info box instead of a wordy legend.
         toward_txt = (r"$\approx$ flat" if straddles
                       else rf"toward {compass16(az)} (${az:.0f}^\circ$)")
         info = "\n".join([
-            rf"slope $= {slope_km:+.2f}$ mGal/km, {toward_txt}",
-            rf"95% CI $[{lo_km:+.2f},\ {hi_km:+.2f}]$",
+            rf"slope $= {slope_km:+.2f} \pm {se_km:.2f}$ mGal/km, {toward_txt}",
             rf"$\chi^2_\nu = {chi2_red:.1f}$",
         ])
         ax1.text(0.015, 0.97, info, transform=ax1.transAxes, va="top", ha="left",
@@ -227,8 +230,8 @@ def main():
 
         # Keep the fit ingredients for the combined "all fits" figure built below.
         fit_panels.append(dict(line_id=line_id, x=x, y=y, se=g["SE"].values,
-                               stype=stype, trend=trend, xm=xm, ym=ym, lo_km=lo_km,
-                               hi_km=hi_km, color=color, info=info))
+                               stype=stype, trend=trend, xm=xm, ym=ym, slope=slope,
+                               slope_se=slope_se, color=color, info=info))
 
         ax1.set_ylabel("CBA (mGal)")
         ax1.set_title(rf"Line {line_id} $-$ regional de-trend (robust weighted)",
@@ -308,7 +311,7 @@ def main():
     print(f"Residual figure    -> {combo.relative_to(BASE)}")
 
     # Combined figure of the regional fits (the top panels of the per-line figures,
-    # stacked): CBA + robust trend + 95% CI, one row per line.
+    # stacked): CBA + robust trend + +/-1 sigma, one row per line.
     figf, axesf = plt.subplots(len(LINES), 1, sharey=True,   # shared y -> lines directly comparable
                                figsize=(COMBINED_W_IN, COMBINED_PANEL_H_IN * len(LINES)))
     for ax, p in zip(np.atleast_1d(axesf), fit_panels):
@@ -317,8 +320,8 @@ def main():
         plot_points(ax, x, y, se, p["stype"], p["color"], ms=3, capsize=2,
                     elinewidth=1.0)
         ax.plot(x, p["trend"], "--", color="0.35", lw=1.6, zorder=2)
-        ax.fill_between(x, p["ym"] + (p["lo_km"] / 1000.0) * (x - xm),
-                        p["ym"] + (p["hi_km"] / 1000.0) * (x - xm),
+        ax.fill_between(x, p["ym"] + (p["slope"] - p["slope_se"]) * (x - xm),
+                        p["ym"] + (p["slope"] + p["slope_se"]) * (x - xm),
                         color="0.35", alpha=0.15, zorder=1)
         # Numbers (slope / CI / azimuth / chi2) live in the trend table, not here.
         ax.set_ylabel("CBA (mGal)")
@@ -338,7 +341,7 @@ def main():
         Line2D([0], [0], marker=TIE_MARKER, color="0.3", linestyle="None",
                markersize=5, label="tie station"),
         Line2D([0], [0], color="0.35", linestyle="--", lw=1.6, label="robust trend"),
-        mpatches.Patch(color="0.35", alpha=0.15, label="95% CI"),
+        mpatches.Patch(color="0.35", alpha=0.15, label=r"$\pm$ SE"),
     ], loc="lower center", ncol=4, frameon=True, bbox_to_anchor=(0.5, 0.0))
     figf.suptitle("Regional de-trend fits (per line)", fontweight="bold")
     figf.tight_layout(rect=[0, 0.05, 1, 0.97])

@@ -93,7 +93,8 @@ WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 LINE = 3
 CEILING0, FLOOR0 = 3.8, 14.6
 MODES = ("circle", "ellipse")
-SIGMA_PICK = 1.0             # m, ~50 MHz vertical resolution (100 MHz ~0.5)
+SIGMA_PICK = 1.25            # m, half-wavelength range resolution v/(2f) at 50 MHz
+                             # (v=0.125 m/ns -> lambda/2 = 1.25 m); picks trusted on LF
 # GPR migration velocity: picks are time picks, so velocity scales ALL depths
 # jointly (a systematic, common-mode term -- distinct from the per-pick noise).
 # Per line, from LINE_PRESETS (set in main); defaults below are Line 3's.
@@ -409,8 +410,8 @@ def parse_args():
     p.add_argument("--truncate", nargs="+", default=["inf"],
                    help="one or more pit distances in m; 'inf' = infinite 2D tube "
                         "(e.g. --truncate inf 10 15)")
-    p.add_argument("--sigma-pick", type=float, default=1.0,
-                   help="GPR pick 1-sigma (m)")
+    p.add_argument("--sigma-pick", type=float, default=1.25,
+                   help="GPR pick 1-sigma (m); default lambda/2 at 50 MHz")
     p.add_argument("--velocity", type=float, default=None,
                    help="override GPR migration velocity (m/ns; default is per-line)")
     p.add_argument("--velocity-sigma", type=float, default=None,
