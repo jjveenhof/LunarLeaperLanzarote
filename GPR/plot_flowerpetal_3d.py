@@ -465,10 +465,11 @@ def make_figure(curtains, clip_pct, gain_presets, default_gain,
     return fig, state
 
 
-def write_html(fig, state, out_path):
+def write_html(fig, state, out_path, title='Flower petals 3D'):
     """Write a self-contained (offline) HTML: the Plotly figure plus left-side
     gain/clip sliders whose handlers rebuild the gained, equalised surfacecolor
-    in the browser from the raw amplitude embedded once in each surface."""
+    in the browser from the raw amplitude embedded once in each surface.
+    `title` sets the browser tab name so the unmigrated/migrated plots differ."""
     fig_html = fig.to_html(include_plotlyjs='inline', full_html=False,
                            div_id='gpr3d_fig')
 
@@ -476,7 +477,7 @@ def write_html(fig, state, out_path):
 <html>
 <head>
   <meta charset="utf-8" />
-  <title>FlowerPetals 3D</title>
+  <title>{page_title}</title>
   <style>
     body {{ margin: 0; font-family: Segoe UI, Arial, sans-serif; }}
     .wrap {{ display: grid; grid-template-columns: 230px 1fr; gap: 12px; padding: 10px; }}
@@ -561,6 +562,7 @@ def write_html(fig, state, out_path):
         c0=state['default_clip_idx'],
         fig_html=fig_html,
         state_json=json.dumps(state, separators=(',', ':')),
+        page_title=title,
     )
     Path(out_path).write_text(page, encoding='utf-8')
 
@@ -571,7 +573,7 @@ def main():
     )
     parser.add_argument('--velocity', type=float, default=None,
                         help='Override wave velocity in m/ns (default: per-profile params)')
-    parser.add_argument('--gain', type=float, default=0.0,
+    parser.add_argument('--gain', type=float, default=3.0,
                         help='Initial active gain preset (snapped to the nearest button)')
     parser.add_argument('--clip', type=float, default=99.0,
                         help='Amplitude clip percentile for initial colour scale (default: 99)')
@@ -638,8 +640,8 @@ def main():
                              equalize=args.equalize)
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = Path(args.out) if args.out else OUT_DIR / 'flowerpetal_3d.html'
-    write_html(fig, state, out_path)
+    out_path = Path(args.out) if args.out else OUT_DIR / 'flowerpetal_unmigrated_3d.html'
+    write_html(fig, state, out_path, title='Flower petals 3D (unmigrated)')
     print('Saved: {}  (gain presets {}, active {})'.format(
         out_path.resolve(), GAIN_PRESETS, default_gain))
 

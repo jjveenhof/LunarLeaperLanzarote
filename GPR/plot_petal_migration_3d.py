@@ -22,7 +22,7 @@ Usage:
     python plot_petal_migration_3d.py
     python plot_petal_migration_3d.py --gain 3.0 --clip 99
 Output:
-    Results/GPR/FlowerPetals3D/petal_migration_3d.html
+    Results/GPR/FlowerPetals3D/flowerpetal_migrated_3d.html
 """
 
 import sys
@@ -45,7 +45,7 @@ OUT_DIR   = fp.OUT_DIR
 # Picked from Results/GPR/Migration/petal_map.png. Tune here and rerun.
 SEGMENTS = {
     'FlowerPetal1_50MHz': [(0, 28), (40, 52), (57, None)],
-    'FlowerPetal2_50MHz': [(0, 30), (50, 70), (70, None)],
+    'FlowerPetal2_50MHz': [(0, 30), (50, None)],   # 50-70 + 70-end merged into one
     'FlowerPetal3_50MHz': [(0, 25), (32, 48), (49, None)],
 }
 
@@ -56,9 +56,13 @@ SEG_COLOURS = {
     'FlowerPetal3_50MHz': ['limegreen', 'olive', 'darkgreen'],
 }
 
-# Line 3 migrated section drawn in the same scene.
-L3_KEY    = 'Line3_50MHz'
-L3_COLOUR = 'purple'
+# Line 3 migrated sections drawn in the same scene (from their saved _migrated.npz).
+# (key, colour, label) -- both frequencies, matching the unmigrated 3D plot which
+# also shows L3 at 50 and 100 MHz.
+L3_LINES = [
+    ('Line3_50MHz',  'purple',    'L3 50MHz migrated'),
+    ('Line3_100MHz', 'goldenrod', 'L3 100MHz migrated'),
+]
 
 
 def _petal_prof(key):
@@ -150,31 +154,31 @@ def migrate_segment(prof, start_m, end_m, velocity, colour, label):
                     east_s, north_s, elev_s, mig, depth, ref_elev, sfreq)
 
 
-def l3_curtain():
-    """Migrated Line 3 from its saved NPZ, draped flat-datum."""
-    with np.load(str(MIGR_DIR / (L3_KEY + '_migrated.npz'))) as f:
+def l3_curtain(key, colour, label):
+    """Migrated Line 3 (one frequency) from its saved NPZ, draped flat-datum."""
+    with np.load(str(MIGR_DIR / (key + '_migrated.npz'))) as f:
         data      = f['data'].astype(np.float64)
         dist_axis = f['dist_axis'].astype(np.float64)
         depth     = f['depth_axis'].astype(np.float64)
         ref_elev  = float(f['ref_elev'])
         velocity  = float(f['velocity'])
-    prof = _petal_prof(L3_KEY)
+    prof = _petal_prof(key)
     gnss_df = fp.load_gnss_lines(fp.GNSS_LINES)
     east_fn, north_fn, elev_fn = fp.build_track_interps(
         gnss_df, prof['gnss_line'], prof['metre'])
     gnss_m = dist_axis + prof['offset']
     east, north, elev = fp.reconcile_geometry(
-        L3_KEY, east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
+        key, east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
     dz = float(depth[1] - depth[0])
     sfreq = 1000.0 * velocity / (2.0 * dz)   # depth-domain equivalent for the gain
-    print('  {}: migrated NPZ, {} traces, v={:.3f}'.format(L3_KEY, data.shape[1], velocity))
-    return _curtain(L3_KEY + '_migrated', 'L3 migrated', L3_COLOUR,
+    print('  {}: migrated NPZ, {} traces, v={:.3f}'.format(key, data.shape[1], velocity))
+    return _curtain(key + '_migrated', label, colour,
                     east, north, elev, data, depth, ref_elev, sfreq)
 
 
 def main():
     ap = argparse.ArgumentParser(description='3D migrated petal segments + L3.')
-    ap.add_argument('--gain', type=float, default=0.0,
+    ap.add_argument('--gain', type=float, default=3.0,
                     help='initial gain preset (snapped to nearest button)')
     ap.add_argument('--clip', type=float, default=99.0, help='initial clip percentile')
     ap.add_argument('--vexag', type=float, default=1.0, help='vertical exaggeration')
@@ -197,7 +201,8 @@ def main():
             if c is not None:
                 curtains.append(c)
 
-    curtains.append(l3_curtain())
+    for key, colour, label in L3_LINES:
+        curtains.append(l3_curtain(key, colour, label))
 
     default_gain = min(fp.GAIN_PRESETS, key=lambda g: abs(g - args.gain))
     edge  = fp.load_edge(fp.GNSS_FP)  if args.edge  else None
@@ -212,8 +217,8 @@ def main():
         x=0.5, xanchor='center', y=0.98, yanchor='top'))
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    out_path = Path(args.out) if args.out else OUT_DIR / 'petal_migration_3d.html'
-    fp.write_html(fig, state, out_path)
+    out_path = Path(args.out) if args.out else OUT_DIR / 'flowerpetal_migrated_3d.html'
+    fp.write_html(fig, state, out_path, title='Flower petals 3D (migrated)')
     print('Saved: {}'.format(out_path.resolve()))
 
 
