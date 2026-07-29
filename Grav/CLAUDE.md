@@ -114,8 +114,10 @@ deciding what to tune and iterating on its own taste.
 
 ## Current Focus
 - Inversion built + uncertainty budget complete; **LiDAR-validated** (FINAL GPR geom
-  2026-07-16): L3 untruncated ellipse 193+/-23 vs LiDAR 203 m^2 (~5%); L5 circle
-  167+/-30 vs 182 (~8% low, chi2_red 1.9). Both inside 1 SE. L3 roof aligns with the
+  2026-07-16): L3 untruncated ellipse 193+/-27 vs LiDAR 203 m^2 (~5%); L5 circle
+  167+/-36 vs 182 (~8% low, chi2_red 1.9). Both inside 1 SE. (Area SEs are the
+  reported MC values; velocity_sigma = 0.015 m/ns since 2026-07-29 -- see
+  [[update-gpr-velocity-picks]]; velocity is now a co-leading channel on L5/L3-ellipse.) L3 roof aligns with the
   LiDAR void top; NB the L5 8.6 m ceiling sits ~6 m above the LiDAR roof (~14.5 m) --
   area validates but the L5 roof-alignment argument is weaker (flagged to GPR).
   Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
