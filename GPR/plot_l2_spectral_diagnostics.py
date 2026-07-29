@@ -50,6 +50,8 @@ LINE_B, FREQ_B, LABEL_B = 'Line3', '100MHz', 'Line3 -- 100 MHz (normal)'
 
 FMAX_MHZ     = 300.0   # crop the displayed spectrum to this frequency (matches notebook)
 F_X_CLIP_PCT = 98.0    # f-x linear colour clip percentile (matches notebook)
+NOTCH_FREQS_MHZ = [75.0, 160.0]   # approx L2 100MHz hardware notches (see CLAUDE.md);
+                                  # guide lines on the mean-spectrum panel only
 
 
 def load_processed(line, freq):
@@ -105,6 +107,8 @@ def make_figure():
     axm = fig.add_subplot(gs[0, :])
     axm.plot(mfreqA, normA, color='#d62728', lw=1.3, label=LABEL_A)
     axm.plot(mfreqB, normB, color='#1f77b4', lw=1.3, label=LABEL_B)
+    for nf in NOTCH_FREQS_MHZ:
+        axm.axvline(nf, color='black', lw=0.8, ls='dashed', zorder=1)
     axm.set_xlim(0, FMAX_MHZ)
     axm.set_ylim(0, 1.08)
     axm.set_xlabel('Frequency (MHz)', fontsize=9)

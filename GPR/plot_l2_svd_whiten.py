@@ -52,6 +52,8 @@ TRIAL_WHITEN_WINDOW = 5   # smoothing bins; lower = flatter spectrum (more aggre
 
 FMAX_MHZ = 300.0   # crop displayed spectrum to this frequency (matches diagnostics script)
 CMAP     = 'seismic'
+NOTCH_FREQS_MHZ = [75.0, 160.0]   # approx L2 100MHz hardware notches (see CLAUDE.md);
+                                  # guide lines on the mean-spectrum panels only
 
 
 def mean_trace_spectrum(data, dt_ns):
@@ -113,6 +115,8 @@ def make_figure():
     ax_a.plot(fB, nB, color='#7f7f7f', lw=1.3, label='baseline (SVD off)')
     ax_a.plot(fS, nS, color='#d62728', lw=1.3,
               label='SVD removed (n={})'.format(TRIAL_N_SVD))
+    for nf in NOTCH_FREQS_MHZ:
+        ax_a.axvline(nf, color='black', lw=0.8, ls='dashed', zorder=1)
     ax_a.set_xlim(0, FMAX_MHZ)
     ax_a.set_ylim(0, 1.08)
     ax_a.set_xlabel('Frequency (MHz)', fontsize=9)
@@ -125,6 +129,8 @@ def make_figure():
     ax_b.plot(fB, nB, color='#7f7f7f', lw=1.3, label='baseline (whiten=0)')
     ax_b.plot(fW, nW, color='#1f77b4', lw=1.3,
               label='whitened (window={})'.format(TRIAL_WHITEN_WINDOW))
+    for nf in NOTCH_FREQS_MHZ:
+        ax_b.axvline(nf, color='black', lw=0.8, ls='dashed', zorder=1)
     ax_b.set_xlim(0, FMAX_MHZ)
     ax_b.set_ylim(0, 1.08)
     ax_b.set_xlabel('Frequency (MHz)', fontsize=9)
