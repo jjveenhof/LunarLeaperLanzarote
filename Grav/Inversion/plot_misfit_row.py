@@ -1,6 +1,6 @@
 """
 The three chi2 misfit surfaces (L3 circle, L5 circle, L3 ellipse) at thesis width --
-a compact alternative to the per-mode surfaces from invert_tube.py (which stay as the
+a compact alternative to the per-mode surfaces from plot_misfit.py (which stay as the
 individual PNGs). The two CIRCLE panels share a y-axis (both are tube radius r on the
 same grid); the ellipse (half-width a) sits on its own row below, so no panel is
 squished and the y-labels never collide.
@@ -8,10 +8,14 @@ squished and the y-labels never collide.
 Each panel is one line+shape's dense grid search over (size, x0), with a DC offset
 fitted analytically at every node. Colour = Delta chi2 RESCALED by the reduced
 chi-square (max(1, chi2_nu)), so the panels -- which have different chi2_nu -- share
-ONE colour scale and one colorbar; the white contours are then the fixed joint
-68% / 95% levels (Delta chi2 = 2.30, 6.17) for two parameters.
+ONE colour scale and one colorbar; the white contours are the 1 SE / 2 SE levels
+(rescaled Delta chi2 = 1, 4), whose projection onto each axis IS the reported +/-1 SE
+/ +/-2 SE for that parameter.
 
-Run:  python plot_misfit_row.py
+Reads precomputed artifacts (run_inversion.py); it never runs the grid search itself.
+
+Run:  python run_inversion.py   # once, to (re)build the artifacts
+      python plot_misfit_row.py
 """
 
 import numpy as np
@@ -23,6 +27,7 @@ _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for 
 from plot_utils import save_figure
 
 import invert_tube as it
+import inversion_io as io
 
 FIG_W_IN, FIG_H_IN = 6.1, 4.4      # thesis \linewidth; two rows of panels
 SIZE_YLIM = (1.0, 20.0)            # common size-axis range (m); one scale for radius r
@@ -33,32 +38,19 @@ MISFIT_HPAD = 0.0                  # inches of padding around the axes (rows + e
 MISFIT_HSPACE = 0.0                # extra height fraction between the two rows
 
 
-def configure(line):
-    """Point invert_tube's module globals at this line's preset (no truncation)."""
-    pre = it.LINE_PRESETS[line]
-    it.LINE = line
-    it.CEILING0 = pre["ceiling"]
-    it.FLOOR0 = pre["floor"] or 16.0
-    it.TRUNCATE_D = None
-    return pre
-
-
 def draw_panel(ax, line, mode, letter, show_ylabel=True, show_xlabel=True):
-    """Draw one rescaled chi2 surface on ax; return its pcolormesh handle."""
-    configure(line)
-    sx, d, se = it.load_line(line)
-    sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-    xmin = sx[np.argmin(d)]
-    x0s = np.arange(xmin - 20, xmin + 20, 0.5)
-    res = it.invert(mode, sx, d, se, it.CEILING0, it.FLOOR0, sizes, x0s)
-    lev = max(1.0, res["chi2red"])                     # rescale so reduced chi2 = 1
-    dchi = (res["chi2"] - res["chi2"].min()) / lev      # rescaled -> shared colour scale
+    """Draw one rescaled chi2 surface on ax (loaded from the artifact); return its
+    pcolormesh handle."""
+    a = io.load_artifact(line, mode)                   # untruncated preset case
+    sizes, x0s, chi2 = a["sizes"], a["x0s"], a["chi2"]
+    lev = max(1.0, a["chi2red"])                        # rescale so reduced chi2 = 1
+    dchi = (chi2 - chi2.min()) / lev                    # rescaled -> shared colour scale
     im = ax.pcolormesh(x0s, sizes, dchi, cmap="viridis_r", vmax=30, shading="auto")
     # 1 SE / 2 SE contours: rescaled Delta chi2 = 1, 4. Their projection onto each
     # axis IS the reported +/-1 SE / +/-2 SE for that parameter (single-parameter
     # Delta chi2, consistent with the SE read off the profiled curve in invert_tube).
     ax.contour(x0s, sizes, dchi, levels=[1.0, 4.0], colors="w", linewidths=0.8)
-    ax.plot(res["x0"], res["size"], "r*", ms=9)
+    ax.plot(a["x0"], a["size"], "r*", ms=9)
     if show_xlabel:
         ax.set_xlabel(r"$x_0$ (m)")
     if show_ylabel:

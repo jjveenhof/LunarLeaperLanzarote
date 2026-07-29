@@ -15,6 +15,9 @@ __pycache__/
 *.csv
 *.h5
 
+# Regenerable inversion outputs -- keep on disk, never commit (rebuilt by run_inversion.py)
+Grav/Inversion/artifacts/
+
 # OS clutter
 .DS_Store
 Thumbs.db

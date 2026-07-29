@@ -36,23 +36,18 @@ All contributions (data grid-search interval + picks + velocity + detrend) are
 combined in quadrature into one reported SE; truncation is kept separate as a
 systematic bracket (compare the inf-vs-truncated runs).
 
-Run in any env; configure from the command line, e.g.:
-    python invert_tube.py                              # Line 3 preset, infinite
-    python invert_tube.py --line 5                     # Line 5 preset (circle)
-    python invert_tube.py --line 3 --truncate inf 10 15   # 3 truncation runs
-    python invert_tube.py --ceiling 6 --floor 17       # override picks
+This module is the pure NUMERICAL ENGINE: forward model, grid search, uncertainty
+budget and posterior sampler, all as side-effect-free functions taking an explicit
+InvCfg. It runs NOTHING on import and has no __main__. The driver run_inversion.py
+computes + persists artifacts; the plot_*.py scripts read them (or, for the pick
+sweep, call the engine here with their own cfg). It does not import matplotlib.
 """
 
 import numpy as np
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
+from dataclasses import dataclass
 from pathlib import Path
 from scipy.optimize import minimize_scalar
 from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
-import sys as _sys, pathlib as _pl
-_sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
-from plot_utils import save_figure
 
 BASE = Path(__file__).resolve().parents[3]
 DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended.csv"
@@ -61,21 +56,24 @@ FIG = BASE / "Results/Grav/Inversion"
 FIG.mkdir(parents=True, exist_ok=True)
 
 # ---- per-line presets: GPR picks + which shapes are fittable ----------------
-# Override any of these from the command line (see parse_args / module docstring).
+# The driver (run_inversion.py) reads these and its CLI overrides into an InvCfg.
 LINE_PRESETS = {
     # GPR-derived geometry + migration velocity per line (2026-07-16). Depths in m
     # below surface (floors air-gap corrected). Velocity feeds the velocity-
     # uncertainty channel; BOTH lines now migrated at 0.125 m/ns (L5 remigrated
     # from 0.11 -- diffraction collapse admits 0.10-0.13, single value settled).
+    # velocity_sigma raised 0.010 -> 0.015 m/ns (2026-07-29): more honest 1-sigma
+    # spanning the diffraction-collapse range; makes velocity a co-leading channel
+    # on L5 / L3-ellipse rather than understating it. Best fits unchanged.
     # Picks live in Data/GPR/Migration/tube_picks.csv (ceiling + apparent floor);
     # floor here = air-gap corrected: ceiling + (floor_app - ceiling)*0.3/v_rock.
     # L3 refined pick: ceiling 3.8, floor 14.6 (apparent 8.3). Supersedes 3.5/14.3.
     3: dict(ceiling=3.8, floor=14.6, modes=("circle", "ellipse"),
-            velocity=0.125, velocity_sigma=0.010),
+            velocity=0.125, velocity_sigma=0.015),
     # L5: no floor reflector -> circle-only. Ceiling re-picked on the v=0.125
     # remigration: 8.6 (was 10.5 at v=0.11). velocity_sigma assumed (GPR gave none).
     5: dict(ceiling=8.6, floor=None, modes=("circle",),
-            velocity=0.125, velocity_sigma=0.010),
+            velocity=0.125, velocity_sigma=0.015),
 }
 
 # ---- fixed constants --------------------------------------------------------
@@ -89,22 +87,22 @@ NVERT = 144                  # polygon vertices (>0.1% accurate, fast)
 RADIUS_GRID = np.arange(1.0, 20.0, 0.1)    # circle radius (m)
 WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 
-# ---- runtime config (set by parse_args in main; defaults = Line 3 preset) ---
-LINE = 3
-CEILING0, FLOOR0 = 3.8, 14.6
-MODES = ("circle", "ellipse")
-SIGMA_PICK = 1.25            # m, half-wavelength range resolution v/(2f) at 50 MHz
-                             # (v=0.125 m/ns -> lambda/2 = 1.25 m); picks trusted on LF
-# GPR migration velocity: picks are time picks, so velocity scales ALL depths
-# jointly (a systematic, common-mode term -- distinct from the per-pick noise).
-# Per line, from LINE_PRESETS (set in main); defaults below are Line 3's.
-VELOCITY = 0.125             # m/ns
-VELOCITY_SIGMA = 0.010       # m/ns 1-sigma
-SLOPE_SE = 0.0               # mGal/m, regional-trend slope 1-sigma (set in main)
-TRUNCATE_D = None            # set per-run from the --truncate list (None = inf 2D)
+
+@dataclass(frozen=True)
+class InvCfg:
+    """Per-run inversion configuration. Threaded explicitly through every engine
+    function so callers (driver, plots, diagnostics) never mutate global state --
+    there IS no global state to mutate. ceiling/floor stay per-call arguments (the
+    sensitivity sweeps vary them at fixed cfg). Built by run_inversion.py from
+    LINE_PRESETS + CLI, stored in each artifact, rebuilt by inversion_io.cfg_of."""
+    velocity: float = 0.125          # m/ns, GPR migration velocity
+    velocity_sigma: float = 0.015    # m/ns, velocity 1-sigma
+    sigma_pick: float = 1.25         # m, GPR pick 1-sigma (lambda/2 at 50 MHz)
+    slope_se: float = 0.0            # mGal/m, regional-trend slope 1-sigma
+    truncate: float = None           # pit distance (m); None = infinite 2D tube
 
 
-def load_line(line=LINE):
+def load_line(line):
     d = np.genfromtxt(DET, delimiter=",", names=True)
     m = d["Line"] == line
     x, resid, se = d["dist"][m], d["CBA_detrended"][m], d["SE"][m]
@@ -127,15 +125,15 @@ def area_of(mode, size, ceiling, floor):
     return np.pi * a * b
 
 
-def forward(mode, size, x0, ceiling, floor, sx):
+def forward(mode, size, x0, ceiling, floor, sx, cfg):
     a, b, depth = shape_params(mode, size, ceiling, floor)
     g = polygon_gz(sx, ellipse_vertices(a, b, x0, depth, n=NVERT), -DENSITY)
-    if TRUNCATE_D is None:                       # infinite 2D tube
+    if cfg.truncate is None:                     # infinite 2D tube
         return g
     # One-sided finite tube (ends at d on the pit side): scale by the truncation
     # factor at the centroid depth. Fast approximation of the exact per-cell
     # forward_polygon.tube_gz (error << the truncation correction itself).
-    F = 0.5 * (1.0 + TRUNCATE_D / np.hypot(depth, TRUNCATE_D))
+    F = 0.5 * (1.0 + cfg.truncate / np.hypot(depth, cfg.truncate))
     return F * g
 
 
@@ -150,22 +148,22 @@ def fit_offset(g, d, w):
     return c, np.sum(w * (d - g - c) ** 2)
 
 
-def chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s):
+def chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg):
     # x0-shift trick: forward(x0) == forward(0) evaluated at (sensors - x0).
     # Compute one dense forward per size, then interpolate for every x0.
     w = 1.0 / se ** 2
     xq = np.arange(sx.min() - x0s.max() - 2, sx.max() - x0s.min() + 2, 0.5)
     chi2 = np.empty((len(sizes), len(x0s)))
     for i, s in enumerate(sizes):
-        g0 = forward(mode, s, 0.0, ceiling, floor, xq)
+        g0 = forward(mode, s, 0.0, ceiling, floor, xq, cfg)
         for j, x0 in enumerate(x0s):
             g = np.interp(sx - x0, xq, g0)
             chi2[i, j] = fit_offset(g, d, w)[1]
     return chi2
 
 
-def invert(mode, sx, d, se, ceiling, floor, sizes, x0s):
-    chi2 = chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s)
+def invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg):
+    chi2 = chi2_surface(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg)
     i, j = np.unravel_index(np.argmin(chi2), chi2.shape)
     chi2min = float(chi2.min())
     dof = len(d) - 3                                     # size, x0, DC offset
@@ -179,7 +177,7 @@ def invert(mode, sx, d, se, ceiling, floor, sizes, x0s):
                 chi2red=chi2red, size_lo=sizes[mask].min(), size_hi=sizes[mask].max())
 
 
-def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0):
+def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0, cfg):
     """Continuous 1D size fit at fixed x0 (fast inner loop for MC).
 
     chi2(size) is smooth and unimodal, so a bounded minimiser finds the best
@@ -187,24 +185,24 @@ def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0):
     """
     w = 1.0 / se ** 2
     def chi(s):
-        g = forward(mode, s, x0, ceiling, floor, sx)
+        g = forward(mode, s, x0, ceiling, floor, sx, cfg)
         return fit_offset(g, d, w)[1]
     r = minimize_scalar(chi, bounds=(sizes[0], sizes[-1]), method="bounded",
                         options={"xatol": 0.05})
     return r.x
 
 
-def size_area_se(mode, sx, d, se, res, ceiling, floor, sizes):
+def size_area_se(mode, sx, d, se, res, ceiling, floor, sizes, cfg=None):
     """Combined 1-sigma on recovered size AND area, from the four RANDOM channels
     (data + picks + velocity + detrend) added in quadrature. Truncation is a
-    separate systematic bracket, NOT included here. Uses module globals SIGMA_PICK,
-    VELOCITY, VELOCITY_SIGMA, SLOPE_SE. Returns a dict of components + totals so
-    both run_mode and the terrain-model plot share one budget definition.
+    separate systematic bracket, NOT included here. Uses cfg.sigma_pick,
+    cfg.velocity, cfg.velocity_sigma, cfg.slope_se. Returns a dict of components +
+    totals so both the driver and the terrain-model plot share one budget definition.
     """
     h = 0.5
 
     def fit(c, f):
-        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"])
+        s = best_size_only(mode, sx, d, se, c, f, sizes, res["x0"], cfg)
         return s, area_of(mode, s, c, f)
 
     size0 = res["size"]
@@ -219,21 +217,21 @@ def size_area_se(mode, sx, d, se, res, ceiling, floor, sizes):
         sp, ap = fit(ceiling, floor + h)
         sm, am = fit(ceiling, max(floor - h, ceiling + 1))
         ds_df, da_df = (sp - sm) / (2 * h), (ap - am) / (2 * h)
-    se_pick = np.hypot(ds_dc, ds_df) * SIGMA_PICK
-    area_se_pick = np.hypot(da_dc, da_df) * SIGMA_PICK
+    se_pick = np.hypot(ds_dc, ds_df) * cfg.sigma_pick
+    area_se_pick = np.hypot(da_dc, da_df) * cfg.sigma_pick
 
     # velocity: a SYSTEMATIC common-mode depth scaling (ceiling+floor together).
-    dv = VELOCITY_SIGMA / VELOCITY
+    dv = cfg.velocity_sigma / cfg.velocity
     sp, ap = fit(ceiling * (1 + dv), floor * (1 + dv))
     sm, am = fit(max(ceiling * (1 - dv), MIN_CEILING), floor * (1 - dv))
     se_vel = abs(sp - sm) / 2.0
     area_se_vel = abs(ap - am) / 2.0
 
     # detrend: the removed regional slope's 1-sigma tilts the residual we fit.
-    tilt = SLOPE_SE * (sx - sx.mean())
+    tilt = cfg.slope_se * (sx - sx.mean())
 
     def fit_data(dd):
-        s = best_size_only(mode, sx, dd, se, ceiling, floor, sizes, res["x0"])
+        s = best_size_only(mode, sx, dd, se, ceiling, floor, sizes, res["x0"], cfg)
         return s, area_of(mode, s, ceiling, floor)
 
     sp, ap = fit_data(d + tilt)
@@ -257,7 +255,7 @@ def size_area_se(mode, sx, d, se, res, ceiling, floor, sizes):
     )
 
 
-def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
+def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng, cfg):
     """Hierarchical posterior sample of tube geometry over the SAME four channels
     size_area_se propagates (picks, velocity common-mode, detrend tilt, data noise)
     -- sampled instead of propagated, for the terrain-plot ensemble/envelope. Each
@@ -265,9 +263,9 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
     mode depth scaling of ceiling+floor together), the regional-trend slope (a tilt
     on the residual) and the station data (measurement noise), then refits (size, x0)
     on a coarse grid with the DC baseline floated inside invert(). Returns
-    [(size, x0, ceiling, floor), ...]. Uses module globals SIGMA_PICK, VELOCITY,
-    VELOCITY_SIGMA, SLOPE_SE, MIN_CEILING -- so it stays in lock-step with the
-    analytic budget in size_area_se (one definition of the channels, both here).
+    [(size, x0, ceiling, floor), ...]. Uses cfg.sigma_pick, cfg.velocity,
+    cfg.velocity_sigma, cfg.slope_se (+ the MIN_CEILING constant) -- so it stays in
+    lock-step with the analytic budget in size_area_se (one channel definition, both).
 
     The data-noise draw is inflated by sqrt(max(1, chi2_nu)) -- the SAME chi2-
     rescaling the analytic data channel uses (invert()'s size interval) -- so the
@@ -279,184 +277,21 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng):
              else np.arange(1.0, 30.0, 0.25))          # coarser than the fit grid
     xmin = sx[np.argmin(d)]
     x0s = np.arange(xmin - 20, xmin + 20, 0.5)
-    dv_sig = VELOCITY_SIGMA / VELOCITY
+    dv_sig = cfg.velocity_sigma / cfg.velocity
     xm = sx - sx.mean()
     # Nominal fit -> chi2_nu, to rescale the data noise for the under-fit (as analytic).
     inflate = np.sqrt(max(1.0, invert(mode, sx, d, se, ceil0, floor0,
-                                      sizes, x0s)["chi2red"]))
+                                      sizes, x0s, cfg)["chi2red"]))
     out = []
     for _ in range(n):
-        c = ceil0 + rng.normal(0, SIGMA_PICK)
-        f = floor0 + (rng.normal(0, SIGMA_PICK) if mode == "ellipse" else 0.0)
+        c = ceil0 + rng.normal(0, cfg.sigma_pick)
+        f = floor0 + (rng.normal(0, cfg.sigma_pick) if mode == "ellipse" else 0.0)
         scale = 1.0 + rng.normal(0, dv_sig)            # velocity: common-mode
         c *= scale; f *= scale
         c = max(c, MIN_CEILING)
         if mode == "ellipse":
             f = max(f, c + 1.0)
-        dd = d + rng.normal(0, SLOPE_SE) * xm + rng.normal(0.0, se * inflate)
-        res = invert(mode, sx, dd, se, c, f, sizes, x0s)
+        dd = d + rng.normal(0, cfg.slope_se) * xm + rng.normal(0.0, se * inflate)
+        res = invert(mode, sx, dd, se, c, f, sizes, x0s, cfg)
         out.append((res["size"], res["x0"], c, f))
     return out
-
-
-# ============================== run one mode =================================
-def run_mode(mode, sx, d, se):
-    sizes = RADIUS_GRID if mode == "circle" else WIDTH_GRID
-    size_lbl = "radius r (m)" if mode == "circle" else "half-width a (m)"
-    tag = "" if TRUNCATE_D is None else f"_trunc{int(TRUNCATE_D)}"
-    ttl = "" if TRUNCATE_D is None else f"  [tube truncated at {TRUNCATE_D:.0f} m]"
-    xmin = sx[np.argmin(d)]
-    x0s = np.arange(xmin - 20, xmin + 20, 0.5)
-
-    res = invert(mode, sx, d, se, CEILING0, FLOOR0, sizes, x0s)
-    chi2red = res["chi2red"]
-    c_best = fit_offset(forward(mode, res["size"], res["x0"], CEILING0, FLOOR0, sx),
-                        d, 1.0 / se ** 2)[0]
-    print(f"\n[{mode}{tag}] best {size_lbl.split()[0]}={res['size']:.2f} m "
-          f"(data 1sigma, rescaled: {res['size_lo']:.2f}-{res['size_hi']:.2f}), "
-          f"x0={res['x0']:.1f} m, baseline={c_best*1000:.0f} uGal, chi2_red={chi2red:.1f}")
-
-    # ---- Figure 1: chi2 misfit surface (standalone, thesis width) ------------
-    # The best-fit anomaly and its posterior spread now live in the combined
-    # anomaly + terrain figure (plot_model_terrain.py). This figure is the misfit
-    # surface on its own, with the joint 68%/95% confidence contours + best-fit star.
-    fig, a1 = plt.subplots(figsize=(6.1, 4.6))         # thesis \linewidth
-    chi2 = res["chi2"]
-    lev = max(1.0, chi2red)                            # rescale confidence levels
-    im = a1.pcolormesh(x0s, sizes, chi2 - chi2.min(), cmap="viridis_r",
-                       vmax=30 * lev, shading="auto")
-    a1.contour(x0s, sizes, chi2 - chi2.min(), levels=[2.30 * lev, 6.17 * lev],
-               colors="w", linewidths=1.0)            # joint 68%, 95% (rescaled)
-    a1.plot(res["x0"], res["size"], "r*", markersize=14)
-    a1.set_xlabel(r"tube centre $x_0$ (m)")
-    a1.set_ylabel(size_lbl)
-    a1.set_title(rf"Line {LINE} {mode}: $\chi^2-\chi^2_{{min}}$ surface "
-                 rf"(white = 68%, 95%){ttl}", fontweight="bold")
-    fig.colorbar(im, ax=a1, label=r"$\Delta\chi^2$")
-    fig.tight_layout()
-    fig.savefig(FIG / f"invert_line{LINE}_{mode}{tag}.png", dpi=140)
-    if not tag:   # untruncated run == the thesis figure
-        save_figure(fig, f"invert_line{LINE}_{mode}", "Inversion", vector=True)
-    print(f"      saved -> Results/Grav/Inversion/invert_line{LINE}_{mode}{tag}.png")
-
-    # ---- combined uncertainty: data + picks + velocity + detrend in quadrature
-    # (analytic propagation; truncation is a separate systematic, not here). Shared
-    # with plot_model_terrain via size_area_se so both use one budget definition.
-    u = size_area_se(mode, sx, d, se, res, CEILING0, FLOOR0, sizes)
-    size0, area_best = u["size"], u["area"]
-    se_data, se_pick, se_vel, se_det, se_tot = (u["se_data"], u["se_pick"],
-        u["se_vel"], u["se_det"], u["se_tot"])
-    area_se_data, area_se, area_se_vel, area_se_det, area_se_tot = (u["area_se_data"],
-        u["area_se_pick"], u["area_se_vel"], u["area_se_det"], u["area_se_tot"])
-
-    # ---- Figure 2: one-at-a-time sweep (covers gross mispicks) ---------------
-    fig, b1 = plt.subplots(figsize=(7, 5))
-    ceilings = np.arange(max(CEILING0 - SWEEP, MIN_CEILING),
-                         CEILING0 + SWEEP + 0.01, 1.0)
-    best_vs_ceil = [invert(mode, sx, d, se, c,
-                           FLOOR0 if mode == "circle" else max(FLOOR0, c + 1),
-                           sizes, x0s)["size"] for c in ceilings]
-    b1.plot(ceilings, best_vs_ceil, "o-", color="#0099FF", label="vs ceiling")
-    if mode == "ellipse":
-        floors = np.arange(FLOOR0 - SWEEP, FLOOR0 + SWEEP + 0.01, 1.0)
-        best_vs_floor = [invert(mode, sx, d, se, CEILING0, max(f, CEILING0 + 1),
-                                sizes, x0s)["size"] for f in floors]
-        b1.plot(floors, best_vs_floor, "s-", color="#00CC80", label="vs floor")
-    # nominal picks with +/- SIGMA_PICK margin (blue = ceiling, green = floor)
-    b1.axvspan(CEILING0 - SIGMA_PICK, CEILING0 + SIGMA_PICK, color="#0099FF",
-               alpha=0.12, zorder=0)
-    b1.axvline(CEILING0, color="#0099FF", ls="--", lw=0.9,
-               label=r"ceiling pick $\pm1\sigma$")
-    if mode == "ellipse":
-        b1.axvspan(FLOOR0 - SIGMA_PICK, FLOOR0 + SIGMA_PICK, color="#00CC80",
-                   alpha=0.12, zorder=0)
-        b1.axvline(FLOOR0, color="#00CC80", ls="--", lw=0.9,
-                   label=r"floor pick $\pm1\sigma$")
-    # horizontal band = combined 1 SE (data + picks + velocity + detrend); x0 fixed
-    # at the best-fit lateral position for the analytic pick/velocity propagation.
-    b1.axhspan(size0 - se_tot, size0 + se_tot, color="#FF5C00", alpha=0.15,
-               label=rf"{size0:.1f} $\pm$ {se_tot:.1f} m (1 SE total)")
-    b1.axhline(size0, color="#FF5C00", lw=1.0)
-    b1.set_xlabel("GPR pick depth (m)")
-    b1.set_ylabel(f"recovered {size_lbl}")
-    b1.set_title(f"Line {LINE} {mode} -- pick sensitivity (at best cave-centre position)" + ttl)
-    b1.legend(fontsize=8)
-    b1.grid(True, alpha=0.25, ls="--")
-    fig.tight_layout()
-    fig.savefig(FIG / f"sensitivity_line{LINE}_{mode}{tag}.png", dpi=140)
-    print(f"      saved -> Results/Grav/Inversion/sensitivity_line{LINE}_{mode}{tag}.png")
-    skew = "  (half-width mildly right-skewed; SE first-order)" \
-        if mode == "ellipse" else ""
-    print(f"      {size_lbl.split()[0]} = {size0:.2f} +/- {se_tot:.2f} m (1 SE total)"
-          f"{skew}")
-    print(f"         contributions (m): data {se_data:.2f} | picks {se_pick:.2f} | "
-          f"velocity {se_vel:.2f} | detrend {se_det:.2f}")
-    print(f"      area = {area_best:.0f} +/- {area_se_tot:.0f} m^2 (1 SE total, "
-          f"= volume per metre)")
-    print(f"         contributions (m^2): data {area_se_data:.0f} | picks {area_se:.0f}"
-          f" | velocity {area_se_vel:.0f} | detrend {area_se_det:.0f}")
-
-
-def parse_args():
-    import argparse
-    p = argparse.ArgumentParser(
-        description="La Corona tube inversion (GPR-constrained, gravity-for-volume).")
-    p.add_argument("--line", type=int, default=3, choices=sorted(LINE_PRESETS),
-                   help="profile line (loads its GPR-pick preset)")
-    p.add_argument("--ceiling", type=float, help="override ceiling pick (m)")
-    p.add_argument("--floor", type=float, help="override floor pick (m, ellipse)")
-    p.add_argument("--modes", nargs="+", choices=["circle", "ellipse"],
-                   help="override which shapes to fit")
-    p.add_argument("--truncate", nargs="+", default=["inf"],
-                   help="one or more pit distances in m; 'inf' = infinite 2D tube "
-                        "(e.g. --truncate inf 10 15)")
-    p.add_argument("--sigma-pick", type=float, default=1.25,
-                   help="GPR pick 1-sigma (m); default lambda/2 at 50 MHz")
-    p.add_argument("--velocity", type=float, default=None,
-                   help="override GPR migration velocity (m/ns; default is per-line)")
-    p.add_argument("--velocity-sigma", type=float, default=None,
-                   help="override velocity 1-sigma (m/ns)")
-    return p.parse_args()
-
-
-def main():
-    global LINE, CEILING0, FLOOR0, MODES, SIGMA_PICK, VELOCITY, VELOCITY_SIGMA
-    global SLOPE_SE, TRUNCATE_D
-    args = parse_args()
-    pre = LINE_PRESETS[args.line]
-    LINE = args.line
-    CEILING0 = args.ceiling if args.ceiling is not None else pre["ceiling"]
-    FLOOR0 = args.floor if args.floor is not None else (pre["floor"] or 16.0)
-    MODES = tuple(args.modes) if args.modes else pre["modes"]
-    SIGMA_PICK = args.sigma_pick
-    VELOCITY = args.velocity if args.velocity is not None else pre["velocity"]
-    VELOCITY_SIGMA = (args.velocity_sigma if args.velocity_sigma is not None
-                      else pre["velocity_sigma"])
-
-    # Regional-trend slope 1-sigma for this line (its tilt was removed before the
-    # inversion, so its uncertainty propagates into the residual we fit).
-    if TREND.exists():
-        tp = np.genfromtxt(TREND, delimiter=",", names=True)
-        row = tp[tp["Line"] == LINE]
-        SLOPE_SE = float(row["slope_se"][0]) if len(row) else 0.0
-    else:
-        print(f"  (no trend-params file; detrend uncertainty omitted)")
-        SLOPE_SE = 0.0
-    truncs = [None if t.lower() in ("inf", "none") else float(t)
-              for t in args.truncate]
-
-    if "ellipse" in MODES and pre["floor"] is None and args.floor is None:
-        raise SystemExit(f"Line {LINE} has no floor pick; pass --floor or drop "
-                         f"ellipse (--modes circle).")
-
-    sx, d, se = load_line(LINE)
-    print(f"Line {LINE}: {len(sx)} stations, residual min {d.min()*1000:.0f} uGal "
-          f"(ceiling {CEILING0:.1f} m"
-          + (f", floor {FLOOR0:.1f} m" if "ellipse" in MODES else "") + ")")
-    for TRUNCATE_D in truncs:
-        for mode in MODES:
-            run_mode(mode, sx, d, se)
-
-
-if __name__ == "__main__":
-    main()

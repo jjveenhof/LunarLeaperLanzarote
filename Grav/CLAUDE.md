@@ -62,22 +62,39 @@ share one; Lines 2 and 5 do not), so trends are fit per line, never as one cross
 
 ## GPR-constrained tube inversion (`Inversion/`)
 Gravity-for-volume inversion of the La Corona tube on the detrended CBA residual.
+Architecture: COMPUTE is detached from PLOTTING (refactor 2026-07-29). One driver
+runs the inversion + Monte Carlo once and persists artifacts; every plot reads them.
 - `forward_polygon.py` -- fast analytic 2-D Talwani polygon forward (pure numpy).
   `forward_fem.py` is the pyGIMLi FEM equivalent (validation/3-D only; needs the
   `pygimli` env). `inspect_*` scripts are validation diagnostics.
-- `invert_tube.py` -- THE inversion. Dense grid search over (size, x0) with a DC
-  baseline fitted analytically at every grid point (relative gravity -> arbitrary
-  datum; dof = n-3). CLI: `--line {3,5} --truncate inf 10 15 --ceiling --floor`.
-  Modes: circle (fix GPR ceiling, fit R) and ellipse (fix ceiling+floor, fit
-  half-width a). Uncertainty budget combined in quadrature: data (chi2-rescaled
-  grid interval) + GPR picks (analytic propagation) + velocity (systematic depth
-  scaling) + detrend slope (from `detrend_trend_params_*.csv`); truncation kept
-  separate as a systematic bracket. GPR inputs FINAL (2026-07-16, BOTH lines migrated
-  at v 0.125): L3 ceiling 3.8/floor 14.6 m (air-gap corrected); L5 ceiling 8.6 m
-  (no floor -> circle-only). No placeholders left.
-- `plot_model_terrain.py` -- best-fit tube under the measured surface (GPR-line
-  GNSS projected onto the same straight profile axis), true scale, auto-overlays
-  `lidar_line{N}.csv` ground truth. Station styling matches the other grav plots.
+- `invert_tube.py` -- the pure NUMERICAL ENGINE (no CLI, no matplotlib, no globals,
+  nothing runs on import). Dense grid search over (size, x0) with a DC baseline
+  fitted analytically at every grid point (relative gravity -> arbitrary datum;
+  dof = n-3); forward, `size_area_se` budget, `sample_ensemble` MC -- all pure
+  functions taking an explicit `InvCfg` (velocity, velocity_sigma, sigma_pick,
+  slope_se, truncate). Modes: circle (fix GPR ceiling, fit R) and ellipse (fix
+  ceiling+floor, fit half-width a). Uncertainty budget combined in quadrature: data
+  (chi2-rescaled grid interval) + GPR picks (analytic propagation) + velocity
+  (systematic depth scaling) + detrend slope (from `detrend_trend_params_*.csv`);
+  truncation kept separate as a systematic bracket.
+- `run_inversion.py` -- THE driver, the ONLY script that runs the inversion. Builds
+  an `InvCfg` per (line, mode, truncation) from `LINE_PRESETS` + CLI, computes best
+  fit + chi2 surface + budget + 300-sample ensemble, writes one artifact each.
+  CLI: `--line {3,5} --truncate inf 10 15 --ceiling --floor --modes --sigma-pick
+  --velocity --velocity-sigma --seed --ensemble`. Run it after any input change.
+- `inversion_io.py` -- artifact persistence (`save_artifact`/`load_artifact`/
+  `cfg_of`); one `.npz` per case at `Results/Grav/Inversion/artifacts/` (gitignored,
+  regenerable). This is the seam decoupling compute from plotting.
+- GPR inputs FINAL (2026-07-16, BOTH lines migrated at v 0.125): L3 ceiling 3.8/floor
+  14.6 m (air-gap corrected); L5 ceiling 8.6 m (no floor -> circle-only). No
+  placeholders left.
+- Plot scripts (READ artifacts, never run the inversion): `plot_misfit_row.py`
+  (3-panel misfit surfaces, 1SE/2SE contours), `plot_misfit.py` (standalone per-mode
+  surface, joint 68/95 contours), `plot_model_terrain.py` (best-fit tube under the
+  measured surface, true scale, auto-overlays `lidar_line{N}.csv` ground truth,
+  ensemble drawn from the artifact). `plot_sensitivity.py` is the exception -- it
+  RUNS the engine (pick sweep, no artifact covers it) with its own `InvCfg`; kept
+  flexible for the planned sensitivity analyses.
 
 ## Plot tuning: generate once, then ask -- never self-iterate
 Claude CANNOT reliably judge whether a figure looks nice, is aligned, well spaced,

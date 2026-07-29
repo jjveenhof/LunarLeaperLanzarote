@@ -29,12 +29,15 @@ are projected onto the same profile axis as the gravity 'dist', so the overlay i
 co-registered regardless of the distance-origin convention. (Ask the LiDAR expert
 to slice along the line and include easting/northing per vertex.)
 
-Run:  python plot_model_terrain.py --line 3 [--truncate 10] [--modes circle ellipse]
+Reads precomputed artifacts (run_inversion.py) for the best fit, uncertainty budget
+and posterior ensemble; it never runs the grid search or the Monte Carlo itself. The
+cheap forward-model evaluations for the drawn curves use the artifact's stored InvCfg.
+
+Run:  python run_inversion.py                       # once, to (re)build the artifacts
+      python plot_model_terrain.py --line 3 [--truncate 10] [--modes circle ellipse]
 """
 
 import argparse
-import hashlib
-import json
 import numpy as np
 import sys as _sys, pathlib as _pl
 _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
@@ -48,6 +51,7 @@ from matplotlib.legend_handler import HandlerTuple
 from pathlib import Path
 
 import invert_tube as it
+import inversion_io as io
 from forward_polygon import ellipse_vertices
 
 CORR = it.BASE / "Data/Gravimetry/Processed/LL_gravity_corrections.csv"
@@ -71,37 +75,6 @@ PICK_C = "#0072B2"             # GPR pick: solid blue line + band (not the dashe
 PANEL_LETTERS = ("a)", "b)")   # (top, bottom); set to None to switch the letters off
 PANEL_LETTER_XY = (0.014, 0.965)   # axes-fraction pos from top-left; move if it crowds N
 PANEL_LETTER_KW = dict(fontsize=12, fontweight="bold", va="top", ha="left", zorder=10)
-
-# The 300-sample posterior ensemble is deterministic given the seed + inputs, so we
-# cache its (size, x0, ceiling, floor) array to disk. The FIRST regen computes it; any
-# later tweak (letter position, colours, limits...) loads it instantly -- no MC rerun.
-CACHE_DIR = _pl.Path(__file__).resolve().parent / "mc_cache"
-
-
-def cached_ensemble(line, mode, sx, d, se, ceil, floor, n, seed, refresh=False):
-    """sample_ensemble output, cached to an npz keyed on everything that changes the
-    draw (geometry, all four channel sigmas, n, seed, and a hash of the data), so a
-    stale cache is never silently reused. Returns an (n, 4) array of (size,x0,c,f)."""
-    key = dict(line=int(line), mode=mode, ceil=float(ceil), floor=float(floor),
-               sigma_pick=float(it.SIGMA_PICK), v=float(it.VELOCITY),
-               vsig=float(it.VELOCITY_SIGMA), slope_se=float(it.SLOPE_SE),
-               n=int(n), seed=int(seed),
-               dhash=hashlib.md5(np.concatenate([sx, d, se]).tobytes()).hexdigest())
-    tag = hashlib.md5(json.dumps(key, sort_keys=True).encode()).hexdigest()[:16]
-    f = CACHE_DIR / f"ens_line{line}_{mode}_{tag}.npz"
-    if f.exists() and not refresh:
-        arr = np.load(f)["ens"]
-        print(f"  loaded cached {mode} ensemble ({len(arr)} samples) <- {f.name}")
-        return arr
-    # per-mode deterministic RNG so the cache is reproducible independent of run order.
-    rng = np.random.default_rng([seed, 0 if mode == "circle" else 1])
-    arr = np.array(it.sample_ensemble(mode, sx, d, se, ceil, floor, n, rng),
-                   dtype=float)
-    CACHE_DIR.mkdir(exist_ok=True)
-    np.savez(f, ens=arr)
-    print(f"  computed + cached {mode} ensemble ({len(arr)} samples) -> {f.name}")
-    return arr
-
 
 def gravity_profile(line):
     """Gravity stations for a line: along-profile dist, elevation (GNSS, matched
@@ -186,35 +159,24 @@ def main():
                    help="number of posterior tube samples drawn faintly (0=off)")
     p.add_argument("--no-band", action="store_true",
                    help="omit the filled +/-1 SE envelope")
-    p.add_argument("--seed", type=int, default=0, help="RNG seed for the ensemble")
-    p.add_argument("--refresh-cache", action="store_true",
-                   help="recompute the posterior ensemble instead of loading the cache")
     args = p.parse_args()
 
-    # ---- configure the imported inversion module ----------------------------
-    it.LINE = args.line
+    # ---- load the precomputed artifacts (run_inversion.py) -------------------
+    # One artifact per (line, mode, truncation). The plot never runs the inversion
+    # or the Monte Carlo -- it reads best fit, budget, ensemble and the stored InvCfg
+    # (velocity/pick sigmas etc.) so the drawn forward curves match the compute run.
+    truncate = None if args.truncate.lower() in ("inf", "none") else float(args.truncate)
     pre = it.LINE_PRESETS[args.line]
-    it.CEILING0 = pre["ceiling"]
-    it.FLOOR0 = pre["floor"] or 16.0
-    it.TRUNCATE_D = None if args.truncate.lower() in ("inf", "none") \
-        else float(args.truncate)
     modes = tuple(args.modes) if args.modes else pre["modes"]
-    ceil, floor = it.CEILING0, it.FLOOR0
-    # uncertainty-channel constants (needed for the band + ensemble; the terrain
-    # plot must set these, else it.* keeps its Line-3 module defaults).
-    it.VELOCITY = pre["velocity"]
-    it.VELOCITY_SIGMA = pre["velocity_sigma"]
-    it.SIGMA_PICK = 1.25                              # GPR pick 1-sigma (m); lambda/2 at 50 MHz
-    if it.TREND.exists():
-        tp = np.genfromtxt(it.TREND, delimiter=",", names=True)
-        r = tp[tp["Line"] == args.line]
-        it.SLOPE_SE = float(r["slope_se"][0]) if len(r) else 0.0
-    else:
-        it.SLOPE_SE = 0.0
+    art, cfgs = {}, {}
+    for mode in modes:
+        art[mode] = io.load_artifact(args.line, mode, truncate)
+        cfgs[mode] = io.cfg_of(art[mode])
+    # ceiling is common across modes for a line; floor differs (ellipse only). The
+    # per-mode picks live in each artifact and are read where the shape is drawn.
+    ceil = art[modes[0]]["ceiling"]
 
     sx, d, se = it.load_line(args.line)
-    xmin = sx[np.argmin(d)]
-    x0s = np.arange(xmin - 20, xmin + 20, 0.5)
     xs, zs, typ, proj = gravity_profile(args.line)
     surf = lambda x: np.interp(x, xs, zs)
     col = LINE_COLORS.get(args.line, "0.1")
@@ -227,13 +189,6 @@ def main():
                 ax.plot(xs[sel], zs[sel], STN_MARKER[t], color=col,
                         ms=STN_SIZE[t], mec="0.2", mew=0.5, ls="none", zorder=5,
                         label=f"{t} station")
-
-    # ---- best fit + shared uncertainty budget per shape (reuse the inversion)-
-    fits, unc = {}, {}
-    for mode in modes:
-        sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-        fits[mode] = it.invert(mode, sx, d, se, ceil, floor, sizes, x0s)
-        unc[mode] = it.size_area_se(mode, sx, d, se, fits[mode], ceil, floor, sizes)
 
     gpr = gpr_surface(args.line, proj, xs, zs)
     if gpr is not None:
@@ -269,13 +224,12 @@ def main():
     LEG_KW = dict(fontsize=6.5, labelspacing=0.25, handlelength=1.5,   # compact legends
                   handletextpad=0.5, borderpad=0.35, framealpha=0.9)
     for mode in modes:
-        res, u = fits[mode], unc[mode]
-        size0, x0, se_tot = res["size"], res["x0"], u["se_tot"]
+        a, cfg = art[mode], cfgs[mode]
+        size0, x0, se_tot = a["size"], a["x0"], a["se_tot"]
+        floor = a["floor"]                            # per-mode (ellipse) pick depth
         surf0 = float(surf(x0))
         wts = 1.0 / se ** 2
-        # Best-fit DC offset (relative gravity -> arbitrary datum), fit to the data.
-        c_best = it.fit_offset(it.forward(mode, size0, x0, ceil, floor, sx),
-                               d, wts)[0]
+        c_best = a["baseline"]        # best-fit DC offset, computed by run_inversion.py
         xd = np.linspace(float(xs.min()), float(xs.max()), 400)   # dense anomaly x
 
         # Two stacked axes; positions are finalised after the limits are known so the
@@ -292,18 +246,17 @@ def main():
         # faint posterior ensemble = the family of solutions (neutral grey). Collect
         # the outlines (for the envelope) AND each sample's forward anomaly (top panel).
         ens, ens_anom = [], []
-        if args.ensemble > 0:
-            print(f"  sampling {args.ensemble} {mode} tubes ...")
-            for (s, xx, cc, ff) in cached_ensemble(args.line, mode, sx, d, se, ceil,
-                                                   floor, args.ensemble, args.seed,
-                                                   refresh=args.refresh_cache):
+        ensemble = a["ensemble"] if args.ensemble > 0 else []
+        if len(ensemble):
+            print(f"  drawing {len(ensemble)} {mode} tubes from the artifact ensemble ...")
+            for (s, xx, cc, ff) in ensemble:
                 ex, ez = outline(mode, s, xx, cc, ff, 160)
                 ax.plot(ex, ez, color="0.3", lw=0.5, alpha=0.06, zorder=2)
                 ens.append((ex, ez))
                 # matching forward anomaly, own DC offset fit to the REAL data, so the
                 # top panel shows the spread of model predictions against fixed data.
-                off = it.fit_offset(it.forward(mode, s, xx, cc, ff, sx), d, wts)[0]
-                ens_anom.append(it.forward(mode, s, xx, cc, ff, xd) + off)
+                off = it.fit_offset(it.forward(mode, s, xx, cc, ff, sx, cfg), d, wts)[0]
+                ens_anom.append(it.forward(mode, s, xx, cc, ff, xd, cfg) + off)
             ax.plot([], [], color="0.35", lw=1.4, alpha=0.7,   # legend proxy
                     label="posterior samples")
 
@@ -327,11 +280,11 @@ def main():
         # so this band NESTS inside the posterior envelope at the ceiling/floor (a
         # consistency check, NOT a second independent uncertainty). Solid blue so it
         # never reads as the black-dashed envelope.
-        dv_frac = it.VELOCITY_SIGMA / it.VELOCITY
+        dv_frac = cfg.velocity_sigma / cfg.velocity
         picks = [(ceil, "GPR ceiling")] + ([(floor, "GPR floor")]
                                            if mode == "ellipse" else [])
         for i, (dp, name) in enumerate(picks):
-            sigma_d = float(np.hypot(it.SIGMA_PICK, dp * dv_frac))
+            sigma_d = float(np.hypot(cfg.sigma_pick, dp * dv_frac))
             ax.axhspan(surf0 - dp - sigma_d, surf0 - dp + sigma_d, color=PICK_C,
                        alpha=0.13, zorder=1)
             ax.axhline(surf0 - dp, color=PICK_C, ls="-", lw=1.2, zorder=3)
@@ -361,7 +314,7 @@ def main():
                 ax_top.errorbar(xs[sel], d[sel], yerr=se[sel], fmt=STN_MARKER[t],
                                 color=col, ms=STN_SIZE[t], mec="0.2", mew=0.5,
                                 ls="none", capsize=2, elinewidth=1.0, zorder=5)
-        ax_top.plot(xd, it.forward(mode, size0, x0, ceil, floor, xd) + c_best,
+        ax_top.plot(xd, it.forward(mode, size0, x0, ceil, floor, xd, cfg) + c_best,
                     "-", color="k", lw=2.0, zorder=6, label="best fit")
         if ens_anom:
             ax_top.plot([], [], color="0.35", lw=1.4, alpha=0.7,
@@ -403,7 +356,7 @@ def main():
         ax.set_xlim(xlo - xpad, xhi + xpad)            # shared -> ax_top follows
         ax.set_ylim(ybot, ytop)
 
-        ttl = "" if it.TRUNCATE_D is None else f"  [truncated at {it.TRUNCATE_D:.0f} m]"
+        ttl = "" if truncate is None else f"  [truncated at {truncate:.0f} m]"
         ax.set_aspect("equal")
         ax.set_xlabel("distance along profile (m)")
         ax.set_ylabel("elevation (m)")                 # REGCAN95 on the right
@@ -436,7 +389,7 @@ def main():
         secax.set_ylabel("depth at tube centre (m)")
         ax_top.set_title(f"Line {args.line}, {mode}{ttl}", fontweight="bold")
 
-        trunc = "" if it.TRUNCATE_D is None else f"_trunc{int(it.TRUNCATE_D)}"
+        trunc = "" if truncate is None else f"_trunc{int(truncate)}"
         out = it.FIG / f"terrain_model_line{args.line}_{mode}{trunc}.png"
         fig.savefig(out, dpi=150)
         if not trunc:   # untruncated run == the thesis figure
