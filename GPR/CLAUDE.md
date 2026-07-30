@@ -70,7 +70,12 @@ The interactive GPRProcessing.ipynb and the standalone multiples schematic
 | `plot_picks.py` | Single-frequency migrated sections with pick annotations (imports helpers from plot_dual_freq) |
 | `plot_processing_steps.py` | Stacked one-panel-per-step figure (apply_processing `capture=`); default Line3_50MHz |
 | `migrate_velocity_scan.py` | Stolt migration velocity scan; outputs interactive HTML with N/S annotations |
-| `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo) |
+| `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo); outputs `flowerpetal_unmigrated_3d.html` (tab title + `write_html(title=...)`), default gain 3 |
+| `plot_petal_migration_3d.py` | 3D Plotly view of Stolt-migrated petal SEGMENTS + migrated L3 (both freq), draped flat-datum in the SAME scene as plot_flowerpetal_3d (cave/rim/plumb + gain/clip sliders reused via its make_figure/write_html); segment ranges in `SEGMENTS`; outputs `flowerpetal_migrated_3d.html` |
+| `plot_petal_map.py` | Plan-view picking aid: petal tracks with distance-along-track ticks, to pick straight sub-segments for migration |
+| `plot_petal_migration_map.py` | THESIS plan-view map: petal trajectories with migrated segments highlighted (imports `SEGMENTS` so it can't drift from the 3D plot); pink petals, orange L3, jameo rim, N arrow |
+| `plot_l2_spectral_diagnostics.py` | L2 100MHz notch diagnostics (mean-trace spectrum + f-x) vs a normal line (L3), thesis figure; notch guide lines at 75/160 MHz |
+| `plot_l2_svd_whiten.py` | Trial figure: does SVD/eigenimage removal or spectral whitening fix the L2 notches? (mean spectra + radargrams; conclusion: no) |
 | `check_polarity.py` | Per-profile polarity convention check (mean-trace first break) |
 | `compare_intersections.py` | Polarity cross-check at Line/petal crossings (trace overlay + xcorr) |
 | `gpr_constants.py` | Shared constants (`V_DEFAULT` wave velocity) |
@@ -110,9 +115,9 @@ Scripts add this to sys.path at runtime; do not move it.
   (line, ceiling, x_ceiling, floor_app, x_floor, notes); derived floor_real/cave
   height are computed by `plot_dual_freq.cave_geometry()` (v_air 0.3) and printed,
   not stored. L5 is ceiling-only, no floor reflector. Line 2 is intentionally not
-  flagged (see Current Focus). Flower-petal migration is planned on straight
-  sub-segments only. The notebook merges on save, so these pipeline-managed keys
-  survive a re-save of the params from GPRProcessing.ipynb.
+  flagged (see Current Focus). Flower-petal migration is DONE on straight
+  sub-segments (plot_petal_migration_3d.py, `SEGMENTS`). The notebook merges on save,
+  so these pipeline-managed keys survive a re-save of the params from GPRProcessing.ipynb.
 - Gain is display-only: NPZs store raw, un-gained amplitudes; `gain_exponent` in
   params records the intended display gain. Applied at render via `display_gain()`:
   notebook view slider, topo PNG (auto from params), `plot_dual_freq.py` (auto from
@@ -169,10 +174,21 @@ stable. Velocity determination is DONE and SETTLED at v = 0.125 m/ns for BOTH li
 NB: LiDAR may NOT be used to justify the velocity pick (blind-pick constraint) --
 diffraction collapse is the only admissible evidence.
 
-Active work: migrate the flower petals. Plan -- take reasonably straight sub-segments
-of each petal and run them through the existing Stolt code, then 3D-plot the migrated
-segments alongside the unmigrated draped sections. Full 3D migration is OUT OF SCOPE
-for this thesis.
+Flower-petal migration DONE (2026-07-29). Straight sub-segments of each petal
+(`SEGMENTS` in plot_petal_migration_3d.py) run through the existing 2-D Stolt code
+(static topo correction -> taper -> Stolt) and draped flat-datum alongside migrated
+L3 (both freq) in `flowerpetal_migrated_3d.html`, reusing plot_flowerpetal_3d's
+scene/furniture/sliders. Full 3-D migration is OUT OF SCOPE. Supporting figures:
+plot_petal_map.py (picking aid) and plot_petal_migration_map.py (thesis plan-view
+map with segments highlighted). Worked into the thesis (2026-07-30): the flower-petal
+results paragraph is in GPR Results (fig:petal-migration-map), and the 3D migration
+snapshots feed the Discussion "Constraining the tube orientation" subsection
+(fig:fp3d-mig-snapshots, sec:disc-orientation). 3D-HTML snapshots captured from the
+browser like the unmigrated App.~fp3d stills.
+
+L2 100 MHz notch: confirmed a hardware artifact -- SVD/eigenimage removal and
+spectral whitening were both trialled (plot_l2_svd_whiten.py) and neither removes
+the notch. Evidence figures: plot_l2_spectral_diagnostics.py + plot_l2_svd_whiten.py.
 
 - Line 2 is deliberately NOT migrated (mixed results: fewest stacks, slack-tape
   positioning, and the 100 MHz spectral notches below). It stays a processed/topo

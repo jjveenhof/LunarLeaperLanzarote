@@ -90,7 +90,7 @@ runs the inversion + Monte Carlo once and persists artifacts; every plot reads t
   placeholders left.
 - Plot scripts (READ artifacts, never run the inversion): `plot_misfit_row.py`
   (3-panel misfit surfaces, 1SE/2SE contours), `plot_misfit.py` (standalone per-mode
-  surface, joint 68/95 contours), `plot_model_terrain.py` (best-fit tube under the
+  surface, 1SE/2SE contours -- aligned with the row), `plot_model_terrain.py` (best-fit tube under the
   measured surface, true scale, auto-overlays `lidar_line{N}.csv` ground truth,
   ensemble drawn from the artifact). `plot_sensitivity.py` is the exception -- it
   RUNS the engine (pick sweep, no artifact covers it) with its own `InvCfg`; kept
@@ -118,8 +118,8 @@ deciding what to tune and iterating on its own taste.
   167+/-36 vs 182 (~8% low, chi2_red 1.9). Both inside 1 SE. (Area SEs are the
   reported MC values; velocity_sigma = 0.015 m/ns since 2026-07-29 -- see
   [[update-gpr-velocity-picks]]; velocity is now a co-leading channel on L5/L3-ellipse.) L3 roof aligns with the
-  LiDAR void top; NB the L5 8.6 m ceiling sits ~6 m above the LiDAR roof (~14.5 m) --
-  area validates but the L5 roof-alignment argument is weaker (flagged to GPR).
+  LiDAR void top; NB the L5 8.6 m ceiling sits ~5.7 m above the LiDAR roof (~14.3 m
+  depth) -- area validates but the L5 roof-alignment argument is weaker (flagged to GPR).
   Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
   overshoots (truncated L3: 210-320). Frame as model selection, not input tuning
   (no inverse crime).

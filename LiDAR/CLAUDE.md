@@ -15,7 +15,8 @@ Code/<method> sessions.)
 QandA.md entries directed here are tagged `From: [session] -> LiDAR`.
 
 ## Locations
-- Code (here, in git): `Code/LiDAR/` -- `las_tools.py`, `verify_alignment.py`.
+- Code (here, in git): `Code/LiDAR/` -- `las_tools.py`, `verify_alignment.py`,
+  `slice_tube.py`, `recover_transform.py`, `gt_metrics.py`.
 - Data (large, outside git, in OneDrive): `../../LiDAR La Corona/` -- originals
   `LaCorona.bin` and `LaCoronaUnshifted.bin` (CloudCompare native CCB2 format).
 - Scratch (large derived exports, OUTSIDE OneDrive): `C:\Users\jj_ve\lidar_scratch\`.
@@ -47,11 +48,19 @@ angle, not just the junction patch.
 ## Python verification tooling
 - `las_tools.py`: reads X/Y/Z + `Original cloud index` straight from LAS byte offsets
   (laspy cannot parse these clouds' points -- duplicate "C2C absolute distances" field).
-- `verify_alignment.py`: residuals + a 2x2 figure (TOP XY, projected SIDE, two thin-slice
-  cross-sections with compass labels and the cut lines drawn on the TOP plan). Two modes:
-  default reads the three aligned ASCII exports; `--las CLOUD.las` reads a single LAS with
-  all subsets (baseline). Residuals reported by distance threshold (isolates the genuine
-  overlap). Baseline (pre-alignment) idx2->idx0 residual ~ mean 8.7 m / median 5.6 m.
+- `verify_alignment.py`: NN residuals + before/after comparison figures for the thesis --
+  `alignment_check.png` (Puerta Falsa) and `gente_check.png` (`--gente`, Jameo de la Gente),
+  each: a)/b) before/after plan panels + W-E/N-S cross-sections (Z shared per row), authored
+  at page width (~6.1 in, figure-sizing rule) and saved title-free to thesis-overleaf
+  `Appendices/Lidar reregistering` at 450 dpi. `--las CLOUD.las` gives the single-cloud
+  baseline 2x2. Residuals reported by distance threshold (isolates the genuine overlap);
+  baseline idx2->idx0 ~ mean 8.7 / median 5.6 m.
+- `gt_metrics.py`: registration-quality metrics for the two measured jameos on three beats --
+  (1) how-far-off (rotation-aware point displacement), (2) tie to independent RTK/drone control,
+  (3) internal surface fit. Establishes the ground-truth VERTICAL accuracy of the L3/L5
+  cross-sections ~0.2 m (RSS chains: L3 0.24, L5 0.21 m). NOTE: uses feature-vertical at PF's
+  shaft edge but local-plane vertical ONLY on the smooth drone surface -- not interchangeable
+  (a plane fit at PF's rim returns garbage); see its docstring.
 - `alignment_transforms.txt`: the reproducible record of the final transforms (net 4x4 per
   mover, component transforms, RMS, verification results).
 - Run with the env python (see root CLAUDE.md). Pass Windows-form paths.
@@ -92,17 +101,21 @@ All alignment + derived products DONE. Full transform record in `alignment_trans
    Tunnel (idx5) + Jameo (idx6) re-registered to drone/RTK (bridge pattern). Net 4x4s
    recovered frame-safe by `recover_transform.py` (Jameo 7.6 m move + 1.83 deg tilt fix,
    RMS 2.9 cm; Tunnel 6.5 m, Z-locked, RMS 0.01 cm; Topo drone = -0.35 m datum drop).
-4. **Tube cross-sections for gravity** (2026-06-30). `slice_tube.py` slices the corrected
-   Tunnel in each gravity line's vertical plane -> `lidar_line{3,5}.csv` in
-   Code/Grav/Inversion/ (x=dist along line, z=ABSOLUTE REGCAN95 elevation). Areas: L3 203,
-   L5 182 m^2. Centres match gravity x0 (76 vs 73; 51 vs 50). Validated by Grav.
+4. **Tube cross-sections for gravity** (2026-06-30; E,N added 2026-07-17). `slice_tube.py`
+   slices the corrected tube/Tunnel in each gravity line's vertical plane -> `lidar_line{3,5}.csv`
+   in Code/Grav/Inversion/, columns `x,z,easting,northing` (x=dist along line, z=ABSOLUTE
+   REGCAN95 elevation, E,N=absolute EPSG:4083 per vertex so Grav projects onto their own profile
+   axis -- see QandA). Areas: L3 203, L5 182 m^2. Centres match gravity x0 (76 vs 73; 51 vs 50).
+   Validated by Grav. Ground-truth vertical accuracy ~0.2 m (see `gt_metrics.py`), fed to the
+   Discussion via the root QandA handoff.
 5. **La Gente depth map + footprint** (2026-06-30). Corrected-Tunnel cave-top raster
    `QGIS/caveheight_clean_laGente.tif` (2 m, ceiling = max Z) + plan-view envelope
    `Reregistered clouds/Gente_envelope.shp`, handed to QGIS for the overburden map
    (surface - cave-top, masked). Both lack an embedded CRS -> assign EPSG:4083 on load.
 
-Tools added: `slice_tube.py` (line-plane cross-section + area), `recover_transform.py`
-(net 4x4 from before/after exports via scalar-field point matching).
+Tools added: `slice_tube.py` (line-plane cross-section + area + per-vertex E,N),
+`recover_transform.py` (net 4x4 from before/after exports via scalar-field point matching),
+`gt_metrics.py` (three-beat registration-quality metrics; ground-truth vertical accuracy).
 
 DROPPED (decision 2026-07-01): the single merged whole-cave deliverable is NOT being
 built. The cave is consumed piecewise (cross-sections, depth maps, footprints, 3D plot),
