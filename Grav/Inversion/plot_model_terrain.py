@@ -275,16 +275,19 @@ def main():
                 label=f"best-fit {mode}")   # size + area now live in the results table
 
         # GPR pick depths (SOLID BLUE) + their own depth-uncertainty band.
-        # sigma_d = sqrt(sigma_pick^2 + (d*sigma_v/v)^2) combines picking noise and
-        # common-mode velocity scaling -- the SAME channels sample_ensemble perturbs,
-        # so this band NESTS inside the posterior envelope at the ceiling/floor (a
-        # consistency check, NOT a second independent uncertainty). Solid blue so it
-        # never reads as the black-dashed envelope.
-        dv_frac = cfg.velocity_sigma / cfg.velocity
+        # sigma_d = sqrt(sigma_pick^2 + (ceil*sigma_v/v)^2) combines picking noise and
+        # the common-mode velocity depth SHIFT -- the SAME channels sample_ensemble
+        # perturbs, so this band NESTS inside the posterior envelope at the ceiling/
+        # floor (a consistency check, NOT a second independent uncertainty). The
+        # velocity term uses the CEILING depth for BOTH picks (the tube slides rigidly
+        # with the overburden; the air-gap-corrected void height is v_air-fixed), so
+        # the floor band is NOT inflated by its own depth. Solid blue so it never reads
+        # as the black-dashed envelope.
+        vel_shift = ceil * cfg.velocity_sigma / cfg.velocity   # common-mode, ceiling-driven
         picks = [(ceil, "GPR ceiling")] + ([(floor, "GPR floor")]
                                            if mode == "ellipse" else [])
         for i, (dp, name) in enumerate(picks):
-            sigma_d = float(np.hypot(cfg.sigma_pick, dp * dv_frac))
+            sigma_d = float(np.hypot(cfg.sigma_pick, vel_shift))
             ax.axhspan(surf0 - dp - sigma_d, surf0 - dp + sigma_d, color=PICK_C,
                        alpha=0.13, zorder=1)
             ax.axhline(surf0 - dp, color=PICK_C, ls="-", lw=1.2, zorder=3)

@@ -34,7 +34,7 @@ def save_artifact(path, *, line, mode, cfg, ceiling, floor, sizes, x0s, res, u,
         line=line, mode=mode, ceiling=ceiling, floor=floor,
         truncate=(np.nan if cfg.truncate is None else cfg.truncate),
         velocity=cfg.velocity, velocity_sigma=cfg.velocity_sigma,
-        sigma_pick=cfg.sigma_pick, slope_se=cfg.slope_se, density=it.DENSITY,
+        sigma_pick=cfg.sigma_pick, slope_se=cfg.slope_se, density=cfg.density,
         sizes=sizes, x0s=x0s, chi2=res["chi2"],
         size=res["size"], x0=res["x0"], area=u["area"],
         chi2min=res["chi2min"], dof=res["dof"], chi2red=res["chi2red"],
@@ -70,4 +70,4 @@ def cfg_of(d):
     the plot scripts still need (best-fit + ensemble anomaly curves)."""
     return it.InvCfg(velocity=d["velocity"], velocity_sigma=d["velocity_sigma"],
                      sigma_pick=d["sigma_pick"], slope_se=d["slope_se"],
-                     truncate=d["truncate"])
+                     truncate=d["truncate"], density=d["density"])

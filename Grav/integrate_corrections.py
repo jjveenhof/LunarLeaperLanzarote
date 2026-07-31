@@ -37,6 +37,11 @@ from grav_utils import PROC_DIR, RHO_DEFAULT, rho_str, sba_file
 TC_FILE  = PROC_DIR / "LL_gravity_corrections.csv"
 LSQ_FILE = PROC_DIR / "lsq_drift_decay.csv"
 
+# Density (g/cm3) the colleague used for his corrections, incl. the terrain
+# correction. The TC is linear in density, so it is rescaled by rho/TC_RHO for runs
+# at any other rho (density sweep) -- see main().
+TC_RHO = 1.875
+
 
 def main(rho=RHO_DEFAULT):
     # -- Load data -------------------------------------------------------------
@@ -109,7 +114,13 @@ def main(rho=RHO_DEFAULT):
     print(f"\nSaved -> {f1.name}  (full colleague corrections)")
 
     # -- Option 2: our SBA + colleague TC ---------------------------------------
-    sba2["dTC"] = sba2["Terrain_correction"] - sba2["TC_base"]
+    # The terrain correction is a mass integral, so it is EXACTLY linear in density.
+    # The colleague computed his at TC_RHO; rescale it to whatever rho this run uses,
+    # so a density sweep moves the TC in step with our Bouguer slab instead of leaving
+    # it silently pinned at TC_RHO. At rho = TC_RHO the factor is 1 (no-op).
+    # (Option 1 above is NOT rescaled: it uses the colleague's FA/BA/TC wholesale and
+    # is therefore inherently a TC_RHO product -- hence no rho in its filename.)
+    sba2["dTC"] = (sba2["Terrain_correction"] - sba2["TC_base"]) * (rho / TC_RHO)
     n_no_tc = sba2["dTC"].isna().sum()
     if n_no_tc:
         print(f"WARNING: {n_no_tc} stations have no TC -- TC set to 0 for those")

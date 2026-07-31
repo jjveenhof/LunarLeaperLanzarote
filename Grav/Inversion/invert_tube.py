@@ -44,16 +44,33 @@ sweep, call the engine here with their own cfg). It does not import matplotlib.
 """
 
 import numpy as np
+import sys as _sys
 from dataclasses import dataclass
 from pathlib import Path
 from scipy.optimize import minimize_scalar
 from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
+_sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
+from grav_utils import rho_str, RHO_DEFAULT   # one definition of the rho->filename map
 
 BASE = Path(__file__).resolve().parents[3]
-DET = BASE / "Data/Gravimetry/Processed/bouguer_anomaly_decay_rho1p875_detrended.csv"
-TREND = BASE / "Data/Gravimetry/Processed/detrend_trend_params_rho1p875.csv"
+PROC = BASE / "Data/Gravimetry/Processed"
 FIG = BASE / "Results/Grav/Inversion"
 FIG.mkdir(parents=True, exist_ok=True)
+
+
+def det_file(rho=RHO_DEFAULT):
+    """Detrended-CBA residual for a chain density rho (g/cm3) -- the inversion input."""
+    return PROC / f"bouguer_anomaly_decay_rho{rho_str(rho)}_detrended.csv"
+
+
+def trend_file(rho=RHO_DEFAULT):
+    """Regional-trend parameters (incl. slope_se) for a chain density rho (g/cm3)."""
+    return PROC / f"detrend_trend_params_rho{rho_str(rho)}.csv"
+
+
+# Canonical rho = 1.875 paths, kept as module constants for the default chain.
+DET = det_file()
+TREND = trend_file()
 
 # ---- per-line presets: GPR picks + which shapes are fittable ----------------
 # The driver (run_inversion.py) reads these and its CLI overrides into an InvCfg.
@@ -78,7 +95,8 @@ LINE_PRESETS = {
 
 # ---- fixed constants --------------------------------------------------------
 LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}   # QGIS map palette
-DENSITY = RHO_HOST             # 1875 kg/m^3, fixed (chain-coupled; see docstring)
+DENSITY = RHO_HOST             # kg/m^3, canonical chain density (= InvCfg.density
+                               # default). Swept runs pass their own via InvCfg.
 MIN_CEILING = 1.0             # m, shallowest physical void top (rock cover above)
 SWEEP = 6.0                   # m, +/- range for the wide one-at-a-time sweep
 NVERT = 144                  # polygon vertices (>0.1% accurate, fast)
@@ -100,10 +118,17 @@ class InvCfg:
     sigma_pick: float = 1.25         # m, GPR pick 1-sigma (lambda/2 at 50 MHz)
     slope_se: float = 0.0            # mGal/m, regional-trend slope 1-sigma
     truncate: float = None           # pit distance (m); None = infinite 2D tube
+    # Host-rock density in kg/m^3 (NOT g/cm3 -- 1875.0, not 1.875) for the void
+    # contrast. CHAIN-COUPLED: the same rock density sets the Bouguer slab + terrain
+    # correction upstream, so a density sweep must re-run the pipeline at the matching
+    # rho and read that chain's detrended residual (see det_file/trend_file), never
+    # vary this alone.
+    density: float = RHO_HOST
 
 
-def load_line(line):
-    d = np.genfromtxt(DET, delimiter=",", names=True)
+def load_line(line, rho=RHO_DEFAULT):
+    """Detrended residual for one line at chain density rho (g/cm3)."""
+    d = np.genfromtxt(det_file(rho), delimiter=",", names=True)
     m = d["Line"] == line
     x, resid, se = d["dist"][m], d["CBA_detrended"][m], d["SE"][m]
     o = np.argsort(x)
@@ -127,7 +152,7 @@ def area_of(mode, size, ceiling, floor):
 
 def forward(mode, size, x0, ceiling, floor, sx, cfg):
     a, b, depth = shape_params(mode, size, ceiling, floor)
-    g = polygon_gz(sx, ellipse_vertices(a, b, x0, depth, n=NVERT), -DENSITY)
+    g = polygon_gz(sx, ellipse_vertices(a, b, x0, depth, n=NVERT), -cfg.density)
     if cfg.truncate is None:                     # infinite 2D tube
         return g
     # One-sided finite tube (ends at d on the pit side): scale by the truncation
@@ -220,10 +245,18 @@ def size_area_se(mode, sx, d, se, res, ceiling, floor, sizes, cfg=None):
     se_pick = np.hypot(ds_dc, ds_df) * cfg.sigma_pick
     area_se_pick = np.hypot(da_dc, da_df) * cfg.sigma_pick
 
-    # velocity: a SYSTEMATIC common-mode depth scaling (ceiling+floor together).
+    # velocity: a SYSTEMATIC common-mode DEPTH SHIFT of the whole tube. Picks are time
+    # picks, so a fractional migration-velocity error scales the OVERBURDEN depth
+    # (ceiling prop v_rock). The air-gap-corrected void height is set by v_air (a
+    # constant, ~exact), so the cave height is INVARIANT to v_rock and the floor shifts
+    # by the SAME absolute amount as the ceiling -- the tube slides in depth, keeping
+    # its height. Shift = ceiling * dv (NOT floor * dv: scaling each pick by its own
+    # depth would wrongly let the ellipse height breathe). For circle mode the floor is
+    # unused, so this reduces to the ceiling scaling as before (circles unchanged).
     dv = cfg.velocity_sigma / cfg.velocity
-    sp, ap = fit(ceiling * (1 + dv), floor * (1 + dv))
-    sm, am = fit(max(ceiling * (1 - dv), MIN_CEILING), floor * (1 - dv))
+    shift = ceiling * dv
+    sp, ap = fit(ceiling + shift, floor + shift)
+    sm, am = fit(max(ceiling - shift, MIN_CEILING), floor - shift)
     se_vel = abs(sp - sm) / 2.0
     area_se_vel = abs(ap - am) / 2.0
 
@@ -260,7 +293,8 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng, cfg):
     size_area_se propagates (picks, velocity common-mode, detrend tilt, data noise)
     -- sampled instead of propagated, for the terrain-plot ensemble/envelope. Each
     draw perturbs the GPR picks (independent noise), the migration velocity (common-
-    mode depth scaling of ceiling+floor together), the regional-trend slope (a tilt
+    mode depth SHIFT of the whole tube by the overburden amount, cave height preserved
+    -- see size_area_se for the air-gap rationale), the regional-trend slope (a tilt
     on the residual) and the station data (measurement noise), then refits (size, x0)
     on a coarse grid with the DC baseline floated inside invert(). Returns
     [(size, x0, ceiling, floor), ...]. Uses cfg.sigma_pick, cfg.velocity,
@@ -284,10 +318,10 @@ def sample_ensemble(mode, sx, d, se, ceil0, floor0, n, rng, cfg):
                                       sizes, x0s, cfg)["chi2red"]))
     out = []
     for _ in range(n):
-        c = ceil0 + rng.normal(0, cfg.sigma_pick)
-        f = floor0 + (rng.normal(0, cfg.sigma_pick) if mode == "ellipse" else 0.0)
-        scale = 1.0 + rng.normal(0, dv_sig)            # velocity: common-mode
-        c *= scale; f *= scale
+        # velocity: common-mode depth SHIFT (overburden-driven, cave height preserved)
+        vshift = ceil0 * rng.normal(0, dv_sig)
+        c = ceil0 + rng.normal(0, cfg.sigma_pick) + vshift
+        f = floor0 + (rng.normal(0, cfg.sigma_pick) if mode == "ellipse" else 0.0) + vshift
         c = max(c, MIN_CEILING)
         if mode == "ellipse":
             f = max(f, c + 1.0)

@@ -114,10 +114,15 @@ deciding what to tune and iterating on its own taste.
 
 ## Current Focus
 - Inversion built + uncertainty budget complete; **LiDAR-validated** (FINAL GPR geom
-  2026-07-16): L3 untruncated ellipse 193+/-27 vs LiDAR 203 m^2 (~5%); L5 circle
+  2026-07-16): L3 untruncated ellipse 193+/-24 vs LiDAR 203 m^2 (~5%); L5 circle
   167+/-36 vs 182 (~8% low, chi2_red 1.9). Both inside 1 SE. (Area SEs are the
   reported MC values; velocity_sigma = 0.015 m/ns since 2026-07-29 -- see
-  [[update-gpr-velocity-picks]]; velocity is now a co-leading channel on L5/L3-ellipse.) L3 roof aligns with the
+  [[update-gpr-velocity-picks]]. Velocity channel FIXED 2026-07-30 to a common-mode
+  DEPTH SHIFT by the overburden (ceiling*dv), cave height preserved -- the air-gap
+  correction makes the void height v_air-fixed, so only the ceiling scales with
+  v_rock. This dropped the L3-ellipse velocity channel 13->7 m^2 (co-leading only on
+  L5 now; circles unchanged). Applies to both size_area_se and sample_ensemble; the
+  terrain-plot GPR-pick band uses ceiling*dv for both picks too.) L3 roof aligns with the
   LiDAR void top; NB the L5 8.6 m ceiling sits ~5.7 m above the LiDAR roof (~14.3 m
   depth) -- area validates but the L5 roof-alignment argument is weaker (flagged to GPR).
   Ground truth favors the UNTRUNCATED 2-D model -- the pit-truncation correction
@@ -135,7 +140,7 @@ Settled -- NO sweep, reasons recorded so we don't relitigate:
   toward the pit IS the finite-strike correction = dominant 2-D departure). Full 3-D FEM
   out of scope (2nd-order). Frame the truncation bracket as the 2-D-limitation bound.
 
-Still to do (order: B -> A -> density):
+Still to do (order was B -> A -> density; DENSITY IS DONE, B and A remain):
 1. **Plan B -- LiDAR-pick robustness.** Re-invert L3/L5 with ceiling/floor read off
    `lidar_line{3,5}.csv` as the constraint; compare recovered AREA to the GPR-pick area.
    Similar -> result insensitive to ~1 m pick differences. Frame STRICTLY as
@@ -148,8 +153,30 @@ Still to do (order: B -> A -> density):
    zero, depth resolution via anomaly width). Frame as quantifying the tightening:
    "gravity alone constrains ceiling to +/-X m; GPR pick reduces it to +/-Y m." Do NOT
    oversell as "unconstrained" -- a tight valley would backfire.
-3. **Density chain-sweep** -- last independent systematic. Re-run pipeline per rho ->
-   re-detrend -> re-invert over a plausible range; report the area bracket.
+3. ~~**Density chain-sweep**~~ -- **DONE 2026-07-30** (`sweep_density.py`). Question was
+   turned around: instead of assuming a rho range and reporting an area bracket, sweep
+   WIDE (1.4-2.8) and report the density TOLERANCE. Results: response is an offset
+   hyperbola `A = a/rho + b` (R2 >= 0.997); equivalently `rho*A = a + b*rho`, so b is
+   the drift of the recovered MASS DEFICIT with rho. L5 b = -0.1 (dead flat, R2=1e-4)
+   -> pure 1/rho; L3 b = -154 (circle) / -74 (ellipse). Tolerance (rho departure before
+   the induced area change exceeds 1 SE): **L3 +/-0.14, L5 +/-0.31 g/cm3** -> quote L3
+   (binding, 7.5%). Fig `density_sweep`, Table `tab:density-sweep`.
+   MECHANISM UNRESOLVED -- do NOT claim one in the thesis. Three hypotheses tested and
+   falsified: (a) topographic curvature projected on the model shape (predicts b =
+   -43/-38/+44 vs measured -154/-74/-0.1: wrong magnitude AND sign); (b) fitted-geometry
+   variation (doesn't rank with |b|); (c) assumed depth -- RULED OUT by a controlled
+   test (same line/model, ceiling swept 3-13 m: at ceiling 3 m, L3 b=-148 vs L5 b=-11,
+   a factor 13 apart at identical geometry). Depth is a second-order MODULATOR within a
+   line (L3: -148 -> -276 over ceiling 3->13 m), not the cause. The difference lives in
+   the DATA, not the geometry. Measured but not explanatory: the rho-dependent residual
+   has opposite sign at the cave (L3 +28, L5 -25 uGal per g/cm3 -- surface sags over the
+   tube on L3, bulges on L5). Also NB with 2 lines depth is CONFOUNDED with line
+   identity; the within-line sweep is what un-confounds it.
+   Pipeline gaps closed to enable this: TC now rescaled by rho/1.875 in
+   `integrate_corrections.py` (TC is linear in rho -- no rerun by the colleague needed);
+   `detrend_regional.py --no-plots` (its figure names do NOT encode rho, so sweeping
+   would clobber the canonical rho=1.875 figures + thesis PDFs); `InvCfg.density` +
+   `it.det_file(rho)`/`it.trend_file(rho)` so the inversion follows the swept rho.
 
 Reconciliation to state explicitly (A and B look contradictory but aren't): the depth
 prior is NECESSARY (A) but its PRECISION is forgiving (B). Turns the "subjective picks"

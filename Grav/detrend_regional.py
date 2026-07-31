@@ -53,7 +53,12 @@ COMBINED_PANEL_H_IN = 2.0  # per-line panel height (in); raise for taller panels
 MAP_GRAD_MAG = 1.5      # mGal/km  (map shows ~1-2)
 MAP_GRAD_AZ  = 337.5    # deg from N, NNW
 
-rho = float(sys.argv[1]) if len(sys.argv) > 1 else RHO_DEFAULT
+# --no-plots: write the CSVs only. Used by the density sweep, which re-runs this at
+# many rho -- the figure filenames do NOT encode rho, so plotting there would
+# repeatedly clobber the canonical rho=1.875 figures (and their thesis PDFs).
+NO_PLOTS = "--no-plots" in sys.argv[1:]
+_pos = [a for a in sys.argv[1:] if not a.startswith("--")]
+rho = float(_pos[0]) if _pos else RHO_DEFAULT
 INPUT = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str(rho)}_with_TC.csv"
 OUTCSV = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str(rho)}_detrended.csv"
 TRENDCSV = PROC_DIR / f"detrend_trend_params_rho{rho_str(rho)}.csv"
@@ -199,6 +204,9 @@ def main():
         out_rows.append(g[["Line", "loc_id", "Easting", "Northing", "dist",
                            "CBA", "SE", "trend", "CBA_detrended", "StationType"]])
 
+        if NO_PLOTS:          # all data for this line is collected; skip the figures
+            continue
+
         # -- Plot: CBA + robust trend (top), detrended residual (bottom) -------
         color = LINE_COLORS[line_id]
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7), sharex=True,
@@ -276,6 +284,9 @@ def main():
                                                "intercept", "x_mean", "chi2_red"])
     params.to_csv(TRENDCSV, index=False)
     print(f"Trend params       -> {TRENDCSV.relative_to(BASE)}")
+
+    if NO_PLOTS:      # CSVs written; the rest of main() is figures only
+        return
 
     # Clean combined figure of the detrended residuals -- the exact data the
     # tube inversion fits (one panel per line, SE bars, S->N orientation).
