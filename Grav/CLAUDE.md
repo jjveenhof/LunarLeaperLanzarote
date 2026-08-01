@@ -66,7 +66,9 @@ Architecture: COMPUTE is detached from PLOTTING (refactor 2026-07-29). One drive
 runs the inversion + Monte Carlo once and persists artifacts; every plot reads them.
 - `forward_polygon.py` -- fast analytic 2-D Talwani polygon forward (pure numpy).
   `forward_fem.py` is the pyGIMLi FEM equivalent (validation/3-D only; needs the
-  `pygimli` env). `inspect_*` scripts are validation diagnostics.
+  `pygimli` env). `inspect_*` scripts are validation diagnostics -- incl.
+  `inspect_beta1.py`, the switch tests behind the density-offset mechanism (see below;
+  reuses the per-rho chain CSVs already on disk, so it needs no pipeline rerun).
 - `invert_tube.py` -- the pure NUMERICAL ENGINE (no CLI, no matplotlib, no globals,
   nothing runs on import). Dense grid search over (size, x0) with a DC baseline
   fitted analytically at every grid point (relative gravity -> arbitrary datum;
@@ -157,21 +159,65 @@ Still to do (order was B -> A -> density; DENSITY IS DONE, B and A remain):
    turned around: instead of assuming a rho range and reporting an area bracket, sweep
    WIDE (1.4-2.8) and report the density TOLERANCE. Results: response is an offset
    hyperbola `A = a/rho + b` (R2 >= 0.997); equivalently `rho*A = a + b*rho`, so b is
-   the drift of the recovered MASS DEFICIT with rho. L5 b = -0.1 (dead flat, R2=1e-4)
-   -> pure 1/rho; L3 b = -154 (circle) / -74 (ellipse). Tolerance (rho departure before
-   the induced area change exceeds 1 SE): **L3 +/-0.14, L5 +/-0.31 g/cm3** -> quote L3
-   (binding, 7.5%). Fig `density_sweep`, Table `tab:density-sweep`.
-   MECHANISM UNRESOLVED -- do NOT claim one in the thesis. Three hypotheses tested and
-   falsified: (a) topographic curvature projected on the model shape (predicts b =
-   -43/-38/+44 vs measured -154/-74/-0.1: wrong magnitude AND sign); (b) fitted-geometry
-   variation (doesn't rank with |b|); (c) assumed depth -- RULED OUT by a controlled
-   test (same line/model, ceiling swept 3-13 m: at ceiling 3 m, L3 b=-148 vs L5 b=-11,
-   a factor 13 apart at identical geometry). Depth is a second-order MODULATOR within a
-   line (L3: -148 -> -276 over ceiling 3->13 m), not the cause. The difference lives in
-   the DATA, not the geometry. Measured but not explanatory: the rho-dependent residual
-   has opposite sign at the cave (L3 +28, L5 -25 uGal per g/cm3 -- surface sags over the
-   tube on L3, bulges on L5). Also NB with 2 lines depth is CONFOUNDED with line
-   identity; the within-line sweep is what un-confounds it.
+   the drift of the recovered MASS DEFICIT with rho. Fitted (beta0, beta1): L3 circle
+   738/-161, L3 ellipse 506/-75, L5 circle 317/-1 -> L5 is pure 1/rho, L3 is not.
+   Tolerance (rho departure before the induced area change exceeds 1 SE): **L3 +/-0.156
+   (circle) / +/-0.147 (ellipse), L5 +/-0.323 g/cm3**, i.e. 8.3 / 7.9 / 17.2% on the
+   binding (downward) side. The SE reference is the **MC** SE (SD of the artifact
+   ensemble: 41.2/24.5/35.6 m^2) -- switched 2026-08-01 from the analytic `area_se_tot`
+   budget (37.0/24.8/34.3) because the thesis reports the MC values in
+   tab:inversion-results, and a tolerance quoted against an SE the reader cannot find
+   there is a trap. `sweep_density.nominal_se()` now reads the artifact.
+   NB the tolerance is the closed-form crossing of the FITTED HYPERBOLA with the
+   A0 -/+ SE band, `rho = beta0/(A0 -/+ SE - beta1)` (switched 2026-08-01 from
+   interpolating the swept points, which inherited the size-grid area quantisation --
+   ~2-5 m^2, the same order as the fit residual -- and depended on the rho step; it
+   moved the L3 ellipse 7.2 -> 7.9%). Not the linear `SE*rho0/beta0` estimate either. Useful identity: `beta0 = rho0*(A0 - beta1)`, so relative
+   tolerance ~ `(SE/A0)/(1 - beta1/A0)` -- all three have SE/A0 = 13-21%, and it is
+   beta1 that tightens L3, NOT a better-constrained area (L3 circle has a LARGER SE than
+   L5, 41 vs 36 m^2, yet half the tolerance).
+   Fig `density_sweep`, Table `tab:density-sweep`.
+   MECHANISM (redone properly 2026-08-01, `inspect_beta1.py` -- supersedes the earlier
+   "unresolved / three falsified hypotheses" note; the old topographic-curvature estimate
+   was under-specified, do NOT resurrect it). rho enters in TWO places and both matter:
+   (1) the CHAIN (Bouguer + TC scale with rho -> the detrended CBA itself moves) and
+   (2) the CONTRAST. Switch test, freezing the data at rho0 so only the contrast varies:
+   beta1 is ALREADY -94/-23/-53 with the chain off -- i.e. much of beta1 is the INVERSION,
+   because the fitted shape is constrained (circle top pinned at the ceiling, only R free)
+   so the anomaly WIDTH changes with R too, and the shape-free mass-deficit argument does
+   not transfer exactly. Chain contribution (full minus chain-off) = -67/-52/**+52**:
+   comparable magnitude, OPPOSITE SIGN on L5. Sign explained by the data alone (no
+   inversion): d(CBA)/drho at the cave minus the flanks is **+44.6 uGal per g/cm3 on L3**
+   (low gets shallower with rho -> less area -> beta1 down) but **-35.2 on L5** (low
+   deepens -> beta1 up). => **L5's near-pure hyperbola is a COINCIDENCE, a cancellation of
+   two comparable terms -- NOT evidence that L5 obeys theory or is immune to the
+   feedback.** Do not claim otherwise in the thesis.
+   RULED OUT as the between-line discriminator, both by controlled tests:
+   - DEPTH: force both lines to the same ceiling (circle on both). At 3 m, L3 -152 vs
+     L5 -13 (12x apart at identical geometry); and within L3 deeper makes it WORSE
+     (-152 -> -293 over ceiling 3->13 m), the opposite of the "deeper feels topography
+     less" story. L5 stays flat (-13 -> -4) at every depth.
+   - SIZE: two independent controls, both negative. (i) Forcing the ceiling also moves
+     the recovered area, giving matched-area pairs ACROSS lines: L3 @ ceiling 3 m
+     (A=206) vs L5 @ ceiling 11 m (A=201) -> beta1 -152 vs -5, 30x apart at matched
+     size. (ii) TEST D, the real size sweep -- an ellipse of imposed height on a FIXED
+     centroid (9.2 m), same geometry on both lines, so depth AND size are matched
+     row-by-row. Within L3 beta1 swings **+81 -> -98** while the area stays 153-202 m^2
+     and is NON-MONOTONIC in height: beta1 is NOT a function of area. (So the apparent
+     `beta1/A ~ -0.7` in the ceiling sweep was DEPTH doing the work, since size and
+     depth move together there -- do not quote that ratio.) L5 stays flat (-19..+19)
+     throughout, and at the matched row h=4 (L3 A=153 beta1=+81 vs L5 A=158 beta1=+6)
+     the lines still differ ~13x.
+     Caveat when writing this up: TEST B holds the CEILING fixed (centroid moves),
+     TEST D holds the CENTROID fixed (ceiling moves 7.2 -> 1.2 m), so neither alone is
+     a perfect depth control -- together they bracket it, and L5 is flat under both.
+     The one within-L3 trend consistent across B and D is that a larger VERTICAL EXTENT
+     (deeper tube bottom) drives beta1 more negative; area does not.
+   Take-away for the thesis (keep SHORT, it bloats the discussion): both the correction
+   and the inversion feedback affect beta0 AND beta1; L5 being pure is a coincidence; the
+   two questions that matter for the Moon are depth and size, and neither is the cause;
+   OAT machinery breaks down for a chain-coupled parameter like this -> further research
+   needed. With only 2 lines, line identity is confounded with everything else.
    Pipeline gaps closed to enable this: TC now rescaled by rho/1.875 in
    `integrate_corrections.py` (TC is linear in rho -- no rerun by the colleague needed);
    `detrend_regional.py --no-plots` (its figure names do NOT encode rho, so sweeping

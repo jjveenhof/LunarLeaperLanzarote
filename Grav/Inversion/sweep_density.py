@@ -105,10 +105,27 @@ def invert_at(rho):
 
 
 def nominal_se():
-    """Total 1 SE on area at the nominal density -- the tolerance reference."""
+    """Total 1 SE on area at the nominal density -- the tolerance reference.
+
+    This MUST be the SE the thesis actually reports in tab:inversion-results, which is
+    the MONTE CARLO one: the standard deviation of the posterior ensemble areas stored
+    in the canonical artifact (run_inversion.py). The analytic `area_se_tot` budget is
+    close but not identical (37.0/24.8/34.3 vs 41.2/24.5/35.6 m^2), and quoting a
+    tolerance against an SE the reader cannot find in the results table is a trap.
+    Falls back to the analytic budget only if the artifact is missing.
+    """
+    import inversion_io as io
     tp = np.genfromtxt(it.trend_file(RHO_NOM), delimiter=",", names=True)
     out = {}
     for line, mode in CASES:
+        try:
+            a = io.load_artifact(line, mode)
+            ens = a["ensemble"]
+            areas = np.array([it.area_of(mode, s, c, f) for (s, _x, c, f) in ens])
+            out[(line, mode)] = (float(a["area"]), float(areas.std(ddof=1)))
+            continue
+        except (FileNotFoundError, KeyError):
+            print(f"  (no artifact for L{line} {mode}; falling back to analytic SE)")
         pre = it.LINE_PRESETS[line]
         ceiling, floor = pre["ceiling"], (pre["floor"] or 16.0)
         row = tp[tp["Line"] == line]
@@ -148,21 +165,26 @@ def fit_hyperbola(rhos, areas):
     return a, b, 1.0 - ss_res / ss_tot
 
 
-def tolerance(rhos, areas, area0, se):
-    """Rho interval over which |A(rho) - A(rho_0)| stays within the 1 SE band.
-    Linear interpolation on the crossing; None where the curve never leaves."""
-    dev = np.abs(np.asarray(areas) - area0) - se       # <0 inside the band
-    lo = hi = None
-    i0 = int(np.argmin(np.abs(np.asarray(rhos) - RHO_NOM)))
-    for i in range(i0, 0, -1):                          # walk down from nominal
-        if dev[i - 1] > 0 >= dev[i]:
-            f = dev[i] / (dev[i] - dev[i - 1])
-            lo = rhos[i] + f * (rhos[i - 1] - rhos[i]); break
-    for i in range(i0, len(rhos) - 1):                  # walk up
-        if dev[i + 1] > 0 >= dev[i]:
-            f = dev[i] / (dev[i] - dev[i + 1])
-            hi = rhos[i] + f * (rhos[i + 1] - rhos[i]); break
-    return lo, hi
+def tolerance(b0, b1, area0, se):
+    """Rho interval over which the FITTED response stays within the 1 SE band.
+
+    Crossing the fitted hyperbola, not the swept points. The recovered areas are
+    quantised by the size search grid (a 0.1 m size step is ~2-5 m^2 of area, i.e. the
+    same order as the fit residual), so interpolating between raw sweep points inherits
+    that jitter and also depends on the rho step; the fit averages it out and gives a
+    closed form. Solving  b0/rho + b1 = area0 -/+ se  for rho:
+
+        rho_lo = b0 / (area0 + se - b1)      (larger area -> lower rho)
+        rho_hi = b0 / (area0 - se - b1)
+
+    area0 and se are the REPORTED best-fit area and its MC SE (tab:inversion-results),
+    so the band is anchored to the published result rather than to the fit's own value
+    at rho_0. Returns (lo, hi); a bound is None if the denominator is non-positive,
+    i.e. the curve never leaves the band on that side.
+    """
+    lo_den, hi_den = area0 + se - b1, area0 - se - b1
+    return (b0 / lo_den if lo_den > 0 else None,
+            b0 / hi_den if hi_den > 0 else None)
 
 
 def _common_ylim(rhos, table, ref, pad=0.05):
@@ -254,9 +276,9 @@ def main():
 
     rhos = [r for r in rhos if r in table]
     ref = nominal_se()
-    tols = {c: tolerance(rhos, [table[r][c]["area"] for r in rhos], *ref[c])
-            for c in CASES}
     fits = {c: fit_hyperbola(rhos, [table[r][c]["area"] for r in rhos]) for c in CASES}
+    # Tolerance from the FITTED curve (see tolerance()), so it needs the fit first.
+    tols = {c: tolerance(fits[c][0], fits[c][1], *ref[c]) for c in CASES}
 
     print("\n=== response model  A(rho) = a/rho + b  (b = 0 is pure 1/rho) ===")
     for line, mode in CASES:

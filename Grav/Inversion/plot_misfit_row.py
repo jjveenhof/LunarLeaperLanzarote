@@ -85,9 +85,10 @@ def main():
 
     cbax = fig.add_subplot(gs[1, 1])                   # free corner -> colorbar
     cbax.axis("off")
-    # A tall colorbar placed inside the empty cell (inset), so it fills the corner's
-    # vertical space (~ell panel height) instead of a thin bar with slack around it.
-    cax = cbax.inset_axes([0.20, 0.05, 0.05, 0.90])    # [x, y, w, h] in cell fractions
+    # Colorbar inset into the empty cell. The cell shares its row with the ellipse
+    # panel, so spanning the FULL cell height (y=0, h=1) makes the bar exactly as tall
+    # as that panel's y-axis -- no slack above or below.
+    cax = cbax.inset_axes([0.20, 0.0, 0.05, 1.0])      # [x, y, w, h] in cell fractions
     cb = fig.colorbar(im, cax=cax)
     cb.set_label(r"$\Delta\chi^2/\chi^2_\nu$", fontsize=8)
     cb.ax.tick_params(labelsize=8)
