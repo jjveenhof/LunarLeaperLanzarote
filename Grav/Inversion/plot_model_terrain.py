@@ -19,7 +19,7 @@ along the profile azimuth would give. In the bottom panel we draw:
 
 Axes are equal-aspect so shapes are undistorted for direct comparison.
 
-LiDAR overlay: drop a CSV next to this script named  lidar_line{LINE}.csv  with
+LiDAR overlay: reads  Data/LiDAR/lidar_line{LINE}.csv  (grav_utils.lidar_file), with
 columns  x,z,easting,northing  where
     easting,northing = absolute REGCAN95 coords of each cave-outline vertex
     z = elevation (m, REGCAN95 orthometric height)
@@ -205,7 +205,7 @@ def main():
         vx, vz = vv[:, 0], surf(x0) - vv[:, 1]         # x, absolute elevation
         return np.append(vx, vx[0]), np.append(vz, vz[0])   # closed
 
-    lidar = HERE / f"lidar_line{args.line}.csv"
+    lidar = it.lidar_file(args.line)
     Ld = np.genfromtxt(lidar, delimiter=",", names=True) if lidar.exists() else None
 
     # ---- ONE FIGURE PER SHAPE: anomaly (top) + terrain section (bottom), -----
@@ -266,7 +266,7 @@ def main():
             _, _, dbest = it.shape_params(mode, size0, ceil, floor)
             (ix, iz), (ox, oz) = posterior_envelope(ens, x0, surf0 - dbest)
             ax.plot(ox, oz, color="k", lw=1.0, ls=(0, (4, 3)), zorder=6,
-                    label=r"$\pm$std. dev. envelope")
+                    label=r"$\pm$1 SE envelope")
             ax.plot(ix, iz, color="k", lw=1.0, ls=(0, (4, 3)), zorder=6)
 
         # best-fit model outline: solid black on top.

@@ -50,7 +50,7 @@ from pathlib import Path
 from scipy.optimize import minimize_scalar
 from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
-from grav_utils import rho_str, RHO_DEFAULT   # one definition of the rho->filename map
+from grav_utils import rho_str, RHO_DEFAULT, lidar_file   # one definition of the rho->filename map
 
 BASE = Path(__file__).resolve().parents[3]
 PROC = BASE / "Data/Gravimetry/Processed"

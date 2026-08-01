@@ -14,6 +14,17 @@ from pathlib import Path
 BASE        = Path(__file__).resolve().parents[2]
 PROC_DIR    = BASE / "Data/Gravimetry/Processed"
 RESULTS_DIR = BASE / "Results/Grav"
+# LiDAR cave cross-sections handed over by the LiDAR session -- ground truth for the
+# inversion, and now also consumed by the GPR session. They are DATA, so they live
+# under Data/ (outside the Code/ git repo) rather than next to the scripts.
+LIDAR_DIR   = BASE / "Data/LiDAR"
+
+
+def lidar_file(line):
+    """Cave-outline CSV for a gravity line: columns x,z,easting,northing (the `x` is a
+    legacy along-profile distance -- project easting/northing onto your own axis
+    instead). Returns the path whether or not it exists; callers check."""
+    return LIDAR_DIR / f"lidar_line{line}.csv"
 
 # Free-air gradient: dg/dh = -2g/R (standard geodetic value, valid at all latitudes)
 # g ~ 9.807 m/s2, R ~ 6371 km -> 2*9.807/6371000 = 3.079e-6 m/s2/m = 0.3079 mGal/m

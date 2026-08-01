@@ -93,7 +93,7 @@ runs the inversion + Monte Carlo once and persists artifacts; every plot reads t
 - Plot scripts (READ artifacts, never run the inversion): `plot_misfit_row.py`
   (3-panel misfit surfaces, 1SE/2SE contours), `plot_misfit.py` (standalone per-mode
   surface, 1SE/2SE contours -- aligned with the row), `plot_model_terrain.py` (best-fit tube under the
-  measured surface, true scale, auto-overlays `lidar_line{N}.csv` ground truth,
+  measured surface, true scale, auto-overlays the `Data/LiDAR/lidar_line{N}.csv` ground truth,
   ensemble drawn from the artifact). `plot_sensitivity.py` is the exception -- it
   RUNS the engine (pick sweep, no artifact covers it) with its own `InvCfg`; kept
   flexible for the planned sensitivity analyses.
@@ -144,7 +144,7 @@ Settled -- NO sweep, reasons recorded so we don't relitigate:
 
 Still to do (order was B -> A -> density; DENSITY IS DONE, B and A remain):
 1. **Plan B -- LiDAR-pick robustness.** Re-invert L3/L5 with ceiling/floor read off
-   `lidar_line{3,5}.csv` as the constraint; compare recovered AREA to the GPR-pick area.
+   `Data/LiDAR/lidar_line{3,5}.csv` as the constraint; compare recovered AREA to the GPR-pick area.
    Similar -> result insensitive to ~1 m pick differences. Frame STRICTLY as
    sensitivity-to-constraint, NOT a 2nd validation (feeding LiDAR geom + comparing to
    LiDAR area double-uses ground truth = inverse crime). Empirically bounds the total
