@@ -82,16 +82,43 @@ def fit_station(t_min, grav, se):
 
 # -- Plot one line --------------------------------------------------------------
 
+# -- Appendix grid layout ------------------------------------------------------
+# These figures used to be built 16.8 in wide (6 cols x 2.8 in) and then squeezed into
+# \textwidth (~6.3 in) by LaTeX -- a ~2.6x shrink, which is why a 7 pt title landed on
+# the page at ~2.7 pt and was unreadable. Building at the FINAL width instead makes one
+# pt here one pt on the page. ROW_H_IN reproduces the OLD aspect ratio exactly
+# (old = nrows*3.0 / 16.8), so the figure occupies the same space on the page as before
+# and only the text changes size. Raise the FS_* values for bigger text; past a point
+# the 3-line titles will start to collide and the grid needs fewer columns instead.
+GRID_NCOLS = 6
+FIG_W_IN = 6.5                              # the width LaTeX renders these at
+ROW_H_IN = 0.98                             # height of ONE ROW OF AXES; LOWER = shorter
+                                            # figure (L5 needs to leave room for its
+                                            # caption on the page)
+# Reserves for the suptitle and the figure legend, in INCHES rather than as a fraction
+# of the figure. As a fraction the gap grew with the row count (7% was 0.33 in on L4 but
+# 0.57 in on L3), so the tall figures wasted the most space and the legend drifted away
+# from the panels. Absolute reserves keep the gap identical on every line.
+TOP_RES_IN, LEG_RES_IN = 0.20, 0.32         # LOWER = tighter to the panels
+FS_TITLE, FS_TICK, FS_AXLAB, FS_LEG, FS_SUP = 6, 5.5, 6, 5.5, 8
+# Ink weight. SMALLER = lighter/thinner marks, which keeps 124 tiny panels from reading
+# as a wall of blue. MS_DATA is the reading marker; LW_THIN the error bars; LW_FIT the
+# fitted curve; LW_REF the dashed/dotted reference lines.
+MS_DATA, CAPSIZE, LW_THIN, LW_FIT, LW_REF = 0.8, 1.2, 0.35, 0.5, 0.4
+CAPTHICK = 0.25          # cap stroke weight; LOWER = shorter/flatter caps.
+                         # CAPSIZE is the cap WIDTH -- raise it for wider caps.
+
+
 def plot_line(line_df, line_id, results):
     stations = sorted(line_df["Station"].unique())
     n = len(stations)
-    ncols = 6
+    ncols = GRID_NCOLS
     nrows = int(np.ceil(n / ncols))
 
-    fig, axes = plt.subplots(nrows, ncols,
-                              figsize=(ncols * 2.8, nrows * 3.0),
-                              squeeze=False)
-    fig.suptitle(f"Line {line_id}, exponential decay fits", fontsize=12, y=1.0)
+    fig_h = nrows * ROW_H_IN + TOP_RES_IN + LEG_RES_IN
+    fig, axes = plt.subplots(nrows, ncols, figsize=(FIG_W_IN, fig_h), squeeze=False)
+    fig.suptitle(f"Line {line_id}, exponential decay fits", fontsize=FS_SUP,
+                 y=1.0 - 0.35 * TOP_RES_IN / fig_h)
 
     for idx, station in enumerate(stations):
         ax  = axes[idx // ncols][idx % ncols]
@@ -110,52 +137,62 @@ def plot_line(line_df, line_id, results):
         fit_color   = "grey" if settled else "tab:green"
         label_color = "red" if not converged else "black"
 
-        # Data points
-        ax.errorbar(t_min, grav, yerr=se,
-                    fmt="o", color="steelblue", markersize=3,
-                    capsize=2, linewidth=0.6, elinewidth=0.6, zorder=3,
-                    label="readings")
-
-        # Fitted curve
-        t_dense = np.linspace(0, t_min.max(), 200)
-        ax.plot(t_dense, decay_model(t_dense, g_inf, A, tau),
-                color=fit_color, linewidth=1.2, zorder=2,
-                label="decay fit" if not settled else "flat fit")
-
-        # Weighted mean (always computed, shown as reference for settled stations)
+        # Weighted mean (always computed, shown as reference for settled stations).
+        # Needed BEFORE plotting now: it sets the per-panel reference level.
         w_plot      = 1.0 / se**2
         g_wmean_p   = (w_plot * grav).sum() / w_plot.sum()
         se_wmean_p  = 1.0 / np.sqrt(w_plot.sum())
 
+        # Reported value for this station: weighted mean if settled, else g_inf.
+        display_g  = g_wmean_p  if settled else g_inf
+        display_se = se_wmean_p if settled else se_g_inf
+
+        # Plot RELATIVE to the reported value, in uGal. Absolute mGal tick labels were
+        # 8 characters wide ("5468.164") and ate a third of every panel; offsets are 3.
+        # Nothing is lost -- the absolute value is in the panel title. The reference is
+        # the reported value, so the dashed/dotted line the station is judged against
+        # always sits at 0.
+        uG = lambda v: (v - display_g) * 1000.0
+
+        # Data points
+        ax.errorbar(t_min, uG(grav), yerr=se * 1000.0,
+                    fmt="o", color="steelblue", markersize=MS_DATA,
+                    capsize=CAPSIZE, capthick=CAPTHICK, linewidth=LW_THIN,
+                    elinewidth=LW_THIN, zorder=3,
+                    label="readings")
+
+        # Fitted curve
+        t_dense = np.linspace(0, t_min.max(), 200)
+        ax.plot(t_dense, uG(decay_model(t_dense, g_inf, A, tau)),
+                color=fit_color, linewidth=LW_FIT, zorder=2,
+                label="decay fit" if not settled else "flat fit")
+
         # Asymptote line + uncertainty band
-        ax.axhline(g_inf, color=fit_color, linewidth=0.9,
+        ax.axhline(uG(g_inf), color=fit_color, linewidth=LW_REF,
                    linestyle="--", alpha=0.8, label="$g_\\infty$ (fit)")
         if not settled:
-            ax.axhspan(g_inf - se_g_inf, g_inf + se_g_inf,
-                       color="tab:green", alpha=0.15, zorder=1,
+            # lw=0: axhspan's Polygon otherwise strokes its own edge in the same
+            # colour AND alpha as the fill, so the boundary blends twice and reads as
+            # a darker rim. Killing the edge makes the band evenly tinted.
+            ax.axhspan(uG(g_inf - se_g_inf), uG(g_inf + se_g_inf),
+                       color="tab:green", alpha=0.15, zorder=1, lw=0,
                        label="$g_\\infty$ uncertainty")
         if settled:
             # Settled: show weighted mean with its uncertainty band
-            ax.axhline(g_wmean_p, color="darkorange", linewidth=0.9,
+            ax.axhline(uG(g_wmean_p), color="darkorange", linewidth=LW_REF,
                        linestyle=":", alpha=0.9, label="weighted mean")
-            ax.axhspan(g_wmean_p - se_wmean_p, g_wmean_p + se_wmean_p,
-                       color="darkorange", alpha=0.15, zorder=1)
+            ax.axhspan(uG(g_wmean_p - se_wmean_p), uG(g_wmean_p + se_wmean_p),
+                       color="darkorange", alpha=0.15, zorder=1, lw=0)
 
-        # Title and CSV use weighted mean for settled, g_inf for settling
-        display_g  = g_wmean_p  if settled else g_inf
-        display_se = se_wmean_p if settled else se_g_inf
-        status     = "settled"  if settled else f"$\\tau$={tau:.1f}m"
-        date       = grp["Date"].iloc[0].replace("/", "-")
-        start_time = grp["Time"].iloc[0]
-        ax.set_title(f"S{station}  {status}\n"
-                     f"{date}  {start_time}\n"
-                     f"g={display_g:.3f} $\\pm$ {display_se:.3f} mGal",
-                     fontsize=7, color=label_color, pad=3)
-        ax.tick_params(labelsize=6)
-        ax.yaxis.set_major_formatter(plt.matplotlib.ticker.FormatStrFormatter("%.3f"))
-        # Only show x-label on bottom row to avoid crowding
+        status = "settled" if settled else f"$\\tau$={tau:.1f}m"
+        ax.set_title(f"S{station}  {status}",
+                     fontsize=FS_TITLE, color=label_color, pad=2)
+        ax.tick_params(labelsize=FS_TICK, pad=1.5)
+        # Only show axis labels on the outer edges to avoid crowding
         if idx // ncols == nrows - 1:
-            ax.set_xlabel("min", fontsize=6)
+            ax.set_xlabel("min", fontsize=FS_AXLAB, labelpad=1)
+        if idx % ncols == 0:
+            ax.set_ylabel(r"$g-g_{\rm rep}$ ($\mu$Gal)", fontsize=FS_AXLAB, labelpad=1)
         ax.margins(y=0.18)
 
     # Hide unused subplots
@@ -174,26 +211,27 @@ def plot_line(line_df, line_id, results):
     import matplotlib.patches as mpatches
     legend_elements = [
         Line2D([0], [0], marker="o", color="steelblue", linestyle="None",
-               markersize=4, label="Readings +/- SE"),
-        Line2D([0], [0], color="tab:green", linewidth=1.2,
+               markersize=MS_DATA*1.6, label="Readings +/- SE"),
+        Line2D([0], [0], color="tab:green", linewidth=LW_FIT,
                label="Decay fit (settling)"),
-        Line2D([0], [0], color="tab:green", linewidth=0.9, linestyle="--",
+        Line2D([0], [0], color="tab:green", linewidth=LW_REF, linestyle="--",
                label="$g_\\infty$ (settling)"),
         mpatches.Patch(color="tab:green", alpha=0.25,
                label="+/- SE($g_\\infty$) (settling)"),
-        Line2D([0], [0], color="grey", linewidth=1.2,
+        Line2D([0], [0], color="grey", linewidth=LW_FIT,
                label="Flat fit (settled)"),
-        Line2D([0], [0], color="grey", linewidth=0.9, linestyle="--",
+        Line2D([0], [0], color="grey", linewidth=LW_REF, linestyle="--",
                label="$g_\\infty$ (settled)"),
-        Line2D([0], [0], color="darkorange", linewidth=0.9, linestyle=":",
+        Line2D([0], [0], color="darkorange", linewidth=LW_REF, linestyle=":",
                label="Weighted mean (settled)"),
         mpatches.Patch(color="darkorange", alpha=0.3,
                label="+/- SE(mean) (settled)"),
     ]
-    plt.tight_layout(rect=[0, 0.07, 1, 0.97], h_pad=2.5, w_pad=1.0)
+    plt.tight_layout(rect=[0, LEG_RES_IN / fig_h, 1, 1 - TOP_RES_IN / fig_h],
+                     h_pad=0.15, w_pad=0.05)
     fig.legend(handles=legend_elements, loc="lower center",
-               ncol=4, fontsize=7, frameon=True,
-               bbox_to_anchor=(0.5, 0.02), bbox_transform=fig.transFigure)
+               ncol=4, fontsize=FS_LEG, frameon=True,
+               bbox_to_anchor=(0.5, 0.005), bbox_transform=fig.transFigure)
     return fig
 
 
@@ -218,7 +256,8 @@ def main(plot=True):
         se_wmean  = 1.0 / np.sqrt(w.sum())
 
         g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grp["Grav"], se)
-        settled = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
+        settled = ((not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
+                   or (tau < TAU_MIN))     # match plot_line(): reject degenerate fits
 
         # Best gravity estimate: g_inf from fit for settling stations,
         # weighted mean for settled ones (fit asymptote unreliable when A ~= 0)
@@ -227,6 +266,8 @@ def main(plot=True):
 
         records.append({
             "Line": line, "Station": station,
+            "Date":      grp["Date"].iloc[0],
+            "Time":      grp["Time"].iloc[0],
             "Easting":   grp["Easting"].iloc[0],
             "Northing":  grp["Northing"].iloc[0],
             "Elevation": grp["Elevation"].iloc[0],
