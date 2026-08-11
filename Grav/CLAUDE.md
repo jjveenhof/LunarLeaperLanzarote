@@ -30,6 +30,16 @@ Parallel/legacy (NOT in the main chain): `drift_correction.py` (simple linear dr
 Shared constants/helpers (paths, rho filename formatting, normal gravity, FAC/Bouguer
 factors, along-profile distance) live in `grav_utils.py` -- use it instead of redefining them.
 
+`station_decay.py` also writes the appendix decay-fit grids (one figure per line);
+`make_decay_table.py` turns `decay_fits.csv` into the companion LaTeX table
+(`thesis-overleaf/Appendices/decay_fits_table.tex`, two 62-row blocks on one page).
+The panels show SHAPE only -- y is relative (uGal about the reported value) and the
+title carries only station + tau -- so the absolute gravity lives in that table.
+GOTCHA worth remembering: those grids used to be built 16.8 in wide and squeezed into
+\textwidth by LaTeX, so 7 pt text landed on the page at ~2.7 pt. Build appendix grids
+at their FINAL width (`FIG_W_IN`) and pt means pt. Same for legend/title reserves --
+use absolute inches, not figure fractions, or the gap grows with the row count.
+
 Visualisation: `visualise_lsq.py` (LSQ profiles), `visualise_CBA.py` (auto-detects CBA/SBA).
 Diagnostics in `Inspect/` (LSQ stats, base stations, decay residuals, corrections comparison).
 One-offs and legacy plots in `Adhoc/` (incl. `visualise_lines.py` for the simple-drift output).
@@ -52,6 +62,14 @@ share one; Lines 2 and 5 do not), so trends are fit per line, never as one cross
   `grav_utils.rho_str` (1.875 -> `rho1p875`); never round it.
 - SE columns strictly match their value column (SBA <-> SE_SBA, CBA <-> SE_CBA);
   no silent substitution when an SE is unavailable.
+- A station counts as SETTLED if the fit did not converge, OR |A| < SE_A, OR
+  tau < TAU_MIN (0.5 min -- a degenerate spike fit). Settled stations report the
+  WEIGHTED MEAN, decaying ones the fitted g_inf. `main()` was missing the tau term
+  until 2026-08-01, so decay_fits.csv said 10 settled while the figures labelled 12;
+  fixed, and the 12 now matches the thesis text (10 that had time + 2 judged settled).
+  Propagation was contained to Line 4 (L4 S0/S2, 1-2 uGal; LSQ max 2.5 uGal on L4,
+  EXACTLY 0 on Lines 2/3/5 despite L3 and L4 sharing a base) -- no inversion input
+  moved, so no artifact or results-table number changed.
 - Colleague's corrections file: `Data/Gravimetry/Processed/LL_gravity_corrections.csv`
   (FA_correction, BA_correction, Terrain_correction). All values are in mGal by
   convention. The terrain correction is small: mean ~0.10 mGal, and on Line 3 it
@@ -149,12 +167,28 @@ Still to do (order was B -> A -> density; DENSITY IS DONE, B and A remain):
    sensitivity-to-constraint, NOT a 2nd validation (feeding LiDAR geom + comparing to
    LiDAR area double-uses ground truth = inverse crime). Empirically bounds the total
    depth-constraint sensitivity, subsuming the rough guessed velocity/pick sigma.
-2. **Plan A -- free-depth grid search (non-uniqueness).** Add depth as a search axis
-   (circle: ceiling,R,x0; ellipse: ceiling,floor,a,x0), float DC, slice chi2 in the
-   (depth, area) plane. Expect a BROAD soft depth-size valley (gravity has weak, not
-   zero, depth resolution via anomaly width). Frame as quantifying the tightening:
-   "gravity alone constrains ceiling to +/-X m; GPR pick reduces it to +/-Y m." Do NOT
-   oversell as "unconstrained" -- a tight valley would backfire.
+2. ~~**Plan A -- free-depth grid search**~~ -- **DONE 2026-08-01** (`freedepth.py`,
+   circle only; ellipse variant NOT run). Stacks the existing 2-D (size,x0) search over
+   a ceiling grid into a cube; dof = n-4. Results (Table `tab:freedepth`, Fig
+   `freedepth`): L3 c=2.5 m (1SE 1.75-3.25), A=196 (172-222), chi2_nu 5.3 -- TIGHT, so
+   do NOT write "neither line can separate the parameters"; L5 c=21.8 m (1SE 14.0 to
+   UNBOUNDED), A=437 (>=249), chi2_nu 1.5. Gravity alone puts the LiDAR ceiling at
+   0.9 sigma and the L5 GPR pick at 2.3 sigma -> independent support for "wrong
+   arrival" without using LiDAR as a constraint. On L3 both references sit at ~1.5 sigma.
+   CEIL_GRID runs to 40 m; extending it did NOT close L5's valley, and past ~39 m the
+   best radius hits the top of RADIUS_GRID (19.9 m) -- `analyse()` has a guard that
+   refuses to report the fake upper bound this produced. L5's spread is bounded by the
+   SEARCH GRID, not the data; say so in any caption.
+   Terrain/anomaly twin: `plot_freedepth_terrain.py` -- same layout as
+   `plot_model_terrain.py` on purpose. The ONE difference that must be stated in the
+   text: its ensemble is drawn from the chi2 CUBE (weight ~ exp(-dchi2/2kappa^2)), a
+   DATA-ONLY posterior, not `sample_ensemble`'s input-perturbation posterior -- not
+   comparable spreads. Upside: it is the same object the contours show. Detrend
+   uncertainty is NOT in it (deferred, not judged negligible). The `$\pm$1 SE envelope`
+   label is fine on every terrain figure: measured, the 16-84 radial band is within
+   2-6% of +/-1 SD even for open-valley L5. `SHOW_GPR_PICK=False` (the pick constrains
+   nothing here); `DEPTH_CLIP` cuts the L5 panel so the cloud spills off-frame, echoing
+   the unbounded ceiling.
 3. ~~**Density chain-sweep**~~ -- **DONE 2026-07-30** (`sweep_density.py`). Question was
    turned around: instead of assuming a rho range and reporting an area bracket, sweep
    WIDE (1.4-2.8) and report the density TOLERANCE. Results: response is an offset

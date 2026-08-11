@@ -64,6 +64,7 @@ Which titles get hidden is set by `titles=`:
   * "suptitle" -- hide only the figure suptitle.
   * "keep"     -- hide nothing.
 """
+import os
 from pathlib import Path
 import matplotlib as mpl
 from matplotlib.text import Text
@@ -72,7 +73,16 @@ from matplotlib.collections import QuadMesh
 
 # git-bridge Overleaf clone (outside OneDrive). The thesis \includegraphics paths
 # resolve relative to this root, so writing here means no manual copy step.
-THESIS = Path(r"C:\Users\jj_ve\thesis-overleaf")
+#
+# HANDOVER: this is machine-specific. Set the THESIS_REPO environment variable to your
+# own clone of the Overleaf project and every plot script follows automatically:
+#     Windows (PowerShell):  $env:THESIS_REPO = "D:\path\to\thesis-overleaf"
+#     Linux / macOS:         export THESIS_REPO=/path/to/thesis-overleaf
+# Without it, the original author's path below is used. If that path does not exist,
+# save_figure() still writes the browse PNG into Results/ and warns instead of failing,
+# so the pipeline stays runnable on a machine with no thesis clone at all.
+_THESIS_DEFAULT = r"C:\Users\jj_ve\thesis-overleaf"
+THESIS = Path(os.environ.get("THESIS_REPO", _THESIS_DEFAULT))
 
 _TITLE_MODES = ("auto", "all", "suptitle", "keep")
 
@@ -137,6 +147,25 @@ def _title_artists(fig, mode):
     return arts
 
 
+_THESIS_WARNED = False
+
+
+def _check_thesis_repo():
+    """True if the thesis clone exists. Warns once per process if it does not, so a
+    successor without the Overleaf repo still gets browse PNGs instead of a crash or
+    a stray directory tree created at the original author's path."""
+    global _THESIS_WARNED
+    if THESIS.is_dir():
+        return True
+    if not _THESIS_WARNED:
+        print("WARNING: thesis repo not found at {}\n"
+              "         Vector PDFs will NOT be written. Set THESIS_REPO to your clone\n"
+              "         of the Overleaf project to restore thesis figure output."
+              .format(THESIS))
+        _THESIS_WARNED = True
+    return False
+
+
 def save_figure(fig, name, folder, vector=True, dpi=300, titles="auto",
                 tight=True, browse_dir=None, browse_dpi=150):
     """Write the title-free thesis figure into thesis-overleaf/<folder>/<name>.<ext>
@@ -145,12 +174,15 @@ def save_figure(fig, name, folder, vector=True, dpi=300, titles="auto",
     `titles` in {"auto","all","suptitle","keep"} -- see module docstring.
     `tight` -- crop to content; set False for figures pre-sized for equal aspect
     (see module docstring). Both saves honour it.
-    Returns (thesis_path, browse_path); browse_path is None when browse_dir is None.
+    Returns (thesis_path, browse_path); browse_path is None when browse_dir is None,
+    and thesis_path is None when no thesis clone is available (see THESIS above).
     """
     if titles not in _TITLE_MODES:
         raise ValueError("titles must be one of {}".format(_TITLE_MODES))
+    have_thesis = _check_thesis_repo()
     out_dir = THESIS / folder
-    out_dir.mkdir(parents=True, exist_ok=True)
+    if have_thesis:
+        out_dir.mkdir(parents=True, exist_ok=True)
     ext = "pdf" if vector else "png"
 
     if vector:  # keep heavy raster artists compact + sharp inside the vector PDF
@@ -165,8 +197,10 @@ def save_figure(fig, name, folder, vector=True, dpi=300, titles="auto",
     prev = [(a, a.get_visible()) for a in titles]
     for a, _ in prev:
         a.set_visible(False)
-    thesis_path = out_dir / "{}.{}".format(name, ext)
-    fig.savefig(thesis_path, dpi=dpi, bbox_inches=bbox)
+    thesis_path = None
+    if have_thesis:
+        thesis_path = out_dir / "{}.{}".format(name, ext)
+        fig.savefig(thesis_path, dpi=dpi, bbox_inches=bbox)
     for a, vis in prev:
         a.set_visible(vis)
 

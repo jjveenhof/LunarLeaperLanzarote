@@ -109,7 +109,7 @@ All alignment + derived products DONE. Full transform record in `alignment_trans
    Validated by Grav. Ground-truth vertical accuracy ~0.2 m (see `gt_metrics.py`), fed to the
    Discussion via the root QandA handoff.
 5. **La Gente depth map + footprint** (2026-06-30). Corrected-Tunnel cave-top raster
-   `QGIS/caveheight_clean_laGente.tif` (2 m, ceiling = max Z) + plan-view envelope
+   `QGIS project/caveheight_clean_laGente.tif` (2 m, ceiling = max Z) + plan-view envelope
    `Reregistered clouds/Gente_envelope.shp`, handed to QGIS for the overburden map
    (surface - cave-top, masked). Both lack an embedded CRS -> assign EPSG:4083 on load.
 
