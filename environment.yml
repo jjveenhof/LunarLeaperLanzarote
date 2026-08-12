@@ -1,0 +1,65 @@
+# Conda environment for the Lunar Leaper thesis code (GPR, gravimetry, LiDAR, QGIS helpers).
+#
+#     conda env create -f environment.yml
+#     conda activate GPR_plotting_LL
+#
+# Then run any script with that env's python. See the root CLAUDE.md for the
+# invoke-by-full-path convention used on the author's machine.
+#
+# This is a CURATED spec, not a `conda env export` dump: it lists what the code actually
+# imports, pinned to the versions the thesis results were produced with (2026-08-11).
+# Transitive dependencies are left to the solver so the environment can still be built on
+# Linux/macOS. A full byte-level freeze of the author's Windows env is not reproducible
+# cross-platform and was deliberately not used.
+#
+# Verified surface: every third-party module imported anywhere under Code/ is listed here.
+# Two exceptions, both intentional and documented below (pygimli, gdp).
+
+name: GPR_plotting_LL
+
+channels:
+  - conda-forge
+  - defaults
+
+dependencies:
+  - python=3.11
+  - numpy=2.3.5
+  - scipy=1.16.3
+  - pandas=2.3.3
+  - matplotlib=3.10.6
+  - pyproj=3.7.2          # CRS handling, EPSG:4083 (REGCAN95 / UTM 28N)
+  - ipykernel=7.2         # GPRProcessing.ipynb / GPRFieldVisual.ipynb
+  - pip=25.3
+
+  - pip:
+      # Interactive figures + notebook widgets (the GPR params notebook needs both).
+      - plotly==6.6.0
+      - ipywidgets==8.1.8
+
+      # LAS/LAZ reading for the LiDAR session. NOTE: Code/LiDAR/las_tools.py deliberately
+      # bypasses laspy for point records (duplicate "C2C absolute distances" field makes
+      # laspy choke) and parses raw byte offsets instead -- but laspy is still used to
+      # read the HEADER. Both are required.
+      - laspy==2.7.0
+      - lazrs==0.8.1
+
+      # georadar-data-processing ("gdp"), the GPR filter library: public ETH package,
+      # LGPL v3. Pinned to the exact commit the thesis results were produced with.
+      # Five functions are used, all from Code/GPR/gpr_processing.py: dewow, filter_data
+      # (gdp.preprocessing.filtering); normalize_data (gdp.preprocessing.normalizing);
+      # apply_gain (gdp.preprocessing.gain); remove_svd (gdp.preprocessing.image_processing).
+      # A stale copy of this library also sits under "Other data and scripts/Tube X/..." --
+      # that copy is NOT what imports at runtime and should not be used.
+      - git+https://gitlab.com/pygp/georadar-data-processing.git@517f008b4f1140d3725445c69a1b7e37970ebbc6
+
+# NOT in this environment, on purpose:
+#
+#   pygimli -- needed only by Code/Grav/Inversion/forward_fem.py, an FEM cross-check of
+#     the analytic Talwani forward (forward_polygon.py). No thesis number depends on it;
+#     the inversion runs on pure numpy. pygimli's solver stack conflicts with the pins
+#     above, so it lives in its own env. Create one only if you want to re-run the FEM
+#     validation:  conda create -n pygimli -c gimli -c conda-forge pygimli
+#
+#   GDAL / rasterio -- the QGIS raster work (overburden maps) is done in the QGIS GUI,
+#     not from Python. See Code/QGIS/CLAUDE.md for the recipe. Nothing under Code/
+#     imports either library.
