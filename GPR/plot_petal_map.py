@@ -40,25 +40,11 @@ MARGIN_M     = 6.0    # map margin around each petal's extent (m); larger = more
 
 
 def track_xy(prof, source):
-    """(dist_along_m, east, north, apex_idx) mapping the processed dist_axis onto
-    the GNSS track exactly as plot_flowerpetal_3d does. source: 'fp' or 'lines'."""
-    npz_path = fp.PROC_DIR / (prof['key'] + '_processed.npz')
-    with np.load(str(npz_path)) as f:
-        dist_axis = f['dist_axis'].astype(np.float64)
-
-    if source == 'fp':
-        gnss_df = fp.load_gnss_fp(fp.GNSS_FP)
-    else:
-        gnss_df = fp.load_gnss_lines(fp.GNSS_LINES)
-    east_fn, north_fn, elev_fn = fp.build_track_interps(
-        gnss_df, prof['gnss_line'], prof['metre'])
-    gnss_m = dist_axis + prof['offset']
-    east, north, _elev = fp.reconcile_geometry(
-        prof['key'], east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
-
-    seg = np.hypot(np.diff(east), np.diff(north))
-    dist_along = np.concatenate([[0.0], np.cumsum(seg)])
-
+    """(dist_along_m, east, north, apex_idx). Track via fp.petal_track (phase-2 F7);
+    apex (out/back split point) computed here as it is map-specific. source:'fp'|'lines'."""
+    r = fp.petal_track(prof, source=source)
+    east, north, dist_axis, dist_along = (r['east'], r['north'],
+                                          r['dist_axis'], r['dist_along'])
     d2 = (east - east[0]) ** 2 + (north - north[0]) ** 2
     apex = int(np.argmax(d2))
     dtrace = float(dist_axis[1] - dist_axis[0]) if len(dist_axis) > 1 else 1.0

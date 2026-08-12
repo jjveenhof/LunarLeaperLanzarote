@@ -160,6 +160,13 @@ it is not a STOP item. Actual re-run verification happens in phase 2 per rule 2.
 | FP3D_mig_NE_annotated.pdf | fig:fp3d-mig-snapshots-b | **UNKNOWN (manual)** -- F3 |
 | Appendices/Flowerpetals/FP3D*.png (8) | fig:fp3d-a..d, fig:fp3d-mig-a..d | manual browser screenshots of the 3D HTML (expected) |
 
+### Tables (settings-only; no generator, but checkable against source)
+
+| thesis table | main.tex label | source of truth | verified 2026-08-12 |
+|---|---|---|---|
+| GPR acquisition parameters | tab:gpr-acquisition (main.tex:385) | field notes; time-window, antenna sep and trace spacing also in `Data/GPR/Stitched/{stem}_raw.json` (`Total_time_window`, `Antenna_sep`, `Step_size`) | window/ant-sep/spacing match the raw sidecars for all 9 profiles; stacks (2048/512/4096/4096) are field-note-only, not in any data file |
+| GPR processing parameters | tab:gpr-processing (main.tex:523) | `Data/GPR/Processed/{stem}_params.json` | ALL cells match. Ref time-zero (ns) = `tzero_shift` (samples) x dt (1.6 ns @50MHz, 0.8 ns @100MHz); max-time crop = `max_time_ns`; dewow 25 samp, bandpass 20-100 / 40-200 MHz, norm start 50 ns all match. No drift -> no rule-3 escalation |
+
 Orphan/stale outputs in `thesis-overleaf/GPR/` (exist, not `\includegraphics`'d): `multiples_schematic.pdf` (also unproduced), `arrival_chart.pdf` (also unproduced), `Line{3,5}_dual_freq_migrated.pdf`, `Line{3,5}_dual_freq_topo.pdf`, `Line{3,5}_{50,100}MHz_picks.pdf` (produced-but-unused). Author should confirm these can be pruned.
 
 ## Appendix B -- Cross-import surface (the shared library API)

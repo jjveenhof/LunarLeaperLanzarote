@@ -1,5 +1,13 @@
 """
-make_variant.py
+make_variant.py  -- ARCHIVED / QUARANTINED (phase-2 F9, 2026-08-11)
+Ad-hoc tool, NOT part of the reproduce chain and not in the CLAUDE.md Key Files.
+It generated the L2/SVD-notch trial (the `Line5_100MHz_svd1_*` artifacts sit next
+to it in this Adhoc/ folder). Its conclusion -- the L2 100 MHz notch is a hardware
+artifact that SVD/whitening do not fix -- is preserved in Code/GPR/CLAUDE.md and
+the two plot_l2_* figures. Kept for decision history (rule 5), not reuse. NOTE: it
+was written to run from Code/GPR/ (imports assume that dir on sys.path); move it
+back there if you ever need to run it.
+
 Reprocess any profile with one or more parameter overrides and save under a
 variant stem, so the result can be inspected in migration without touching the
 canonical params/processed/topo files.

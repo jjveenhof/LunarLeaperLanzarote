@@ -147,3 +147,21 @@ def apply_processing(data, time_axis, sfreq, params, capture=None):
         _cap('svd')
 
     return processed, time_axis_out
+
+
+# --- small shared analysis utilities (used by the diagnostic/QC scripts) -------
+
+def mean_trace_spectrum(data, dt_ns):
+    """|rFFT| of the MEAN TRACE: average the traces in the time domain first, then
+    one FFT -- np.abs(np.fft.rfft(data.mean(axis=1))). Returns (amplitude, freq_MHz).
+    Shared by the L2 notch-diagnostic scripts (was copied in both plot_l2_*)."""
+    spec = np.abs(np.fft.rfft(data.mean(axis=1)))
+    freq = np.fft.rfftfreq(data.shape[0], d=dt_ns) * 1000.0   # cycles/ns -> MHz
+    return spec, freq
+
+
+def peak_normalise(tr):
+    """Divide a trace by its peak absolute amplitude (unchanged if all-zero).
+    Shared by check_polarity.py and compare_intersections.py (was `norm`)."""
+    m = float(np.max(np.abs(tr)))
+    return tr / m if m > 0 else tr

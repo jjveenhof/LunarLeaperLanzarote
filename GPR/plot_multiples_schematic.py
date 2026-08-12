@@ -48,6 +48,9 @@ from plot_utils import save_figure
 # ---- PARAMETERS (edit to taste) ----------------------------------------------
 D_CEIL = 5    # rock thickness, surface to cave ceiling (m)
 H_CAVE = 10    # true cave height, ceiling to floor (m)
+# Local frozen constants for this standalone, non-pipeline schematic (hardcoded
+# geometry). Canonical values live in gpr_constants (V_DEFAULT=0.125, V_AIR=0.3);
+# kept local here on purpose so the illustration stays self-contained.
 V_ROCK = 0.125    # m/ns -- rock velocity (also the plotting velocity)
 V_AIR  = 0.30    # m/ns -- air velocity (~speed of light)
 

@@ -21,6 +21,13 @@ Usage:
     python plot_dual_freq.py Line3 --stage migrated   # Stolt-migrated data
     python plot_dual_freq.py Line3 --velocity 0.11    # override velocity
     python plot_dual_freq.py Line3 --clip 95          # clip percentile
+
+ALSO A LIBRARY (imported by other GPR scripts -- change these with care):
+    loaders   : load_npz, load_param, load_clip, load_flip
+    picks     : read_picks, pick_entries, annotate_pick, PICKS_CSV, PICK_PANEL_CFG
+    constants : CMAP, X_OFFSET_100MHZ
+  Importers: plot_picks (picks + X_OFFSET + loaders), plot_lidar_cave_overlay
+             (load_npz/param/clip + CMAP).
 """
 
 import argparse
@@ -36,7 +43,7 @@ from matplotlib.patches import Ellipse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from gpr_constants import V_DEFAULT
+from gpr_constants import V_DEFAULT, V_AIR, SECTION_START_100MHZ
 from gpr_processing import display_gain
 from profile_geometry import load_flip as _load_flip_canonical
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
@@ -48,21 +55,16 @@ DATA_GPR      = HERE / '../../Data/GPR'
 OUT_DIR       = HERE / '../../Results/GPR/DualFreq'
 MIGRATED_DIR  = HERE / '../../Results/GPR/Migrated'
 
-# x-offset (metres): where the 100 MHz back antenna sat on the full line.
-# Line2: both lines share the same start.
-# Line3: 100 MHz section starts at metre 60.
-# Line5: 100 MHz starts at metre 30 (profile already reversed in GPRFieldVisual).
-X_OFFSET_100MHZ = {
-    'Line2': 0.0,
-    'Line3': 60.0,
-    'Line5': 30.0,
-}
+# x-offset (metres) for the 100 MHz panel = where its section starts on the line.
+# Single source in gpr_constants (phase-2 F6); kept under this name for importers
+# (plot_picks.py imports X_OFFSET_100MHZ from here).
+X_OFFSET_100MHZ = SECTION_START_100MHZ
 
 CMAP = 'seismic'
 
 # tube ceiling/floor picks (annotated on migrated sections)
 PICKS_CSV = DATA_GPR / 'Migration' / 'tube_picks.csv'
-V_AIR = 0.3   # m/ns, for the air-gap floor-depth correction (see cave_geometry)
+# V_AIR imported from gpr_constants (air-gap floor-depth correction; see cave_geometry)
 
 # free-form interpretive annotations (points/ellipses) -- NOT picks, do not feed
 # the inversion; see the CSV header for the point/ellipse column layout

@@ -37,7 +37,15 @@ and migration outputs. Currently `true` for Line3_50/100MHz only (acquired S->N)
 Gain is NOT a processing step -- it is display-only (`display_gain`), never baked
 into saved NPZs. See Conventions.
 
-Batch processing (all profiles with saved params):
+ONE-COMMAND regenerate-everything (run_pipeline + every standalone deterministic
+figure/QC script; prints the manual steps it cannot do -- see MANUAL_ARTIFACTS.md):
+    python run_all.py                     # everything deterministic
+    python run_all.py --no-scans          # skip the slow velocity-scan HTMLs
+Prerequisite: raw NPZs + `_params.json` already exist (they come from the two
+notebooks; run_all does NOT stitch or tune params, and does NOT take the browser
+snapshots or the velocity pick).
+
+Batch processing (all profiles with saved params) -- the core, called by run_all:
     python run_pipeline.py                # all profiles + downstream plots
     python run_pipeline.py Line2_100MHz   # single profile + its downstream plots
     python run_pipeline.py --no-scans     # skip the slow velocity-scan HTMLs
@@ -64,13 +72,17 @@ The interactive GPRProcessing.ipynb and the standalone multiples schematic
 |---|---|
 | `GPRProcessing.ipynb` | Interactive notebook: load, tune, inspect, save params |
 | `gpr_processing.py` | Core `apply_processing` function -- shared by notebook + run_pipeline |
-| `run_pipeline.py` | Batch re-process all profiles using saved `_params.json` |
-| `topo_correction.py` | Static topo correction using GNSS; reads `_processed.npz` |
+| `run_all.py` | One command: run_pipeline + every standalone deterministic figure/QC script; prints the manual steps it can't do |
+| `run_pipeline.py` | Batch re-process all profiles using saved `_params.json` (core, called by run_all) |
+| `topo_correction.py` | Static topo correction using GNSS; reads `_processed.npz`, writes `_topo.npz` (compute core; F12 split) |
+| `plot_topo_section.py` | Topo QC-PNG renderer split out of topo_correction (F12); `save_topo_figure` + `CLIP_FALLBACK` (imported back by topo_correction) |
 | `plot_dual_freq.py` | Stacked 50/100 MHz figure per line; migrated stage emits plain + `_picks`-annotated versions (tube_picks.csv; layout via `PICK_PANEL_CFG`); gain/clip/depth from params JSON |
 | `plot_picks.py` | Single-frequency migrated sections with pick annotations (imports helpers from plot_dual_freq) |
 | `plot_processing_steps.py` | Stacked one-panel-per-step figure (apply_processing `capture=`); default Line3_50MHz |
-| `migrate_velocity_scan.py` | Stolt migration velocity scan; outputs interactive HTML with N/S annotations |
-| `plot_flowerpetal_3d.py` | 3D Plotly view of petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo); outputs `flowerpetal_unmigrated_3d.html` (tab title + `write_html(title=...)`), default gain 3 |
+| `migrate_velocity_scan.py` | Stolt migration velocity scan CLI + HTML/PNG plotting; imports its compute core from `migrate_scan_io` and re-exports the taper helper/constants for plot_petal_migration_3d |
+| `migrate_scan_io.py` | Migration compute core (F11 split): `migrate_at_velocity`, `save_migrated_npz`, `live_sample_taper`, `tgain_weights`, `norm99` + Stolt pad/taper constants |
+| `plot_flowerpetal_3d.py` | 3D Plotly scene builders (`make_figure`/`write_html`) + CLI for petals + Line 3 + LiDAR cave, draped on GNSS surface (reads `_processed.npz`, NOT topo); outputs `flowerpetal_unmigrated_3d.html`, default gain 3; imports its data layer from `flowerpetal_io` and re-exports it (`fp.NAME` API preserved) |
+| `flowerpetal_io.py` | Data layer of the 3D viewer (F12 split): `PROFILES` + path constants, GNSS/edge/plumb/LiDAR loaders, `build_track_interps`, `load_velocity`, `petal_track`, `drape_curtain`, `split_panels` |
 | `plot_petal_migration_3d.py` | 3D Plotly view of Stolt-migrated petal SEGMENTS + migrated L3 (both freq), draped flat-datum in the SAME scene as plot_flowerpetal_3d (cave/rim/plumb + gain/clip sliders reused via its make_figure/write_html); segment ranges in `SEGMENTS`; outputs `flowerpetal_migrated_3d.html` |
 | `plot_petal_map.py` | Plan-view picking aid: petal tracks with distance-along-track ticks, to pick straight sub-segments for migration |
 | `plot_petal_migration_map.py` | THESIS plan-view map: petal trajectories with migrated segments highlighted (imports `SEGMENTS` so it can't drift from the 3D plot); pink petals, orange L3, jameo rim, N arrow |
@@ -92,9 +104,17 @@ Data paths (relative to project root):
 - Dual-freq PNGs: `Results/GPR/DualFreq/`
 - Migration HTMLs: `Results/GPR/Migration/`
 
-External dependency: `georadar-data-processing` (gdp) library located at
-`Other data and scripts/Tube X/GPR/scripts/georadar-data-processing/`.
-Scripts add this to sys.path at runtime; do not move it.
+External dependency: `georadar-data-processing` (imported as `gdp`) -- a public package
+from `https://gitlab.com/pygp/georadar-data-processing` (ETH; LGPL v3). It is a normal
+pip install in the project env (`lacorona-lunarleaper-thesis`) and is `import gdp`-ed
+directly; the project
+`Code/environment.yml` pins it (commit 517f008, 2026-03-20). A successor does NOT need any
+sys.path setup and does NOT need the copy under `Other data and scripts/Tube X/...`
+(that copy is stale and is NOT what imports at runtime -- the env's install wins).
+Only these five functions are used, all from `gpr_processing.py`:
+`dewow`, `filter_data` (gdp.preprocessing.filtering); `normalize_data`
+(gdp.preprocessing.normalizing); `apply_gain` (gdp.preprocessing.gain); `remove_svd`
+(gdp.preprocessing.image_processing).
 
 ## Conventions
 
@@ -169,7 +189,9 @@ Processing pipeline, topo correction, draped 3D viz, and Stolt migration are all
 stable. Velocity determination is DONE and SETTLED at v = 0.125 m/ns for BOTH lines
 (L5 remigrated from its earlier 0.11 on 2026-07-16; diffraction collapse admits
 0.10-0.13, one value chosen). Final picks: L3 ceiling 3.8 / floor_app 8.3 (real
-14.6), L5 ceiling 8.6, in `tube_picks.csv`. Handed to the gravity inversion
+14.6 -- DERIVED by cave_geometry() from floor_app 8.3 + v_air 0.3, not stored;
+recompute rather than trust this number if the pick or v_air changes), L5 ceiling
+8.6, in `tube_picks.csv`. Handed to the gravity inversion
 (LINE_PRESETS updated 2026-07-16; Grav instructed via QandA to re-run everything).
 NB: LiDAR may NOT be used to justify the velocity pick (blind-pick constraint) --
 diffraction collapse is the only admissible evidence.

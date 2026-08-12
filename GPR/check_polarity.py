@@ -30,7 +30,9 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import pathlib as _pl
 sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
+sys.path.insert(0, str(_pl.Path(__file__).resolve().parent))       # Code/GPR
 from plot_utils import save_figure
+from gpr_processing import peak_normalise as norm
 from pathlib import Path
 
 HERE     = Path(__file__).parent
@@ -58,9 +60,7 @@ def dominant_sign(mean_trace, time, t_meas):
     return int(np.sign(m[k])), float(t[k])
 
 
-def norm(tr):
-    a = float(np.max(np.abs(tr)))
-    return tr / a if a > 0 else tr
+# norm() imported as peak_normalise from gpr_processing (shared; phase-2 F7)
 
 
 def main():

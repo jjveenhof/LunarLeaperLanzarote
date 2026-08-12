@@ -18,6 +18,16 @@ from pathlib import Path
 # Make topo_correction importable from the parent directory
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import topo_correction as tc
+from gpr_constants import OFFSET_50MHZ, OFFSET_100MHZ, SECTION_START_100MHZ
+
+
+def test_constants_have_expected_values():
+    """Value-lock for the centralised geometry constants (phase-2 F6). The dist
+    tests below verify the FORMULA using these; this one pins the VALUES, so an
+    accidental change to gpr_constants trips exactly one obvious test."""
+    assert OFFSET_50MHZ == 1.10
+    assert OFFSET_100MHZ == 0.425
+    assert SECTION_START_100MHZ == {'Line2': 0.0, 'Line3': 60.0, 'Line5': 30.0}
 
 # Paths to real data files
 _DATA = Path(__file__).parent / '../../../Data'
@@ -163,32 +173,32 @@ def test_dist_line2_50MHz_no_offset():
 def test_dist_line3_50MHz_adds_110cm():
     d = _d()
     result = tc.dist_to_gnss_metre('Line3_50MHz', d)
-    np.testing.assert_allclose(result, d + 1.1)
+    np.testing.assert_allclose(result, d + OFFSET_50MHZ)
 
 
 def test_dist_line3_100MHz_offset_60m_plus_425cm():
     d = _d()
     result = tc.dist_to_gnss_metre('Line3_100MHz', d)
-    np.testing.assert_allclose(result, 60.0 + d + 0.425)
+    np.testing.assert_allclose(result, SECTION_START_100MHZ['Line3'] + d + OFFSET_100MHZ)
 
 
 def test_dist_line5_50MHz_adds_110cm():
     d = _d()
     result = tc.dist_to_gnss_metre('Line5_50MHz', d)
-    np.testing.assert_allclose(result, d + 1.1)
+    np.testing.assert_allclose(result, d + OFFSET_50MHZ)
 
 
 def test_dist_line5_100MHz_forward_direction():
     d = _d()
     result = tc.dist_to_gnss_metre('Line5_100MHz', d)
-    np.testing.assert_allclose(result, 30.0 + d + 0.425)
+    np.testing.assert_allclose(result, SECTION_START_100MHZ['Line5'] + d + OFFSET_100MHZ)
 
 
 def test_dist_flowerpetal_adds_110cm():
     d = _d()
     for key in ('FlowerPetal1_50MHz', 'FlowerPetal2_50MHz', 'FlowerPetal3_50MHz'):
         result = tc.dist_to_gnss_metre(key, d)
-        np.testing.assert_allclose(result, d + 1.1, err_msg=key)
+        np.testing.assert_allclose(result, d + OFFSET_50MHZ, err_msg=key)
 
 
 def test_dist_unknown_profile_raises():

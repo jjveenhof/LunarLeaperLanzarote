@@ -23,9 +23,6 @@ import sys
 import numpy as np
 import pandas as pd
 import json
-import matplotlib
-matplotlib.use('Agg')
-import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.ndimage import shift as ndshift
 from scipy.interpolate import interp1d
@@ -42,14 +39,15 @@ PROC_DIR   = HERE / '../../Data/GPR/Processed'
 TOPO_DIR   = HERE / '../../Data/GPR/Topo'
 FIG_DIR    = HERE / '../../Results/GPR/Topo'
 
-# Midpoint offsets: distance from back antenna to rig midpoint (metres)
-OFFSET_50MHZ  = 1.10    # 2.2 m rig
-OFFSET_100MHZ = 0.425   # 0.85 m rig
+# OFFSET_50MHZ / OFFSET_100MHZ / SECTION_START_100MHZ are imported from
+# gpr_constants (centralised in phase-2 F6); re-exported here since other scripts
+# historically imported OFFSET_50MHZ from topo_correction.
 
-CLIP_FALLBACK = 99.5   # QC-PNG clip percentile if the params JSON has no clip_percentile
-
-from gpr_constants import V_DEFAULT as V_FALLBACK   # m/ns used if not stored in params file
-from gpr_processing import display_gain             # display-only gain for the QC PNG
+from gpr_constants import (V_DEFAULT as V_FALLBACK,   # m/ns used if not stored in params file
+                           OFFSET_50MHZ, OFFSET_100MHZ, SECTION_START_100MHZ)
+# QC-PNG rendering split out (F12); CLIP_FALLBACK re-imported so callers of
+# topo_correction keep seeing it and the clip default has one home.
+from plot_topo_section import save_topo_figure, CLIP_FALLBACK
 # ------------------------------------------------------------------------------
 
 
@@ -163,7 +161,7 @@ def dist_to_gnss_metre(profile_key, dist_axis):
 
     elif profile_key == 'Line3_100MHz':
         # Profile starts at metre 60 of Line 3; back antenna on mark
-        return 60.0 + d + OFFSET_100MHZ
+        return SECTION_START_100MHZ['Line3'] + d + OFFSET_100MHZ
 
     elif profile_key == 'Line5_50MHz':
         # Back antenna on metre mark; midpoint is 1.1 m ahead
@@ -172,7 +170,7 @@ def dist_to_gnss_metre(profile_key, dist_axis):
     elif profile_key == 'Line5_100MHz':
         # Profile was reversed in GPRFieldVisual (now runs 30->80 m like the 50MHz).
         # Back antenna on mark; midpoint is 0.425 m ahead.
-        return 30.0 + d + OFFSET_100MHZ
+        return SECTION_START_100MHZ['Line5'] + d + OFFSET_100MHZ
 
     elif profile_key in ('FlowerPetal1_50MHz', 'FlowerPetal2_50MHz', 'FlowerPetal3_50MHz'):
         # Back antenna at metre 0; midpoint is 1.1 m ahead.
@@ -207,69 +205,6 @@ def apply_topo_correction(data, time_axis, elevations, v):
         corrected[:, i] = ndshift(data[:, i], shifts[i],
                                   mode='constant', cval=0.0)
     return corrected, shifts, ref_elev
-
-
-def save_figure(out_path, profile_key, dist_axis, time_axis,
-                corrected, elevations, v, ref_elev, gain_exp=0.0, flip_x=False,
-                annotate_ns=True, clip_pct=CLIP_FALLBACK):
-    """Single-panel topographic section: the radargram is drawn on an absolute
-    elevation axis (m asl) so the surface relief sits inside the plot. The data is
-    referenced to a flat datum (= max elevation) by the static shift, so the real
-    surface dips below the datum -- that gap is the air overburden and is shaded."""
-    fig, ax = plt.subplots(figsize=(14, 6))
-
-    # Display-only gain (saved NPZ stays un-gained); uses the recorded view gain
-    disp = corrected
-    gain_note = ''
-    if gain_exp and gain_exp > 0:
-        sfreq = 1000.0 / float(time_axis[1] - time_axis[0])   # MHz
-        disp = display_gain(corrected, sfreq, gain_exp)
-        gain_note = ' | view gain {:.1f}'.format(gain_exp)
-
-    # Map the time axis to absolute elevation: elev = ref_elev - TWT * v / 2.
-    # Row 0 (time 0) is the datum (highest surface point); deeper rows are lower.
-    t_max      = float(time_axis[-1])
-    elev_bot   = ref_elev - t_max * v / 2.0
-
-    clip_val = np.percentile(np.abs(disp), clip_pct)
-    im = ax.imshow(disp, aspect='auto', cmap='seismic',
-                   vmin=-clip_val, vmax=clip_val,
-                   extent=[dist_axis[0], dist_axis[-1], elev_bot, ref_elev])
-
-    # surface topography drawn inside the section; shade the air above it
-    ax.fill_between(dist_axis, elevations, ref_elev,
-                    color='0.85', zorder=3, linewidth=0)
-    ax.plot(dist_axis, elevations, color='k', linewidth=1.3, zorder=4)
-
-    ax.set_xlim(dist_axis[0], dist_axis[-1])
-    ax.set_ylim(elev_bot, ref_elev)
-    ax.set_xlabel('Distance (m)')
-    ax.set_ylabel('Elevation (m asl)')
-    # pretty label: "Line3_50MHz" -> "Line3 -- 50 MHz" (avoids the raw underscore,
-    # which renders as a raised mark in Computer Modern)
-    _p = profile_key.split('_')
-    pretty = '{} -- {}'.format(_p[0], _p[1].replace('MHz', ' MHz')) \
-        if len(_p) == 2 else profile_key
-    ax.set_title('{} | v = {:.3f} m/ns{} | clip {:.1f}%'.format(
-        pretty, v, gain_note, clip_pct))
-
-    # N/S endpoint labels inside the section at top corners. Only meaningful for
-    # the straight lines -- the flower petals curve through many azimuths (acquired
-    # clockwise), so N/S is dropped there (orientation is read from the 3D plan view).
-    if annotate_ns:
-        ax.text(0.01, 0.03, 'N', transform=ax.transAxes, ha='left', va='bottom',
-                fontsize=11, fontweight='bold', color='black')
-        ax.text(0.99, 0.03, 'S', transform=ax.transAxes, ha='right', va='bottom',
-                fontsize=11, fontweight='bold', color='black')
-
-    # right-hand axis: depth below datum (m) = ref_elev - elevation = TWT * v / 2
-    tax = ax.twinx()
-    tax.set_ylim(t_max * v / 2.0, 0.0)   # 0 at datum, increasing downward
-    tax.set_ylabel('Depth below datum (m)')
-
-    plt.tight_layout()
-    plt.savefig(str(out_path), dpi=150)
-    plt.close(fig)
 
 
 def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
@@ -332,7 +267,7 @@ def correct_profile(npz_path, gnss_lines_df, gnss_fp_df, interp_cache):
                         shifts=shifts,
                         ref_elev=np.array(ref_elev))
 
-    save_figure(out_png, profile_key, dist_axis, time_axis,
+    save_topo_figure(out_png, profile_key, dist_axis, time_axis,
                 corrected, elevations, v, ref_elev,
                 gain_exp=float(params.get('gain_exponent', 0.0)),
                 flip_x=bool(params.get('flip_x', False)),

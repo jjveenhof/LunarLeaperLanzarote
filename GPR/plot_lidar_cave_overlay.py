@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import plot_flowerpetal_3d as fp
 from plot_dual_freq import load_npz, load_param, load_clip, CMAP
 from gpr_processing import display_gain
-from topo_correction import OFFSET_50MHZ
+from gpr_constants import OFFSET_50MHZ
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
 

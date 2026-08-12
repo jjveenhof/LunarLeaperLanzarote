@@ -41,7 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from plot_flowerpetal_3d import (PROFILES, PROC_DIR, GNSS_FP, GNSS_LINES,
                                  load_gnss_fp, load_gnss_lines, build_track_interps)
 from profile_geometry import reconcile_geometry
-from gpr_processing import display_gain
+from gpr_processing import display_gain, peak_normalise as norm
 
 OUT_DIR = Path(__file__).parent / '../../Results/GPR/PolarityCheck'
 
@@ -117,9 +117,7 @@ def gain_trace(tr, time, exponent):
     return display_gain(tr[:, np.newaxis], sfreq, exponent)[:, 0]
 
 
-def norm(tr):
-    m = float(np.max(np.abs(tr)))
-    return tr / m if m > 0 else tr
+# norm() imported as peak_normalise from gpr_processing (shared; phase-2 F7)
 
 
 def main():

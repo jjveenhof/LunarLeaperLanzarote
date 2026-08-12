@@ -36,7 +36,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import segment_tzero as seg_tz
-from gpr_processing import apply_processing, display_gain
+from gpr_processing import apply_processing, display_gain, mean_trace_spectrum
+from gpr_constants import NOTCH_FREQS_MHZ   # L2 100MHz notch centres (guide lines)
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
 
@@ -52,16 +53,6 @@ TRIAL_WHITEN_WINDOW = 5   # smoothing bins; lower = flatter spectrum (more aggre
 
 FMAX_MHZ = 300.0   # crop displayed spectrum to this frequency (matches diagnostics script)
 CMAP     = 'seismic'
-NOTCH_FREQS_MHZ = [75.0, 160.0]   # approx L2 100MHz hardware notches (see CLAUDE.md);
-                                  # guide lines on the mean-spectrum panels only
-
-
-def mean_trace_spectrum(data, dt_ns):
-    """FFT of the MEAN TRACE -- matches plot_l2_spectral_diagnostics.py exactly."""
-    n_s  = data.shape[0]
-    spec = np.abs(np.fft.rfft(data.mean(axis=1)))
-    freq = np.fft.rfftfreq(n_s, d=dt_ns) * 1000.0   # cycles/ns (GHz) -> MHz
-    return spec, freq
 
 
 def run_variant(data, time_axis, sfreq, base_params, **overrides):

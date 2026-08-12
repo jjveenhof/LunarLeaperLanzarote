@@ -70,21 +70,11 @@ def _petal_prof(key):
 
 
 def _track(prof):
-    """(dist_axis, time_axis, data, east, north, elev, dist_along) for a petal,
-    geometry reconciled to the (flip-baked) data columns exactly as drape_curtain."""
-    with np.load(str(fp.PROC_DIR / (prof['key'] + '_processed.npz'))) as f:
-        data      = f['data'].astype(np.float64)
-        dist_axis = f['dist_axis'].astype(np.float64)
-        time_axis = f['time_axis'].astype(np.float64)
-    gnss_df = fp.load_gnss_fp(fp.GNSS_FP)
-    east_fn, north_fn, elev_fn = fp.build_track_interps(
-        gnss_df, prof['gnss_line'], prof['metre'])
-    gnss_m = dist_axis + prof['offset']
-    east, north, elev = fp.reconcile_geometry(
-        prof['key'], east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
-    seg = np.hypot(np.diff(east), np.diff(north))
-    dist_along = np.concatenate([[0.0], np.cumsum(seg)])
-    return dist_axis, time_axis, data, east, north, elev, dist_along
+    """(dist_axis, time_axis, data, east, north, elev, dist_along) for a petal.
+    Thin wrapper over fp.petal_track (shared composition; phase-2 F7)."""
+    r = fp.petal_track(prof)
+    return (r['dist_axis'], r['time_axis'], r['data'],
+            r['east'], r['north'], r['elev'], r['dist_along'])
 
 
 def _curtain(name, label, colour, east_s, north_s, elev_s, amp, depth, ref_elev, sfreq):

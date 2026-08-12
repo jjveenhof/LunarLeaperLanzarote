@@ -54,31 +54,16 @@ X_MARGIN_FRAC = 0.25  # side whitespace as a fraction of the E-W data span; larg
 
 
 def petal_track(prof):
-    """(east, north, dist_along) for a petal, geometry reconciled to the data."""
-    with np.load(str(fp.PROC_DIR / (prof['key'] + '_processed.npz'))) as f:
-        dist_axis = f['dist_axis'].astype(np.float64)
-    gnss_df = fp.load_gnss_fp(fp.GNSS_FP)
-    east_fn, north_fn, elev_fn = fp.build_track_interps(
-        gnss_df, prof['gnss_line'], prof['metre'])
-    gnss_m = dist_axis + prof['offset']
-    east, north, _elev = fp.reconcile_geometry(
-        prof['key'], east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
-    seg = np.hypot(np.diff(east), np.diff(north))
-    dist_along = np.concatenate([[0.0], np.cumsum(seg)])
-    return east, north, dist_along
+    """(east, north, dist_along) for a petal -- via fp.petal_track (phase-2 F7)."""
+    r = fp.petal_track(prof)
+    return r['east'], r['north'], r['dist_along']
 
 
 def line3_track(key):
-    with np.load(str(fp.PROC_DIR / (key + '_processed.npz'))) as f:
-        dist_axis = f['dist_axis'].astype(np.float64)
+    """(east, north) for the Line 3 track -- via fp.petal_track (source='lines')."""
     prof = next(p for p in fp.PROFILES if p['key'] == key)
-    gnss_df = fp.load_gnss_lines(fp.GNSS_LINES)
-    east_fn, north_fn, elev_fn = fp.build_track_interps(
-        gnss_df, prof['gnss_line'], prof['metre'])
-    gnss_m = dist_axis + prof['offset']
-    east, north, _elev = fp.reconcile_geometry(
-        key, east_fn(gnss_m), north_fn(gnss_m), elev_fn(gnss_m))
-    return east, north
+    r = fp.petal_track(prof, source='lines')
+    return r['east'], r['north']
 
 
 def main():

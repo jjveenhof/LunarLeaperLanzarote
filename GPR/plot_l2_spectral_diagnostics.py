@@ -38,6 +38,8 @@ import matplotlib.gridspec as gridspec
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
+from gpr_constants import NOTCH_FREQS_MHZ   # L2 100MHz notch centres (guide lines)
+from gpr_processing import mean_trace_spectrum
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
 
@@ -50,8 +52,6 @@ LINE_B, FREQ_B, LABEL_B = 'Line3', '100MHz', 'Line3 -- 100 MHz (normal)'
 
 FMAX_MHZ     = 300.0   # crop the displayed spectrum to this frequency (matches notebook)
 F_X_CLIP_PCT = 98.0    # f-x linear colour clip percentile (matches notebook)
-NOTCH_FREQS_MHZ = [75.0, 160.0]   # approx L2 100MHz hardware notches (see CLAUDE.md);
-                                  # guide lines on the mean-spectrum panel only
 
 
 def load_processed(line, freq):
@@ -64,15 +64,6 @@ def load_processed(line, freq):
         t    = npz['time_axis'].astype(np.float64)
         x    = npz['dist_axis'].astype(np.float64)
     return data, t, x
-
-
-def mean_trace_spectrum(data, dt_ns):
-    """FFT of the MEAN TRACE (average in time domain first) -- matches the
-    notebook's np.fft.rfft(np.mean(proc_ng, axis=1)) exactly."""
-    n_s  = data.shape[0]
-    spec = np.abs(np.fft.rfft(data.mean(axis=1)))
-    freq = np.fft.rfftfreq(n_s, d=dt_ns) * 1000.0   # cycles/ns (GHz) -> MHz
-    return spec, freq
 
 
 def per_trace_spectrum(data, dt_ns):
