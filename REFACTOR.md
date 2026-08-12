@@ -37,8 +37,8 @@ successor would waste an hour here" is a reason.
 
 4. **Read-only on data.** The refactor touches `Code/` only. Raw acquisition data
    (`Data/GPR/Stitched/`, raw `Data/GNSS/`, `Data/Gravimetry/Field data` + Notes,
-   `LiDAR La Corona/*.bin`, anything in `C:\Users\jj_ve\lidar_scratch`) is irreplaceable
-   and outside scope. Regenerating `Data/*/Processed/` or `Results/` is fine.
+   `LiDAR La Corona/*.bin`) is irreplaceable and outside scope. Regenerating
+   `Data/*/Processed/` or `Results/` is fine.
 
 5. **Quarantine beats delete.** Superseded scripts carry decision history -- that history
    IS handover value ("we tried this, it didn't work"). Move them to the session's
