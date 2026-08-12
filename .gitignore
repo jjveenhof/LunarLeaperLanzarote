@@ -7,6 +7,9 @@ __pycache__/
 # Jupyter
 .ipynb_checkpoints/
 
+# Test runner caches
+.pytest_cache/
+
 # Data files (keep data outside repo, but just in case)
 *.dat
 *.raw
@@ -26,3 +29,17 @@ GPR/QandA.md
 QGIS/QandA.md
 Grav/QandA.md
 LiDAR/QandA.md
+
+# Phase-2 refactor golden master (regenerable snapshots; do not commit).
+# Every session's shim writes to <session>/_goldenmaster/ -- see Code/goldenmaster.py.
+_goldenmaster/
+
+# Quarantined GPR trial artifacts (Adhoc/, moved there by refactor F9).
+# These came from Data/GPR/ and Results/GPR/, which live OUTSIDE this repo, so
+# quarantining them into Code/ would otherwise commit ~43 MB of dead binary --
+# including a 42 MB velocity-scan HTML -- into git history permanently.
+# The files stay on disk; Adhoc/README.md records what they were and where they
+# came from, which is the decision history worth keeping (rule 5). Deliberately
+# specific rather than a blanket *.npz/*.png: test fixtures such as
+# GPR/tests/refs/*.npz MUST be committed or the successor cannot run the tests.
+GPR/Adhoc/Line5_100MHz_svd1_*
