@@ -19,6 +19,7 @@ from pathlib import Path
 DATA_DIR = Path(__file__).parents[2] / "Data" / "GNSS" / "Cleaned"
 
 EPSG = 4083
+DATETIME_FORMAT = "%d.%m.%Y %H:%M:%S"
 
 # Order field per line group
 LINE_ORDER = {
@@ -41,7 +42,7 @@ def make_feature(coords, line_id):
     }
 
 
-def points_to_lines(df, groups, order_field_map):
+def points_to_lines(df, order_field_map):
     features = []
     for line_id, order_field in order_field_map.items():
         pts = df[df["Line"] == line_id].copy()
@@ -86,11 +87,11 @@ def main():
     petals_csv = DATA_DIR / "CleanedGNSS_GPR_FlowerPetals.csv"
 
     lines_df = pd.read_csv(lines_csv)
-    lines_df["Time"] = pd.to_datetime(lines_df["Time"], format="%d.%m.%Y %H:%M:%S")
+    lines_df["Time"] = pd.to_datetime(lines_df["Time"], format=DATETIME_FORMAT)
     petals_df = pd.read_csv(petals_csv)
-    petals_df["Time"] = pd.to_datetime(petals_df["Time"], format="%d.%m.%Y %H:%M:%S")
+    petals_df["Time"] = pd.to_datetime(petals_df["Time"], format=DATETIME_FORMAT)
 
-    line_features = points_to_lines(lines_df, LINE_ORDER.keys(), LINE_ORDER)
+    line_features = points_to_lines(lines_df, LINE_ORDER)
     write_geojson(line_features, DATA_DIR / "GPR_Lines.geojson")
 
     petal_features = petals_to_lines(petals_df, PETAL_LINES)

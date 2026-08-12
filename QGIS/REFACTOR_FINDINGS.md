@@ -1,8 +1,11 @@
-# QGIS session -- Phase 1 refactor audit
+# QGIS session -- refactor audit (phase 1) and execution (phase 2)
 
 Scope: `Code/QGIS/points_to_lines.py` (~100 lines -- the only code in this session) plus
-the QGIS project/layer assets in `QGIS/` (outside git). Audit only -- no code or project
-files changed. Findings ranked by handover value / risk, per `Code/REFACTOR.md`.
+the .qgz project files and layer assets in `QGIS project/` (outside git; renamed from
+plain `QGIS/` on 2026-08-11 -- paths below reflect the current name). Phase 1 was audit only,
+no changes; phase 2 (docs fixes, the layer rewire, .prj sidecars, legacy quarantine, the
+`points_to_lines.py` nits) is executed and noted inline below. Findings ranked by
+handover value / risk, per `Code/REFACTOR.md`.
 
 Goal sentence for reference: *a competent MSc student who has never seen this project
 can (1) verify any number in the thesis, (2) regenerate any figure, (3) extend the
@@ -17,8 +20,8 @@ state, not code.
 
 ### [1] CLAUDE.md names the wrong file as "the main active project"
 - **Where:** `Code/QGIS/CLAUDE.md:24` ("`Research module report.qgz` -- main active
-  project; contains all print layouts"); `QGIS/Research module report.qgz` (last saved
-  2026-02-26) vs `QGIS/FieldworkReporting.qgz` (last saved 2026-07-13)
+  project; contains all print layouts"); `QGIS project/Research module report.qgz` (last saved
+  2026-02-26) vs `QGIS project/FieldworkReporting.qgz` (last saved 2026-07-13)
 - **What:** I read both `.qgz` files (they are zip archives containing XML; unzipped and
   parsed directly, no QGIS needed). `Research module report.qgz` has only 10 layers, 8 of
   which point at `../La Corona Cave/...` or `../../Section 6.shp` -- a folder ("La Corona
@@ -35,17 +38,20 @@ state, not code.
   works.
 - **Proposed action:** swap CLAUDE.md's "main active project" line to point at
   `FieldworkReporting.qgz`; reclassify `Research module report.qgz` as legacy/broken
-  alongside the `Fieldworkplanning*.qgz` files. These `.qgz` files live in `QGIS/`,
+  alongside the `Fieldworkplanning*.qgz` files. These `.qgz` files live in `QGIS project/`,
   outside git, so any rename/move is propose-only per the session brief -- I have not
   touched them. A CLAUDE.md text fix is zero-risk and should just be done.
 - **Touches numbers?:** NO (documentation only).
 - **Effort:** S
+- **Phase 2 status: DONE (2026-08-11).** CLAUDE.md now names `FieldworkReporting.qgz` as
+  the main active project and reclassifies `Research module report.qgz` as legacy/broken.
+  Not moved to `Legacy/` (finding 4 only approved the specific list it named).
 
 ### [2] A layer named "masked" is wired to the unmasked file -- feeds two live thesis figures
 - **Where:** `FieldworkReporting.qgz`, layer id `cavetop_clean_LaGente_6fe34705...`,
   `<layername>cavetop_clean_masked_LaGente</layername>`,
   `<datasource>./cavetop_clean_LaGente.tif</datasource>` (the RAW, pre-mask file). The
-  actual masked file, `QGIS/cavetop_clean_masked_LaGente.tif`, exists on disk (I verified
+  actual masked file, `QGIS project/cavetop_clean_masked_LaGente.tif`, exists on disk (I verified
   it) but is referenced **zero times** anywhere in the project XML -- it was saved but
   never loaded as a layer.
 - **What:** This mislabeled layer is used by two print-layout map items: `NWFieldworkArea`
@@ -72,6 +78,18 @@ state, not code.
   value. Re-exporting for comparison is the recommended check, not a numeric rerun.
 - **Effort:** S (a few clicks in QGIS), but worth doing before anyone touches this project
   again.
+- **Phase 2 status: DONE (2026-08-11).** Repointed via PyQGIS `setDataSource` (not the GUI --
+  `qgis_process`/`python-qgis-ltr.bat` from the OSGeo4W install let this be done headlessly
+  and precisely). Also found and fixed a SECOND stale reference my phase-1 XML scan missed:
+  a frozen "locked layers" snapshot inside the `NWFieldworkArea` layout's map item, which
+  `QgsProject.write()` did not auto-correct -- needed a direct XML patch (the layout's
+  `<Layout name=...>` tag has "name" in varying attribute positions across layouts, which
+  is also why my phase-1 traceability table build initially under-counted; re-scanned with
+  an attribute-order-independent regex to confirm no other stale entries exist anywhere).
+  `FieldworkReporting.qgz.bak-20260811` kept as a pre-fix backup. Re-exported both affected
+  layouts (`NWFieldworkArea`, `OverviewFieldworkAreaNoLegend`) to a scratch path via
+  `QgsLayoutExporter` and eyeballed them -- both match the delivered thesis PDFs. All 35
+  project layers confirmed still valid after the fix.
 
 ### [3] Missing-CRS files -- consolidated list (per your audit note)
 - **Where:** scattered across CLAUDE.md prose; verified by checking for `.prj` sidecars
@@ -79,7 +97,7 @@ state, not code.
 - **What:** files that load into QGIS as "unknown CRS" even though their coordinates are
   already correct EPSG:4083 (REGCAN95 / UTM 28N) -- because CloudCompare/other exports
   didn't embed one:
-  - `QGIS/caveheight_clean_laGente.tif` -- raster; per this session's transcript, EPSG:4083
+  - `QGIS project/caveheight_clean_laGente.tif` -- raster; per this session's transcript, EPSG:4083
     was assigned via "Assign projection" (writes into the file), so this one is likely
     already fixed on disk -- I could not independently re-verify the embedded CRS byte
     (no GDAL/rasterio in the env, see Reproducibility note below), so treat as
@@ -91,9 +109,9 @@ state, not code.
     4 of the 7 print layouts, including 3 that ARE thesis figures (`OverviewFieldworkArea`,
     `OverviewRegion`, `OverviewFieldworkAreaNoLegend`) -- this one was missing from the
     original audit note and is the most consequential of the group.
-  - `QGIS/envelope z-flat.shp` -- no `.prj`; used as "Lava tube envelope" in the
+  - `QGIS project/envelope z-flat.shp` -- no `.prj`; used as "Lava tube envelope" in the
     `OverviewRegion` thesis layout and `FlowerPetalOutreach`.
-  - `QGIS/All GPR surveys.shp` -- no `.prj`; legacy/superseded (see finding 4), low
+  - `QGIS project/All GPR surveys.shp` -- no `.prj`; legacy/superseded (see finding 4), low
     priority.
 - **Why it hurts handover:** goal (3). Right now this knowledge exists only as "it loads
   fine because I already fixed it in my open QGIS session" -- not written down anywhere as
@@ -110,9 +128,17 @@ state, not code.
   rule 4 allows it, but I did not do it in phase 1).
 - **Touches numbers?:** NO.
 - **Effort:** S
+- **Phase 2 status: DONE (2026-08-11).** `caveheight_clean_laGente.tif` was actually
+  NOT fixed on disk despite the in-session "Assign projection" -- confirmed with `gdalinfo`
+  (found via the OSGeo4W install, so this could finally be checked directly this session):
+  no CRS block at all. Fixed for real with `gdal_edit.py -a_srs EPSG:4083`; verified
+  statistics (min/max/mean/stddev) identical before and after -- metadata-only change, no
+  pixel data touched. The three no-`.prj` shapefiles plus `envelope z-flat.shp` and
+  `All GPR surveys.shp` all got `.prj` sidecars (WKT copied from the already-correct
+  `Jameos.prj`). Consolidated list is now in `Code/QGIS/CLAUDE.md`.
 
 ### [4] Legacy layer triage (propose only -- lives outside git)
-- **Where:** `QGIS/` folder, project root.
+- **Where:** `QGIS project/` folder, project root.
 - **What:** planning-stage shapefiles superseded by the real survey data: `All GPR
   surveys.shp`, `ContextLine*.shp`, `CentreLines*.shp`, `FlowerPetalLine*.shp`,
   `GridLines.shp`, `ParallelLine.shp`, `ParallelContextLine.shp`, `SmallDeepLine.shp`,
@@ -122,14 +148,19 @@ state, not code.
   `Fieldworkplanning.qgz`, `Fieldworkplanning2.qgz` (pre-fieldwork planning, confirmed not
   referenced by any thesis figure).
 - **Why it hurts handover:** goal (3), mildly. None of these break anything today, but a
-  successor browsing `QGIS/`'s ~30 shapefiles has no way to tell "superseded, safe to
+  successor browsing `QGIS project/`'s ~30 shapefiles has no way to tell "superseded, safe to
   ignore" from "still load-bearing" without opening each one.
 - **Proposed action:** per rule 5 (quarantine beats delete) and your note that these are
-  outside git -- propose a `QGIS/Legacy/` subfolder and moving the planning-stage
+  outside git -- propose a `QGIS project/Legacy/` subfolder and moving the planning-stage
   shapefiles + the two unused `.qgz` files into it. **Not doing this myself**: it's a
   file-system move outside the git-tracked area, explicitly your call per the audit brief.
 - **Touches numbers?:** NO.
 - **Effort:** S if approved (plain file moves), but propose-only per scope.
+- **Phase 2 status: DONE (2026-08-11), approved by the Supervisor session.** Confirmed via
+  PyQGIS that none of the listed files are referenced by any layer in
+  `FieldworkReporting.qgz` before moving. All moved into `QGIS project/Legacy/` with a
+  one-line `README.md` (per rule 5). Reloaded the project afterward -- all 35 layers still
+  valid, all 4 thesis-figure layouts still resolve.
 
 ### [5] `points_to_lines.py` -- two trivial code notes, neither worth urgent action
 - **Where:** `Code/QGIS/points_to_lines.py:44-54` (`points_to_lines` function),
@@ -146,18 +177,26 @@ state, not code.
   edit.
 - **Touches numbers?:** NO.
 - **Effort:** S (skippable)
+- **Phase 2 status: DONE (2026-08-11), approved by the Supervisor session.** Both nits
+  applied. Verified non-regression twice: first manually (copied the two output GeoJSONs
+  before editing, re-ran, `diff` -- identical), then again with the shared
+  `Code/QGIS/goldenmaster.py` shim per the Supervisor's golden-master addendum (`snapshot`
+  taken post-fix as the new baseline, `check --verbose` reports both files bit-identical).
+  This is the only numeric/data output this session produces.
 
 ### Reproducibility note (checklist f)
 - The order-field convention checklist item ("Time for L2/FP, Meter for L3/L5") IS already
   in the script, not just in CLAUDE.md -- `LINE_ORDER = {2: "Time", 3: "Meter", 5:
   "Meter"}` with a one-line comment above it, and `petals_to_lines` hardcodes `"Time"`.
   No action needed here; the audit note's concern turned out to already be satisfied.
-- The env (`GPR_plotting_LL`) has neither `rasterio` nor `osgeo`/GDAL, so this session
-  could not independently re-verify raster CRS/extent/statistics by script -- everything
-  raster-related above was checked by parsing the `.qgz` XML directly (rasters are just
-  referenced by path/CRS string there) plus recall of the in-session record. If a future
-  session wants to script-verify raster properties, it needs GDAL added to the env or a
-  call out to QGIS's own bundled GDAL.
+- The `GPR_plotting_LL` conda env has neither `rasterio` nor `osgeo`/GDAL, so phase 1's
+  raster checks were limited to parsing `.qgz` XML directly. Phase 2 found a working
+  alternative: the local QGIS/OSGeo4W install (`C:\OSGeo4W`) ships its own GDAL
+  (`gdalinfo.exe`, `gdal_edit.py`) and a PyQGIS-enabled Python (`python-qgis-ltr.bat`),
+  usable standalone without touching the `GPR_plotting_LL` env. This is how finding 3's
+  raster CRS gap got found (the earlier "fix" hadn't actually been written to disk) and
+  fixed for real, and how finding 2's layer rewire + layout re-export were done headlessly.
+  Worth remembering for any future QGIS-adjacent scripting need in this project.
 - The overburden workflow itself (align -> subtract -> mask, documented in
   `Code/QGIS/CLAUDE.md`) is entirely manual QGIS GUI steps -- there is no `.py` script or
   PyQGIS/Processing model that regenerates `cavetop_clean_masked*.tif` from
@@ -177,8 +216,8 @@ via **`FieldworkReporting.qgz`**'s print layouts (see finding 1), exported to
 | Thesis figure (`main.tex`) | QGIS layout (in `FieldworkReporting.qgz`) | Key source layers |
 |---|---|---|
 | `main.tex:167`, regional DEM overview | `OverviewRegion` (2 map items) | `MergedDTM color`/`shade` (`Data/IGN data/Processed/MergedDTM.sdat`), `Lava tube envelope`, `LavaTubeInterpretation_correctCRS`, `Tube Envelope - Cleaned and surface removed`, `PuertaFalsaCleanEnvelope` |
-| `main.tex:358`, Fig. `fig:overview-fieldwork` panel (a) | `OverviewFieldworkAreaNoLegend` | `GPR_Lines`, `Flowerpetals`, `cavetop_clean_masked` (full-cave overburden), `cavetop_clean_masked_PuertaFalsa`, `cavetop_clean_masked_LaGente` (**see finding 2 -- currently mislinked**), `LaGenteCleanEnvelope` |
-| `main.tex:359`, Fig. `fig:overview-fieldwork` panels (b)/(c) | `NWFieldworkArea` (2 map items) | `GravLocations`, `GPR_Lines`, `cavetop_clean_masked_PuertaFalsa`, `cavetop_clean_masked_LaGente` (**finding 2**), `LaGenteCleanEnvelope` |
+| `main.tex:358`, Fig. `fig:overview-fieldwork` panel (a) | `OverviewFieldworkAreaNoLegend` | `GPR_Lines`, `Flowerpetals`, `cavetop_clean_masked` (full-cave overburden), `cavetop_clean_masked_PuertaFalsa`, `cavetop_clean_masked_LaGente` (**finding 2, fixed 2026-08-11**), `LaGenteCleanEnvelope` |
+| `main.tex:359`, Fig. `fig:overview-fieldwork` panels (b)/(c) | `NWFieldworkArea` (2 map items) | `GravLocations`, `GPR_Lines`, `cavetop_clean_masked_PuertaFalsa`, `cavetop_clean_masked_LaGente` (**finding 2, fixed 2026-08-11**), `LaGenteCleanEnvelope` |
 | `main.tex:1157`, La Gente alignment figure | `LaGenteAlignment` | `AfterAlignmentInterpretation`, `Tube Envelope - Cleaned and surface removed`, `PuertaFalsaCleanEnvelope`, `LaGenteCleanEnvelope` |
 
 Layouts present but **not** used in the thesis (checked against `main.tex` --
@@ -204,24 +243,26 @@ failure mode for this script. Not written -- proposing only, per phase-1 scope.
 
 ---
 
-## Recommended cut line
+## Recommended cut line (phase 1) -- now all executed (phase 2, 2026-08-11)
 
 **Worth doing** (all zero/near-zero risk, all docs-or-project-state, no code
-verification needed):
-- [1] Fix CLAUDE.md's "main active project" pointer.
+verification needed) -- **DONE**:
+- [1] Fix CLAUDE.md's "main active project" pointer. DONE.
 - [2] Repoint the mislinked La Gente masked layer and re-export the two affected layouts
-  to confirm the thesis PDFs are unaffected.
-- [3] Consolidate the missing-CRS file list into CLAUDE.md; optionally write `.prj`
-  sidecars for the three shapefiles that have none.
+  to confirm the thesis PDFs are unaffected. DONE, including a second stale reference
+  phase 1 missed.
+- [3] Consolidate the missing-CRS file list into CLAUDE.md; write `.prj`
+  sidecars for the shapefiles that have none. DONE -- also caught and fixed a raster CRS
+  fix from this session that had never actually been written to disk.
 
-**Optional / below the line:**
-- [4] Legacy layer quarantine -- real but low-stakes, and outside git so it needs your
-  explicit go-ahead regardless.
-- [5] The two `points_to_lines.py` code nits -- not worth a standalone edit.
-- The scripted-overburden-pipeline gap (reproducibility note) -- real but is new work,
-  not a refactor; flagging for awareness, not proposing for this pass.
+**Optional / below the line** -- also approved and done by the Supervisor session:
+- [4] Legacy layer quarantine. DONE (`QGIS project/Legacy/`).
+- [5] The two `points_to_lines.py` code nits. DONE, verified byte-identical output.
+- The scripted-overburden-pipeline gap (reproducibility note) -- still real, still new
+  work rather than a refactor; CLAUDE.md now states the manual-artifact fact explicitly
+  instead of leaving it implicit, per the Supervisor dispatch. Not scripted.
 
 No rule-3 discrepancies found (no thesis number disagreed with anything re-checked).
-Finding [2] is the closest thing to a "the thesis might be wrong" alarm, but the visual
-check of the actual delivered PDFs did not show a problem -- it's a reproduction trap for
-the *next* time this project is opened, not a defence-day concern.
+Finding [2] was the closest thing to a "the thesis might be wrong" alarm; the visual
+check of the actual delivered PDFs did not show a problem, and it is now fixed at the
+source besides -- confirmed via a fresh re-export that matches the delivered PDFs.
