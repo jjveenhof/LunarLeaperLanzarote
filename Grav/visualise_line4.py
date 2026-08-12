@@ -27,10 +27,12 @@ import matplotlib.patches as mpatches
 import matplotlib.ticker as mticker
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+# Moved out of Adhoc/ on 2026-08-12: this produces the LIVE thesis figure
+# fig:grav-result-l4, so it is not ad-hoc work.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
-from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, rho_str as rho_fmt, sba_file
+from grav_utils import (BASE, PROC_DIR, BOUGUER_DIR, LSQ_LINES, RHO_DEFAULT,
+                        rho_str as rho_fmt, sba_file)
 
 # Marker colours matching the QGIS map styling (Code/QGIS/CLAUDE.md)
 L4_COLOR   = "#FF4DB8"   # pink   -- Line 4 points
@@ -56,7 +58,7 @@ if USE_CBA:
     G_COL    = "CBA"
     SE_COL   = "SE_CBA"   # may be overridden to SE_SBA after the file is loaded
     YLABEL   = "CBA (mGal)"
-    SAVE_DIR = BASE / "Results/Grav/Bouguer"
+    SAVE_DIR = BOUGUER_DIR
     FILESTEM = f"line4_combined_CBA_rho{rho_fmt(rho)}"
 elif rho_arg is not None:
     rho      = float(rho_arg)
@@ -64,14 +66,14 @@ elif rho_arg is not None:
     G_COL    = "SBA"
     SE_COL   = "SE_SBA"
     YLABEL   = f"Simple Bouguer Anomaly (mGal)  [rho = {rho} g/cm3]"
-    SAVE_DIR = BASE / "Results/Grav/Bouguer"
+    SAVE_DIR = BOUGUER_DIR
     FILESTEM = f"line4_combined_SBA_rho{rho_fmt(rho)}"
 else:
     IN_FILE  = PROC_DIR / "lsq_drift_decay.csv"
     G_COL    = "Grav_lsq"
     SE_COL   = "SE_lsq"
     YLABEL   = "Gravity anomaly (mGal)"
-    SAVE_DIR = BASE / "Results/Grav/LSQ/Lines"
+    SAVE_DIR = LSQ_LINES
     FILESTEM = "line4_combined"
 
 SAVE_DIR.mkdir(parents=True, exist_ok=True)

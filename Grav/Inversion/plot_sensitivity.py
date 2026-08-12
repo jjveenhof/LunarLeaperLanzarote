@@ -52,18 +52,18 @@ SWEEP_LW = 1           # sweep line width (points); bigger = thicker line
 
 def cfg_for(line, args):
     """InvCfg for a line from its preset + CLI overrides (mirrors run_inversion)."""
-    pre = it.LINE_PRESETS[line]
-    return it.InvCfg(
-        velocity=args.velocity if args.velocity is not None else pre["velocity"],
-        velocity_sigma=(args.velocity_sigma if args.velocity_sigma is not None
-                        else pre["velocity_sigma"]),
-        sigma_pick=args.sigma_pick, slope_se=drv.slope_se_of(line), truncate=None)
+    over = dict(sigma_pick=args.sigma_pick)
+    if args.velocity is not None:
+        over["velocity"] = args.velocity
+    if args.velocity_sigma is not None:
+        over["velocity_sigma"] = args.velocity_sigma
+    return it.cfg_for(line, slope_se=drv.slope_se_of(line), **over)
 
 
 def _setup(line, mode):
     sx, d, se = it.load_line(line)
     sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-    x0s = np.arange(sx[np.argmin(d)] - 20, sx[np.argmin(d)] + 20, 0.5)
+    x0s = it.x0_grid(sx, d)
     return sx, d, se, sizes, x0s
 
 
@@ -231,7 +231,7 @@ def main():
     for line, mode in CASES:
         pre = it.LINE_PRESETS[line]
         ceiling = pre["ceiling"]
-        floor = pre["floor"] or 16.0
+        floor = pre["floor"] or it.FLOOR_FALLBACK
         cfg = cfg_for(line, args)
         picks.append(pick_curves(line, mode, ceiling, floor, cfg, args.sweep))
         vels.append(velocity_curve(line, mode, ceiling, floor, cfg))

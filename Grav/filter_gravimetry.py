@@ -38,11 +38,11 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-BASE      = Path(__file__).resolve().parents[2]
-RAW_FILE  = BASE / "Data/Gravimetry/combined_gravimetry.csv"
-DATA_DIR  = BASE / "Data/Gravimetry"
-PROC_DIR  = BASE / "Data/Gravimetry/Processed"
-EXCL_FILE = BASE / "Data/Gravimetry/exclusions.csv"
+from grav_utils import BASE, GRAV_DIR, PROC_DIR   # one definition of the project paths
+
+RAW_FILE  = GRAV_DIR / "combined_gravimetry.csv"
+DATA_DIR  = GRAV_DIR
+EXCL_FILE = GRAV_DIR / "exclusions.csv"
 
 # -- Filtering configurations ---------------------------------------------------
 # Each entry produces a separate output file named filtered_gravimetry_{name}.csv

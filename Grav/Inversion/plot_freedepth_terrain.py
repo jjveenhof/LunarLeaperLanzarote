@@ -42,7 +42,8 @@ from matplotlib.legend_handler import HandlerTuple
 
 import invert_tube as it
 import freedepth as fd
-import plot_model_terrain as pmt          # layout helpers + shared styling
+import terrain_common as pmt              # shared styling + data helpers (library only)
+from plot_utils import save_figure        # was reached via plot_model_terrain
 from forward_polygon import ellipse_vertices
 
 # GPR pick reference line: OFF. The pick constrains nothing here, and showing it invited
@@ -255,7 +256,7 @@ def main():
 
     out = it.FIG / f"freedepth_terrain_line{args.line}.png"
     fig.savefig(out, dpi=150)
-    pmt.save_figure(fig, out.stem, "Inversion", vector=True, tight=False)
+    save_figure(fig, out.stem, "Inversion", vector=True, tight=False)
     plt.close(fig)
     print(f"  saved -> {out.relative_to(it.BASE)}")
 

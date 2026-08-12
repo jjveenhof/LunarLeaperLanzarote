@@ -34,11 +34,13 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-BASE      = Path(__file__).resolve().parents[2]
-CG5_DIR   = BASE / "Data/Gravimetry/Field data"
-NOTES_DIR = BASE / "Data/Gravimetry/Notes"
-GNSS_FILE = BASE / "Data/GNSS/01.05.26/LunLeapLanzGrav.txt"
-OUT_FILE  = BASE / "Data/Gravimetry/combined_gravimetry.csv"
+from grav_utils import BASE, GRAV_DIR, GNSS_DIR   # one definition of the project paths
+
+# Raw acquisition data -- READ ONLY (see the project CLAUDE.md "Data safety" section).
+CG5_DIR   = GRAV_DIR / "Field data"
+NOTES_DIR = GRAV_DIR / "Notes"
+GNSS_FILE = GNSS_DIR / "01.05.26/LunLeapLanzGrav.txt"
+OUT_FILE  = GRAV_DIR / "combined_gravimetry.csv"
 
 
 # -- CG-5 ----------------------------------------------------------------------

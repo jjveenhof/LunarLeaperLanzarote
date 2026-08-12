@@ -1,23 +1,12 @@
+"""QUARANTINED 2026-08-12 -- plots a SUPERSEDED product, not in any chain.
+
+Profile plots of the simple linear drift correction (simple_drift_{config}.csv), which
+was replaced by the LSQ network adjustment. No thesis figure comes from here. Kept as
+the record of the comparison that justified moving to the LSQ.
+
+NB its station-marker map uses tie = "^" whereas the current plots use "v" -- do not
+copy the styling out of this file.
 """
-LEGACY -- visualises the simple (linear) drift correction output, which is no
-longer part of the default pipeline. Use visualise_lsq.py for the LSQ branch.
-Regenerate the input with: python run_pipeline.py --with-simple-drift
-
-Visualise drift-corrected gravity profiles -- one panel per Line.
-
-Input
------
-  Data/Gravimetry/Processed/simple_drift_{name}.csv
-
-Each panel shows
-  - Drift-corrected gravity with SE error bars
-  - Colour per measurement loop
-  - Marker shape per station type  (* base  ^ tie  * regular)
-  - X-axis: signed distance along the line's principal axis (metres)
-    so the profile reads left-to-right regardless of orientation.
-  - Stations without GNSS coordinates are interpolated onto the axis.
-"""
-
 import sys
 import numpy as np
 import pandas as pd
@@ -28,6 +17,7 @@ import matplotlib.ticker as mticker
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import grav_utils as gu
 from grav_utils import BASE, PROC_DIR, along_profile_distance
 
 CORR_FILE = PROC_DIR / "simple_drift_decay.csv"
@@ -118,7 +108,7 @@ def main(filepath=None):
     path = Path(filepath) if filepath else CORR_FILE
     df   = pd.read_csv(path, dtype={"Time_first": str, "Date": str})
     lines   = sorted(df["Line"].unique())
-    fig_dir = BASE / "Results/Grav/Simple drift correction"
+    fig_dir = gu.RESULTS_DIR / "Simple drift correction"
     fig_dir.mkdir(parents=True, exist_ok=True)
     stem = path.stem
 

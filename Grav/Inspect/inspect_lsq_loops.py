@@ -27,9 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-BASE     = Path(__file__).resolve().parents[3]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
-SAVE_DIR = BASE / "Results/Grav/LSQ/Stats"
+from grav_utils import BASE, PROC_DIR, LSQ_STATS as SAVE_DIR   # one definition of paths
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 DRIFT_LIMIT = 60   # microGal/h -- heuristic upper bound on acceptable drift

@@ -1,10 +1,14 @@
-"""Print occupation durations for every station to check consistency within loops."""
+"""QUARANTINED 2026-08-12 -- finished one-off, not in any chain.
 
+Printed per-station occupation durations to check consistency within loops. The question
+it answered is settled and recorded; nothing imports it.
+"""
 import pandas as pd
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[3]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
+from grav_utils import BASE, PROC_DIR             # one definition of the project paths
 
 df = pd.read_csv(PROC_DIR / "station_gravity_decay.csv",
                  dtype={"Time_first": str, "Time_last": str, "Date": str})

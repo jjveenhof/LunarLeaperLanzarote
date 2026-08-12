@@ -32,8 +32,7 @@ from inspect_lsq import solve_with_cov
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
 from plot_utils import save_figure
 
-BASE     = Path(__file__).resolve().parents[3]
-SAVE_DIR = BASE / "Results/Grav/LSQ"
+from grav_utils import BASE, LSQ_DIR as SAVE_DIR   # one definition of the project paths
 LINES    = [2, 3, 4, 5]
 
 # Author the hybrid figure at the width it occupies on the page so text renders at

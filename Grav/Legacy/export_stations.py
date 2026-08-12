@@ -1,14 +1,9 @@
+"""QUARANTINED 2026-08-12 -- finished one-off, not in any chain.
+
+One-time export of the gravity station list for QGIS. The export it produced is already
+in the QGIS project; nothing reads this script and no thesis figure depends on it.
+Kept (not deleted) because it records exactly how that layer was made.
 """
-Export all non-base stations with GNSS data for free-air, Bouguer and terrain corrections.
-
-One row per measurement visit -- co-located stations at slightly different GNSS
-positions are kept as separate rows so their individual coordinates are preserved.
-
-Output
-------
-    Data/Gravimetry/Processed/stations_for_corrections.csv
-"""
-
 import sys
 import pandas as pd
 from pathlib import Path

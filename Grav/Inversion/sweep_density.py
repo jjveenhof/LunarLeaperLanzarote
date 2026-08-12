@@ -87,16 +87,14 @@ def invert_at(rho):
     tp = np.genfromtxt(it.trend_file(rho), delimiter=",", names=True)
     out = {}
     for line, mode in CASES:
-        pre = it.LINE_PRESETS[line]
-        ceiling, floor = pre["ceiling"], (pre["floor"] or 16.0)
+        ceiling, floor, _ = it.geometry_of(line)
         row = tp[tp["Line"] == line]
         slope_se = float(row["slope_se"][0]) if len(row) else 0.0
-        cfg = it.InvCfg(velocity=pre["velocity"], velocity_sigma=pre["velocity_sigma"],
-                        sigma_pick=1.25, slope_se=slope_se, truncate=None,
-                        density=rho * 1000.0)          # g/cm3 -> kg/m3
+        cfg = it.cfg_for(line, slope_se=slope_se,
+                         density=rho * 1000.0)          # g/cm3 -> kg/m3
         sx, d, se = it.load_line(line, rho)
         sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-        x0s = np.arange(sx[np.argmin(d)] - 20, sx[np.argmin(d)] + 20, 0.5)
+        x0s = it.x0_grid(sx, d)
         res = it.invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg)
         out[(line, mode)] = dict(area=it.area_of(mode, res["size"], ceiling, floor),
                                  size=res["size"], x0=res["x0"],
@@ -126,16 +124,13 @@ def nominal_se():
             continue
         except (FileNotFoundError, KeyError):
             print(f"  (no artifact for L{line} {mode}; falling back to analytic SE)")
-        pre = it.LINE_PRESETS[line]
-        ceiling, floor = pre["ceiling"], (pre["floor"] or 16.0)
+        ceiling, floor, _ = it.geometry_of(line)
         row = tp[tp["Line"] == line]
         slope_se = float(row["slope_se"][0]) if len(row) else 0.0
-        cfg = it.InvCfg(velocity=pre["velocity"], velocity_sigma=pre["velocity_sigma"],
-                        sigma_pick=1.25, slope_se=slope_se, truncate=None,
-                        density=RHO_NOM * 1000.0)
+        cfg = it.cfg_for(line, slope_se=slope_se, density=RHO_NOM * 1000.0)
         sx, d, se = it.load_line(line, RHO_NOM)
         sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-        x0s = np.arange(sx[np.argmin(d)] - 20, sx[np.argmin(d)] + 20, 0.5)
+        x0s = it.x0_grid(sx, d)
         res = it.invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg)
         u = it.size_area_se(mode, sx, d, se, res, ceiling, floor, sizes, cfg)
         out[(line, mode)] = (u["area"], u["area_se_tot"])

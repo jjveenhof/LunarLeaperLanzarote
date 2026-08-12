@@ -23,13 +23,15 @@ from matplotlib.lines import Line2D
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# Moved out of Adhoc/ on 2026-08-12: this produces the LIVE thesis figure
+# fig:decay-examples, so it is not ad-hoc work.
 import station_decay as sd
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))   # Code/ for plot_utils
+import grav_utils as gu                          # one definition of the project paths
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/ for plot_utils
 from plot_utils import save_figure
 
 PICKS = [(5, 0), (3, 17), (5, 28), (5, 1)]      # (line, station), left -> right
-OUT = sd.BASE / "Results/Grav/Decay fitting/decay_examples.png"
+OUT = gu.DECAY_DIR / "decay_examples.png"
 
 # Author the figure at the width it occupies on the page: \includegraphics[width=L]
 # scales the WHOLE figure (text included) by L/W. Thesis \linewidth = 6.1 in, placed
@@ -49,8 +51,7 @@ def draw_panel(ax, grp):
     se = grp["SE_i"].fillna(grp["SE_i"].mean())
 
     g_inf, se_g_inf, A, se_A, tau, converged = sd.fit_station(t_min, grav, se)
-    settled = ((not converged) or (abs(A) < sd.SIGNIFICANCE_THRESHOLD * se_A)
-               or (tau < sd.TAU_MIN))
+    settled = sd.is_settled(converged, A, se_A, tau)   # one definition, see station_decay
     fit_color = "grey" if settled else "tab:green"
     label_color = "red" if not converged else "black"
 

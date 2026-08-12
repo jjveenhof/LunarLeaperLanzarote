@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 from grav_utils import along_profile_distance
-from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, sba_file
+from grav_utils import BASE, PROC_DIR, BOUGUER_DIR, RHO_DEFAULT, sba_file
 
 # Strip flags before positional parse
 USE_SBA_SE = "--se-sba" in sys.argv
@@ -138,7 +138,7 @@ def main():
     print(f"  {df[df['StationType'] != 'base'].groupby(['Line','loc_id']).ngroups} "
           f"unique locations across Lines {sorted(df['Line'].unique())}")
 
-    fig_dir = BASE / "Results/Grav/Bouguer"
+    fig_dir = BOUGUER_DIR
     fig_dir.mkdir(parents=True, exist_ok=True)
     stem = INPUT.stem
 

@@ -35,8 +35,7 @@ from drift_correction_lsq import (
     assign_loops, assign_locations, build_G, PROC_DIR
 )
 
-BASE    = Path(__file__).resolve().parents[3]
-SAVE_DIR = BASE / "Results/Grav/LSQ/Stats"
+from grav_utils import BASE, LSQ_STATS as SAVE_DIR   # one definition of the project paths
 LOOP_CMAP = plt.cm.tab10
 
 

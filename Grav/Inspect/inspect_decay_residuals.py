@@ -20,10 +20,9 @@ import matplotlib.lines as mlines
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from station_decay import fit_station, decay_model, SIGNIFICANCE_THRESHOLD, FILT_FILE
+from station_decay import fit_station, decay_model, is_settled, FILT_FILE
 
-BASE     = Path(__file__).resolve().parents[3]
-SAVE_DIR = BASE / "Results/Grav/Decay fitting"
+from grav_utils import BASE, DECAY_DIR as SAVE_DIR   # one definition of the project paths
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 df = pd.read_csv(FILT_FILE, dtype={"Time": str, "Date": str})
@@ -38,8 +37,9 @@ for line_id, line_df in df.groupby("Line"):
         grav  = grp["Grav"]
 
         g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grav, se)
-        settled = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
-        if settled:
+        # Was a hand-written copy of the rule that predated the TAU_MIN term, so this
+        # diagnostic disagreed with the pipeline by 2 stations. Now the same predicate.
+        if is_settled(converged, A, se_A, tau):
             continue
         settling.append((station, t_min.values, grav.values, se.values,
                          g_inf, se_g_inf, A, tau))

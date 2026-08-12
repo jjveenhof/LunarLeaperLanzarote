@@ -35,8 +35,9 @@ import matplotlib.gridspec as gridspec
 from pathlib import Path
 from scipy.optimize import curve_fit
 
-BASE       = Path(__file__).resolve().parents[2]
-PROC_DIR   = BASE / "Data/Gravimetry/Processed"
+import grav_utils as gu
+from grav_utils import BASE, PROC_DIR             # one definition of the project paths
+
 FILT_FILE  = PROC_DIR / "filtered_gravimetry_all.csv"
 OUT_FILE   = PROC_DIR / "decay_fits.csv"
 MEANS_FILE = PROC_DIR / "station_gravity_decay.csv"   # g_inf per station, pipeline format
@@ -45,6 +46,24 @@ MEANS_FILE = PROC_DIR / "station_gravity_decay.csv"   # g_inf per station, pipel
 SIGNIFICANCE_THRESHOLD = 1.0
 # tau below this value (minutes) is physically implausible -- treat as settled
 TAU_MIN = 0.5
+
+
+def is_settled(converged, A, se_A, tau):
+    """THE definition of a settled station -- the single source of truth.
+
+    A station counts as SETTLED (report the weighted mean) when any of:
+      - the decay fit did not converge,
+      - the amplitude is not significant, |A| < SIGNIFICANCE_THRESHOLD * SE_A,
+      - the time constant is degenerate, tau < TAU_MIN (a spike fit, not a decay).
+    Otherwise it is DECAYING and the fitted asymptote g_inf is reported.
+
+    This predicate was written out by hand in four places (main(), plot_line(),
+    Adhoc/decay_examples.py, Inspect/inspect_decay_residuals.py). They drifted: main()
+    was missing the tau term until 2026-08-01, so decay_fits.csv reported 10 settled
+    while the figures labelled 12, and the Inspect/ copy is still missing it today.
+    One function, imported everywhere, is what stops that happening a third time.
+    """
+    return (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A) or (tau < TAU_MIN)
 
 
 # -- Model ---------------------------------------------------------------------
@@ -133,7 +152,7 @@ def plot_line(line_df, line_id, results):
 
         g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grav, se)
 
-        settled     = (not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A) or (tau < TAU_MIN)
+        settled     = is_settled(converged, A, se_A, tau)
         fit_color   = "grey" if settled else "tab:green"
         label_color = "red" if not converged else "black"
 
@@ -256,8 +275,7 @@ def main(plot=True):
         se_wmean  = 1.0 / np.sqrt(w.sum())
 
         g_inf, se_g_inf, A, se_A, tau, converged = fit_station(t_min, grp["Grav"], se)
-        settled = ((not converged) or (abs(A) < SIGNIFICANCE_THRESHOLD * se_A)
-                   or (tau < TAU_MIN))     # match plot_line(): reject degenerate fits
+        settled = is_settled(converged, A, se_A, tau)
 
         # Best gravity estimate: g_inf from fit for settling stations,
         # weighted mean for settled ones (fit asymptote unreliable when A ~= 0)
@@ -337,7 +355,7 @@ def main(plot=True):
     print(f"Saved -> {MEANS_FILE.name}  (pipeline-compatible)")
 
     if plot:
-        fig_dir = BASE / "Results/Grav/Decay fitting"
+        fig_dir = gu.DECAY_DIR
         fig_dir.mkdir(parents=True, exist_ok=True)
         for line_id in sorted(df["Line"].unique()):
             fig = plot_line(df[df["Line"] == line_id], line_id, results)

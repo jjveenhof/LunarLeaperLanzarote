@@ -22,9 +22,12 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from pathlib import Path
 
-BASE = Path(__file__).resolve().parents[3]
-SRC = BASE / "Data/Gravimetry/Processed/filtered_gravimetry_all.csv"
-OUT = BASE / "Results/Grav/acquisition_noise.png"
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
+from grav_utils import BASE, PROC_DIR, RESULTS_DIR   # one definition of the project paths
+
+SRC = PROC_DIR / "filtered_gravimetry_all.csv"
+OUT = RESULTS_DIR / "acquisition_noise.png"
 
 
 def load():

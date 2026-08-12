@@ -13,9 +13,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-BASE     = Path(__file__).resolve().parents[3]
-PROC_DIR = BASE / "Data/Gravimetry/Processed"
-SAVE_DIR = BASE / "Results/Grav/LSQ/Stats"
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
+from grav_utils import BASE, PROC_DIR, LSQ_STATS as SAVE_DIR   # one definition of paths
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 
 LOOP_CMAP = plt.cm.tab10

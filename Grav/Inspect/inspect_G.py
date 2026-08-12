@@ -7,8 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from drift_correction_lsq import assign_loops, assign_locations, build_G
 
-BASE = Path(__file__).resolve().parents[3]
-df = pd.read_csv(BASE / "Data/Gravimetry/Processed/station_gravity_decay.csv",
+from grav_utils import BASE, PROC_DIR, LSQ_STATS   # one definition of the project paths
+df = pd.read_csv(PROC_DIR / "station_gravity_decay.csv",
                  dtype={"Time_first": str, "Time_mid": str, "Date": str})
 df["datetime"] = pd.to_datetime(df["Date"] + " " + df["Time_mid"],
                                 format="%Y/%m/%d %H:%M:%S")
@@ -72,7 +72,7 @@ for line_id, df_line in df.groupby("Line"):
         fontsize=11, pad=20
     )
     plt.tight_layout()
-    save_dir = BASE / "Results/Grav/LSQ/Stats"
+    save_dir = LSQ_STATS
     save_dir.mkdir(parents=True, exist_ok=True)
     fig.savefig(save_dir / f"G_matrix_line{line_id}.png", dpi=150, bbox_inches="tight")
     print(f"Saved -> G_matrix_line{line_id}.png")

@@ -61,9 +61,7 @@ C_GPR, C_BEST, C_LIDAR = "#0072B2", "#C1272D", "#9400D3"
 
 
 def cfg_for(line):
-    pre = it.LINE_PRESETS[line]
-    return it.InvCfg(velocity=pre["velocity"], velocity_sigma=pre["velocity_sigma"],
-                     sigma_pick=1.25, slope_se=drv.slope_se_of(line), truncate=None)
+    return it.cfg_for(line, slope_se=drv.slope_se_of(line))
 
 
 def compute(line):
@@ -77,7 +75,7 @@ def compute(line):
     cfg = cfg_for(line)
     sx, d, se = it.load_line(line)
     sizes = it.RADIUS_GRID
-    x0s = np.arange(sx[np.argmin(d)] - 20, sx[np.argmin(d)] + 20, 0.5)
+    x0s = it.x0_grid(sx, d)
     cube = np.empty((len(CEIL_GRID), len(sizes), len(x0s)))
     for i, c in enumerate(CEIL_GRID):
         cube[i] = it.chi2_surface("circle", sx, d, se, c, 16.0, sizes, x0s, cfg)
@@ -129,8 +127,8 @@ def lidar_ceiling(line):
     f = it.lidar_file(line)
     if not f.exists():
         return None
-    import plot_model_terrain as pmt
-    xs, zs, _, proj = pmt.gravity_profile(line)
+    import terrain_common as tc      # library, not the plotting script (was a lazy
+    xs, zs, _, proj = tc.gravity_profile(line)   # import of plot_model_terrain)
     L = np.genfromtxt(f, delimiter=",", names=True)
     lx, lz = proj(L["easting"], L["northing"]), L["z"]
     return float(np.interp(lx[np.argmax(lz)], xs, zs) - lz.max())

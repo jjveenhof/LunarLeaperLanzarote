@@ -30,7 +30,7 @@ import matplotlib.ticker as mticker
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from grav_utils import BASE, PROC_DIR, along_profile_distance
+from grav_utils import BASE, PROC_DIR, LSQ_LINES, along_profile_distance
 
 DEFAULT   = PROC_DIR / "lsq_drift_decay.csv"
 
@@ -153,7 +153,7 @@ def main(filepath=None):
     print(f"  {df.groupby(['Line','loc_id']).ngroups} unique locations across "
           f"Lines {sorted(df['Line'].unique())}")
 
-    fig_dir = BASE / "Results/Grav/LSQ/Lines"
+    fig_dir = LSQ_LINES
     fig_dir.mkdir(parents=True, exist_ok=True)
     stem = path.stem
 

@@ -28,8 +28,8 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 
-BASE       = Path(__file__).resolve().parents[2]
-PROC_DIR   = BASE / "Data/Gravimetry/Processed"
+from grav_utils import BASE, PROC_DIR             # one definition of the project paths
+
 FILT_FILE  = PROC_DIR / "filtered_gravimetry_all.csv"
 OUT_FILE   = PROC_DIR / "station_gravity_all.csv"
 

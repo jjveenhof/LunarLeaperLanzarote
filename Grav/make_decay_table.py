@@ -62,8 +62,14 @@ def main():
     L.append(r"\begin{table}[htbp]")
     L.append(r"  \centering")
     L.append(f"  \\setlength{{\\tabcolsep}}{{{COLSEP}}}")
-    L.append(r"  \caption[Per-station decay-fit results]{Decay-fit results for all "
-             r"\num{124} gravity stations, ordered by line and station. $g$ is the "
+    # NB the short (list-of-tables) caption reads "Per-station gravimeter decay-fit
+    # results". That word was added by hand in the GENERATED .tex, which this script
+    # overwrites -- so it lived here for exactly one regeneration. It is now in the
+    # generator, which is what makes the "do not edit by hand" banner above true.
+    # The station count is derived, not typed, for the same reason.
+    L.append(r"  \caption[Per-station gravimeter decay-fit results]{Decay-fit results "
+             r"for all \num{" + str(len(rows)) + r"} gravity stations, ordered by line "
+             r"and station. $g$ is the "
              r"reported station gravity: the weighted mean for settled stations and "
              r"the fitted asymptote $g_\infty$ for settling ones, as indicated by the "
              r"status column. $\tau$ is the fitted settling time constant, given only "

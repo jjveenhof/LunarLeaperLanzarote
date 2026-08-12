@@ -32,8 +32,8 @@ from plot_utils import save_figure
 import invert_tube as it
 import inversion_io as io
 
-BASE = Path(__file__).resolve().parents[3]
-FIG = BASE / "Results/Grav/Inversion"
+BASE = it.BASE                                   # paths via grav_utils (one definition)
+FIG = it.FIG
 
 # Which cases to show, in no particular order (the plot sorts them). Each is looked up
 # as an artifact; any case without one is skipped, never substituted.

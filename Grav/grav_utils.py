@@ -14,6 +14,37 @@ from pathlib import Path
 BASE        = Path(__file__).resolve().parents[2]
 PROC_DIR    = BASE / "Data/Gravimetry/Processed"
 RESULTS_DIR = BASE / "Results/Grav"
+
+# Output figure directories. Defined HERE so that "where does this plot land?" has one
+# answer per topic. Scripts in subfolders (Inversion/, Inspect/, Adhoc/) used to each
+# re-derive BASE with parents[3] while top-level scripts used parents[2] -- two spellings
+# of the same path, and a trap for anyone moving a file between folders. Import these
+# instead of rebuilding them; see the bootstrap note below.
+INV_DIR     = RESULTS_DIR / "Inversion"          # inversion figures + artifacts
+ART_DIR     = INV_DIR / "artifacts"              # inversion_io .npz artifacts
+DETREND_DIR = RESULTS_DIR / "Detrend"
+DECAY_DIR   = RESULTS_DIR / "Decay fitting"      # note the space -- matches disk
+LSQ_DIR     = RESULTS_DIR / "LSQ"
+LSQ_STATS   = LSQ_DIR / "Stats"
+LSQ_LINES   = LSQ_DIR / "Lines"
+CORR_DIR    = RESULTS_DIR / "Corrections"
+BOUGUER_DIR = RESULTS_DIR / "Bouguer"
+
+# Input data directories (read-only -- raw acquisition data, see the project CLAUDE.md)
+GRAV_DIR    = BASE / "Data/Gravimetry"           # raw + combined, parent of Processed/
+GNSS_DIR    = BASE / "Data/GNSS"
+
+# Bootstrap for scripts in subfolders
+# -----------------------------------
+# Scripts are run directly (`python Inversion/plot_misfit.py`), not as a package, so a
+# subfolder script cannot `import grav_utils` until Code/Grav is on sys.path. Each such
+# script therefore carries ONE line before importing this module:
+#
+#     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav
+#
+# (parents[2] from Inversion/Inspect/Adhoc reaches Code/, for plot_utils.) That single
+# bootstrap line is the only path arithmetic left outside this file; everything else --
+# BASE and every directory under it -- comes from here.
 # LiDAR cave cross-sections handed over by the LiDAR session -- ground truth for the
 # inversion, and now also consumed by the GPR session. They are DATA, so they live
 # under Data/ (outside the Code/ git repo) rather than next to the scripts.
@@ -31,13 +62,27 @@ def lidar_file(line):
 # The standard 0.3086 includes the ellipsoidal correction; at Lanzarote (29N) ~0.3085
 FAC_GRAD = 0.3086         # mGal/m
 
+# Newton's constant -- THE definition for this session. The Talwani forward model
+# (Inversion/forward_polygon.py, forward_fem.py, inspect_2d_validity.py) imports this
+# rather than restating it; it used to be spelled out in four places with two different
+# values (6.674e-11 here, 6.6743e-11 in all three forward models).
+G_NEWTON  = 6.6743e-11    # m3 kg-1 s-2 (CODATA)
+
 # Bouguer slab factor: g_slab = 2*pi*G * (rho_SI) * h, converted to mGal
 # 2*pi * G         = 2 * pi * 6.674e-11        = 4.194e-10  m3 kg-1 s-2 m-1
 # rho conversion   = 1e3                        kg/m3 per g/cm3
 # mGal conversion  = 1e5                        mGal per m/s2
 # combined         = 4.194e-10 * 1e3 * 1e5      = 0.04192 mGal m-1 per g/cm3
-G_NEWTON  = 6.674e-11     # m3 kg-1 s-2
-BOUGUER_K = 2 * np.pi * G_NEWTON * 1e3 * 1e5    # = 0.04192 mGal m-1 per g/cm3
+#
+# FROZEN: this is computed from G = 6.674e-11, the value used for every number in the
+# submitted thesis -- NOT from G_NEWTON above. Recomputing it with the CODATA G shifts
+# the Bouguer term by 4.5e-5 relative (max 0.009 uGal across all 130 stations, ~1000x
+# below the smallest reported digit), so it would change no thesis number -- but it WOULD
+# change every processed CSV at the 1e-8 level, so the on-disk chain would no longer
+# bit-match the thesis. Kept pinned deliberately; see Code/Grav/QandA.md 2026-08-12.
+# To unify, change 6.674e-11 to G_NEWTON here and re-baseline the golden master.
+G_BOUGUER = 6.674e-11     # m3 kg-1 s-2 -- frozen at the thesis value, do not "correct"
+BOUGUER_K = 2 * np.pi * G_BOUGUER * 1e3 * 1e5   # = 0.04192 mGal m-1 per g/cm3
 
 # WGS84 Somigliani normal gravity constants
 # (Blakely, Potential Theory in Gravity and Magnetic Applications)

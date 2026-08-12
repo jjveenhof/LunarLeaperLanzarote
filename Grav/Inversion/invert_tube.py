@@ -51,10 +51,14 @@ from scipy.optimize import minimize_scalar
 from forward_polygon import polygon_gz, ellipse_vertices, RHO_HOST
 _sys.path.insert(0, str(Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
 from grav_utils import rho_str, RHO_DEFAULT, lidar_file   # one definition of the rho->filename map
+import grav_utils as _gu
 
-BASE = Path(__file__).resolve().parents[3]
-PROC = BASE / "Data/Gravimetry/Processed"
-FIG = BASE / "Results/Grav/Inversion"
+# Paths come from grav_utils -- one definition of BASE and of every directory under it.
+# Re-exported here under their historical names because sibling scripts import them as
+# `it.BASE` / `it.PROC` / `it.FIG`.
+BASE = _gu.BASE
+PROC = _gu.PROC_DIR
+FIG = _gu.INV_DIR
 FIG.mkdir(parents=True, exist_ok=True)
 
 
@@ -105,6 +109,15 @@ NVERT = 144                  # polygon vertices (>0.1% accurate, fast)
 RADIUS_GRID = np.arange(1.0, 20.0, 0.1)    # circle radius (m)
 WIDTH_GRID = np.arange(1.0, 30.0, 0.1)     # ellipse half-width (m)
 
+# Default GPR pick 1-sigma (m) = lambda/2 at 50 MHz. Also the InvCfg default; named here
+# so callers stop repeating the literal 1.25 (it appeared in 6 places).
+SIGMA_PICK = 1.25
+# Fallback floor for a line with no floor reflector (L5). Only ever used to give the
+# ellipse machinery a finite number; L5 is circle-only, where the floor is ignored.
+FLOOR_FALLBACK = 16.0
+# x0 search window: +/- this many m around the observed anomaly minimum, at this step.
+X0_HALFWIDTH, X0_STEP = 20.0, 0.5
+
 
 @dataclass(frozen=True)
 class InvCfg:
@@ -115,7 +128,7 @@ class InvCfg:
     LINE_PRESETS + CLI, stored in each artifact, rebuilt by inversion_io.cfg_of."""
     velocity: float = 0.125          # m/ns, GPR migration velocity
     velocity_sigma: float = 0.015    # m/ns, velocity 1-sigma
-    sigma_pick: float = 1.25         # m, GPR pick 1-sigma (lambda/2 at 50 MHz)
+    sigma_pick: float = SIGMA_PICK   # m, GPR pick 1-sigma (lambda/2 at 50 MHz)
     slope_se: float = 0.0            # mGal/m, regional-trend slope 1-sigma
     truncate: float = None           # pit distance (m); None = infinite 2D tube
     # Host-rock density in kg/m^3 (NOT g/cm3 -- 1875.0, not 1.875) for the void
@@ -124,6 +137,38 @@ class InvCfg:
     # rho and read that chain's detrended residual (see det_file/trend_file), never
     # vary this alone.
     density: float = RHO_HOST
+
+
+def geometry_of(line, ceiling=None, floor=None):
+    """(ceiling, floor, modes) for a line, with optional CLI-style overrides.
+
+    Centralises the `pre["floor"] or FLOOR_FALLBACK` idiom that was written out in five
+    places -- L5 has no floor reflector, so its preset floor is None and the ellipse
+    machinery needs *some* finite number even though L5 is circle-only."""
+    pre = LINE_PRESETS[line]
+    c = pre["ceiling"] if ceiling is None else ceiling
+    f = (pre["floor"] or FLOOR_FALLBACK) if floor is None else floor
+    return c, f, pre["modes"]
+
+
+def cfg_for(line, slope_se=0.0, **overrides):
+    """InvCfg for a line from its preset, with keyword overrides.
+
+    The five callers that build an InvCfg from LINE_PRESETS (run_inversion,
+    sweep_density, freedepth, plot_sensitivity, inspect_beta1) each spelled out the same
+    four fields; a change to the velocity channel had to be made in all of them. Pass
+    e.g. cfg_for(3, slope_se=s, truncate=10.0, density=1900.0)."""
+    pre = LINE_PRESETS[line]
+    kw = dict(velocity=pre["velocity"], velocity_sigma=pre["velocity_sigma"],
+              sigma_pick=SIGMA_PICK, slope_se=slope_se, truncate=None)
+    kw.update(overrides)
+    return InvCfg(**kw)
+
+
+def x0_grid(sx, d):
+    """Search grid for the tube centre: +/-X0_HALFWIDTH m about the anomaly minimum."""
+    xmin = sx[np.argmin(d)]
+    return np.arange(xmin - X0_HALFWIDTH, xmin + X0_HALFWIDTH, X0_STEP)
 
 
 def load_line(line, rho=RHO_DEFAULT):
@@ -198,8 +243,20 @@ def invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg):
     thresh = max(1.0, chi2red)
     prof = chi2.min(axis=1)                              # profile over x0
     mask = (prof - prof.min()) <= thresh
+    size_lo, size_hi = sizes[mask].min(), sizes[mask].max()
+
+    # Grid-edge guard, matching freedepth.analyse(). If the 1-sigma interval runs into
+    # the end of the size grid, the "bound" is where MY GRID stopped, not where the data
+    # stopped allowing sizes -- reporting it as an interval would overstate what the
+    # gravity constrains. Flag it so callers (and captions) can say so.
+    at_lo_edge = bool(mask[0])
+    at_hi_edge = bool(mask[-1])
+    size_capped = at_lo_edge or at_hi_edge
+
     return dict(chi2=chi2, size=sizes[i], x0=x0s[j], chi2min=chi2min, dof=dof,
-                chi2red=chi2red, size_lo=sizes[mask].min(), size_hi=sizes[mask].max())
+                chi2red=chi2red, size_lo=size_lo, size_hi=size_hi,
+                size_capped=size_capped, size_lo_capped=at_lo_edge,
+                size_hi_capped=at_hi_edge)
 
 
 def best_size_only(mode, sx, d, se, ceiling, floor, sizes, x0, cfg):

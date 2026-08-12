@@ -36,8 +36,7 @@ def run_one(line, mode, ceiling, floor, cfg, seed=SEED, ens_n=ENS_N):
     """Compute + persist one (line, mode, truncation) case; return (res, u, baseline)."""
     sx, d, se = it.load_line(line)
     sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-    xmin = sx[np.argmin(d)]
-    x0s = np.arange(xmin - 20, xmin + 20, 0.5)
+    x0s = it.x0_grid(sx, d)
 
     res = it.invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg)
     u = it.size_area_se(mode, sx, d, se, res, ceiling, floor, sizes, cfg)
@@ -93,9 +92,8 @@ def main():
 
     for line in lines:
         pre = it.LINE_PRESETS[line]
-        ceiling = args.ceiling if args.ceiling is not None else pre["ceiling"]
-        floor = args.floor if args.floor is not None else (pre["floor"] or 16.0)
-        modes = tuple(args.modes) if args.modes else pre["modes"]
+        ceiling, floor, preset_modes = it.geometry_of(line, args.ceiling, args.floor)
+        modes = tuple(args.modes) if args.modes else preset_modes
         if "ellipse" in modes and pre["floor"] is None and args.floor is None:
             raise SystemExit(f"Line {line} has no floor pick; pass --floor or "
                              f"drop ellipse (--modes circle).")
@@ -109,9 +107,9 @@ def main():
               f"(ceiling {ceiling:.1f} m"
               + (f", floor {floor:.1f} m" if "ellipse" in modes else "") + ")")
         for truncate in truncs:
-            cfg = it.InvCfg(velocity=velocity, velocity_sigma=velocity_sigma,
-                            sigma_pick=args.sigma_pick, slope_se=slope_se,
-                            truncate=truncate)
+            cfg = it.cfg_for(line, slope_se=slope_se, velocity=velocity,
+                             velocity_sigma=velocity_sigma,
+                             sigma_pick=args.sigma_pick, truncate=truncate)
             for mode in modes:
                 run_one(line, mode, ceiling, floor, cfg,
                         seed=args.seed, ens_n=args.ensemble)

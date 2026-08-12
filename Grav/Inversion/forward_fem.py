@@ -11,7 +11,7 @@ must NOT be re-introduced (that would double-count the terrain effect).
 The modelled vertical response is therefore directly comparable to the
 detrended CBA residual (no further corrections applied).
 
-ENVIRONMENT: run with the `pygimli` conda env, NOT GPR_plotting_LL:
+ENVIRONMENT: run with the `pygimli` conda env, NOT the main project env:
     C:/Users/jj_ve/miniconda3/envs/pygimli/python.exe
 
 Self-test (python forward_lavatube.py) checks the pyGIMLi response against the
@@ -23,7 +23,10 @@ import pygimli as pg
 import pygimli.meshtools as mt
 from pygimli.physics.gravimetry import solveGravimetry
 
-G = 6.6743e-11          # m^3 kg^-1 s^-2
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
+from grav_utils import G_NEWTON as G     # one definition of Newton's constant
 RHO_HOST = 1875.0       # kg/m^3 -- same density as the Bouguer reduction
 MGAL = 1e5              # 1 m/s^2 = 1e5 mGal
 

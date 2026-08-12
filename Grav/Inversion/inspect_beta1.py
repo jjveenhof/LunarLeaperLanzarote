@@ -66,13 +66,11 @@ HEIGHT_GRID = [4.0, 6.0, 8.0, 10.8, 13.0, 16.0]
 def cfg_at(line, rho_contrast, rho_trend):
     """InvCfg with the void contrast set by rho_contrast; detrend slope SE read from
     the chain run at rho_trend (it is a property of that chain output)."""
-    pre = it.LINE_PRESETS[line]
     tp = np.genfromtxt(it.trend_file(rho_trend), delimiter=",", names=True)
     row = tp[tp["Line"] == line]
-    return it.InvCfg(velocity=pre["velocity"], velocity_sigma=pre["velocity_sigma"],
-                     sigma_pick=1.25,
-                     slope_se=float(row["slope_se"][0]) if len(row) else 0.0,
-                     truncate=None, density=rho_contrast * 1000.0)
+    return it.cfg_for(line,
+                      slope_se=float(row["slope_se"][0]) if len(row) else 0.0,
+                      density=rho_contrast * 1000.0)
 
 
 def area_at(line, mode, rho_data, rho_contrast, ceiling=None):
@@ -80,8 +78,7 @@ def area_at(line, mode, rho_data, rho_contrast, ceiling=None):
     INDEPENDENTLY, and optionally an overridden ceiling."""
     pre = it.LINE_PRESETS[line]
     if ceiling is None:
-        ceiling = pre["ceiling"]
-        floor = pre["floor"] or 16.0
+        ceiling, floor, _ = it.geometry_of(line)
     else:
         # Hold the GPR cave HEIGHT and slide the tube to the forced ceiling, so the
         # ellipse stays the same shape; the circle ignores floor anyway.
@@ -90,7 +87,7 @@ def area_at(line, mode, rho_data, rho_contrast, ceiling=None):
     cfg = cfg_at(line, rho_contrast, rho_data)
     sx, d, se = it.load_line(line, rho_data)
     sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-    x0s = np.arange(sx[np.argmin(d)] - 20, sx[np.argmin(d)] + 20, 0.5)
+    x0s = it.x0_grid(sx, d)
     res = it.invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg)
     return it.area_of(mode, res["size"], ceiling, floor)
 
@@ -101,7 +98,7 @@ def area_at_cf(line, mode, rho_data, rho_contrast, ceiling, floor):
     cfg = cfg_at(line, rho_contrast, rho_data)
     sx, d, se = it.load_line(line, rho_data)
     sizes = it.RADIUS_GRID if mode == "circle" else it.WIDTH_GRID
-    x0s = np.arange(sx[np.argmin(d)] - 20, sx[np.argmin(d)] + 20, 0.5)
+    x0s = it.x0_grid(sx, d)
     res = it.invert(mode, sx, d, se, ceiling, floor, sizes, x0s, cfg)
     return it.area_of(mode, res["size"], ceiling, floor)
 

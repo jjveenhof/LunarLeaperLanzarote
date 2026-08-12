@@ -14,9 +14,12 @@ Runs in ANY env (no pyGIMLi needed):
 """
 
 import numpy as np
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))   # Code/Grav for grav_utils
+from grav_utils import G_NEWTON as G, RHO_DEFAULT as _RHO
 
-G = 6.6743e-11          # m^3 kg^-1 s^-2
-RHO_HOST = 1875.0       # kg/m^3
+RHO_HOST = _RHO * 1000.0   # kg/m^3 -- one definition of rho, in g/cm3, scaled here
 MGAL = 1e5              # 1 m/s^2 = 1e5 mGal
 
 

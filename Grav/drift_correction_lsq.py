@@ -38,9 +38,8 @@ import pandas as pd
 from pathlib import Path
 from scipy.spatial.distance import cdist
 
-BASE       = Path(__file__).resolve().parents[2]
-DATA_DIR   = BASE / "Data/Gravimetry"
-PROC_DIR   = BASE / "Data/Gravimetry/Processed"
+from grav_utils import BASE, GRAV_DIR as DATA_DIR, PROC_DIR   # one definition of paths
+
 TIE_DIST_M = 3.0     # metres, co-location threshold for tie stations
 
 

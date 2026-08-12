@@ -35,7 +35,8 @@ _sys.path.insert(0, str(_pl.Path(__file__).resolve().parents[1]))   # Code/ for 
 from plot_utils import save_figure
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from grav_utils import BASE, PROC_DIR, RHO_DEFAULT, rho_str, along_profile_distance
+from grav_utils import (BASE, PROC_DIR, DETREND_DIR, RHO_DEFAULT, rho_str,
+                        along_profile_distance)
 
 LINES = [2, 3, 5]                                   # Line 4 skipped on purpose
 LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}   # QGIS map palette
@@ -62,7 +63,7 @@ rho = float(_pos[0]) if _pos else RHO_DEFAULT
 INPUT = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str(rho)}_with_TC.csv"
 OUTCSV = PROC_DIR / f"bouguer_anomaly_decay_rho{rho_str(rho)}_detrended.csv"
 TRENDCSV = PROC_DIR / f"detrend_trend_params_rho{rho_str(rho)}.csv"
-FIG_DIR = BASE / "Results/Grav/Detrend"
+FIG_DIR = DETREND_DIR
 FIG_DIR.mkdir(parents=True, exist_ok=True)
 
 
