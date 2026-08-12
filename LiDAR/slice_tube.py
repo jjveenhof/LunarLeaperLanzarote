@@ -9,13 +9,15 @@ model is. We project the slab points onto (dist-along-line, absolute elevation),
 then trace a closed outline by angular binning about the centroid (median wall
 radius per bin -- robust to the slab's scatter) and integrate its area (shoelace).
 
-Output: Code/Grav/Inversion/lidar_line{N}.csv  with columns  x,z,easting,northing
+Output: Data/LiDAR/lidar_line{N}.csv  with columns  x,z,easting,northing
   x = distance from the dist=0 end of the gravity line (m; slice-internal origin)
   z = absolute REGCAN95 orthometric elevation (m)
   easting,northing = absolute EPSG:4083 coords of the vertex. A consumer can project
     these onto any profile-axis / distance-origin convention itself, so no baked
     distance coordinate can go stale (see QandA.md, Grav 2026-07-17).
-plus the printed cross-sectional area (m^2).
+plus the printed cross-sectional area (m^2). This is DATA, not a Code/ artifact -- it
+lives under Data/LiDAR/ (outside git) because it is consumed cross-session by Grav (and
+now also GPR); see grav_utils.lidar_file().
 
 Slice geometry (EPSG:4083 / REGCAN95 UTM 28N), from QandA.md:
   Line 3: origin (650620.7, 3227095.7), azimuth 353.6 deg
@@ -28,11 +30,20 @@ import numpy as np
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[2]
-GRAV_INV = BASE / "Code/Grav/Inversion"
+LIDAR_OUT = BASE / "Data/LiDAR"
 
 LINE_GEOM = {
     3: dict(origin=(650620.7, 3227095.7), azimuth=353.6),
     5: dict(origin=(649766.8, 3227446.2), azimuth=358.3),
+}
+
+# Canonical source export + frozen thesis area (m^2) per line -- the single place
+# run_all.py (regeneration) and test_slice_tube.py (regression check) both read this
+# from, so the two can never disagree about which cloud is "the" input for a line.
+_REREG = BASE / "LiDAR La Corona" / "Reregistered clouds"
+DEFAULT_SOURCE = {
+    3: (_REREG / "PF_tube_after.txt", 203),
+    5: (_REREG / "Gente_tunnel_after.txt", 182),
 }
 
 
@@ -125,7 +136,7 @@ def main():
         u = np.array([np.sin(az), np.cos(az)])
         cE = geom["origin"][0] + cx * u[0]
         cN = geom["origin"][1] + cx * u[1]
-        out = GRAV_INV / f"lidar_line{args.line}.csv"
+        out = LIDAR_OUT / f"lidar_line{args.line}.csv"
         np.savetxt(out, np.column_stack([cx, cz, cE, cN]), delimiter=",",
                    header="x,z,easting,northing", comments="", fmt="%.4f")
         print(f"    wrote -> {out.relative_to(BASE)}")

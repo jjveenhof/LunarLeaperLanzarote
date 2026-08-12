@@ -8,6 +8,12 @@ three beats used in the thesis:
                     (RTK rim at PF; drone surface + RTK datum at La Gente).
   [3] INTERNAL FIT  surface agreement of the tunnel to the cloud it locked onto.
 
+Also generates tab:lidar-vertical-budget (main.tex) -- the VERTICAL BUDGET print block
+per site: the per-link |median dz| along the registration chain (tunnel -> bridge ->
+reference/surface -> RTK) plus their RSS. This is the ONLY calculated table LiDAR owns;
+its 7 cells (3 links + RSS, both sites) all trace to this script's own output, so it
+cannot go stale silently -- re-run and compare against main.tex if in doubt.
+
 Cloud roles:
   tunnel (ground truth) = tube idx1 (PF) / Tunnel idx5 (La Gente)  -- what we slice.
   reference it locked onto = stitch idx2 (PF) / Jameo idx6 (La Gente).
@@ -86,6 +92,20 @@ def beat3_internal_fit(name, mover_a, ref_a, thr=1.0):
           f"RMS {np.sqrt((do**2).mean()):.3f} m")
 
 
+def vertical_budget(site, links):
+    """Print the per-link |median dz| chain + its RSS -- generates
+    tab:lidar-vertical-budget (main.tex) so the table cannot go stale silently.
+    links: list of (label, dz array) in registration order (tunnel -> ... -> RTK)."""
+    print(f"  VERTICAL BUDGET ({site}) -- generates tab:lidar-vertical-budget")
+    medians = []
+    for label, dz in links:
+        med = np.median(np.abs(dz))
+        medians.append(med)
+        print(f"      {label:<22} |median dz| = {med:.3f} m  (bias {np.median(dz):+.3f} m, n={len(dz)})")
+    rss = np.sqrt(np.sum(np.square(medians)))
+    print(f"      {'combined (RSS)':<22} = {rss:.3f} m")
+
+
 def vertical_offset_to_plane(query_xyz, surface_xyz, radius=5.0, minpts=6):
     """Signed vertical distance query_z - (local plane through surface points within
     `radius`). Removes the horizontal-spacing floor of a plain 3-D NN.
@@ -117,6 +137,19 @@ def vertical_offset_at_feature(query_xyz, feature_xyz):
     return d, dz
 
 
+def nn_vertical(P, Q, thr=1.0):
+    """Vertical + horizontal components of the nearest-neighbour offset from mover P
+    to reference Q, restricted to the genuine-overlap points (3-D NN < thr). Used for
+    the registration-chain links in tab:lidar-vertical-budget where neither a local
+    plane (vertical_offset_to_plane) nor a single sharp feature
+    (vertical_offset_at_feature) applies -- both P and Q are dense point clouds."""
+    d, i = cKDTree(Q).query(P)
+    ov = d < thr
+    dz = P[ov, 2] - Q[i[ov], 2]
+    dh = np.hypot(P[ov, 0] - Q[i[ov], 0], P[ov, 1] - Q[i[ov], 1])
+    return dz, dh, ov.mean()
+
+
 # ---------------------------------------------------------------- Puerta Falsa
 def puerta_falsa():
     print("#" * 74 + "\n# PUERTA FALSA\n" + "#" * 74)
@@ -133,13 +166,25 @@ def puerta_falsa():
 
     rtk = load_cols(os.path.join(REREG, "PuertaFalsa_edge_RTK.xyz"), [0, 1, 2])
     cave = np.vstack([A["ref"], A["stitch"], A["tube"]])
-    d, dz = vertical_offset_at_feature(rtk, cave)   # rim is a shaft edge, not a plane
+    d, dz_rtk = vertical_offset_at_feature(rtk, cave)   # rim is a shaft edge, not a plane
     print(f"  [2] TIE TO CONTROL (RTK rim {len(rtk)} pts -> LiDAR shaft edge)")
     print(f"      3-D NN: median {np.median(d):.3f} m (mostly along-rim spacing)")
-    print(f"      vertical: |median| {np.median(np.abs(dz)):.3f} m, "
-          f"bias {np.median(dz):+.3f} m, std {dz.std():.3f} m")
+    print(f"      vertical: |median| {np.median(np.abs(dz_rtk)):.3f} m, "
+          f"bias {np.median(dz_rtk):+.3f} m, std {dz_rtk.std():.3f} m")
 
     beat3_internal_fit("tube->stitch", A["tube"], A["stitch"])
+
+    # tab:lidar-vertical-budget: the registration chain tunnel -> bridge -> reference
+    # -> RTK, one vertical-dz link at a time (green/yellow/blue = tube/stitch/ref, the
+    # figure-legend colours). tube->stitch and blue->RTK reuse the beats above (same
+    # NN definitions); stitch->blue is the one link no other beat computes.
+    dz_ts, _, _ = nn_vertical(A["tube"], A["stitch"])
+    dz_sb, _, _ = nn_vertical(A["stitch"], A["ref"])
+    vertical_budget("Puerta Falsa", [
+        ("tube -> stitch (green->yellow)", dz_ts),
+        ("stitch -> blue (yellow->blue)",  dz_sb),
+        ("blue -> RTK (blue->RTK)",        dz_rtk),
+    ])
 
 
 # ------------------------------------------------------------- Jameo de la Gente
@@ -172,14 +217,28 @@ def la_gente():
     print(f"      drone -> jameo surface (over footprint): median {np.median(dj):.2f} m "
           f"(n={len(dj)})")
     # drone <-> RTK: VERTICAL offset (plain 3-D NN is spacing-floored ~0.7 m)
+    dz_rtk = {}
     for lab in ("Gente_rtk_L5.xyz", "Gente_rtk_L2.xyz"):
         rtk = load_cols(os.path.join(REREG, lab), [0, 1, 2])
         r = vertical_offset_to_plane(rtk, drone)
+        dz_rtk[lab[10:12]] = r
         print(f"      RTK {lab[10:12]} vs drone plane (vertical): "
               f"median {np.median(r):+.3f} m, |median| {np.median(np.abs(r)):.3f} m, "
               f"std {r.std():.3f} m  (n={len(r)}/{len(rtk)})")
 
     beat3_internal_fit("Tunnel->Jameo", Ag["Tunnel"], Ag["Jameo"])
+
+    # tab:lidar-vertical-budget: the registration chain tunnel -> bridge -> surface ->
+    # RTK (green/yellow/blue = Tunnel/Jameo/drone, the figure-legend colours). L5's RTK
+    # tie is used for the third link -- L5 is this site's gravity line; L2 above is a
+    # secondary cross-check, not part of the chain the L5 cross-section depends on.
+    dz_tj, _, _ = nn_vertical(Ag["Tunnel"], Ag["Jameo"])
+    dz_jd, _, _ = nn_vertical(dfp, Ag["Jameo"])
+    vertical_budget("La Gente (L5)", [
+        ("Tunnel -> Jameo (green->yellow)", dz_tj),
+        ("Jameo -> drone (yellow->blue)",   dz_jd),
+        ("drone -> RTK L5 (blue->RTK)",     dz_rtk["L5"]),
+    ])
 
 
 if __name__ == "__main__":

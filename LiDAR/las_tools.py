@@ -33,6 +33,14 @@ def _oci_offset(path):
     cum = 0
     for d in extra:
         if d.name.strip() == "Original cloud index":
+            # read_las_xyz_oci below reinterprets these 4 bytes as float32 (the format
+            # every cloud in this project has used) -- if a future export stores the
+            # index at a different width, fail loud here instead of silently misreading
+            # the wrong number of bytes as the field.
+            assert d.num_bytes == 4, (
+                f"'Original cloud index' is {d.num_bytes} bytes wide in {path}, "
+                f"expected 4 (float32). read_las_xyz_oci's np.float32 view assumes 4 -- "
+                f"update it before trusting oci from this file.")
             return cum, eblk
         cum += d.num_bytes
     return None, eblk
@@ -48,11 +56,31 @@ def read_las_xyz_oci(path, step=1, max_points=None):
     off_oci, eblk = _oci_offset(path)
     with open(path, "rb") as fb:
         b = fb.read()
+    assert b[0:4] == b"LASF", (
+        f"{path}: no LASF magic at byte 0 -- not a LAS file, or this reader's fixed "
+        f"header byte offsets (assumed LAS 1.2-1.4 public header block) do not apply.")
+    fmt_id = b[104]
     off_pts = int.from_bytes(b[96:100], "little")
     pt_len = int.from_bytes(b[105:107], "little")
     n = int.from_bytes(b[107:111], "little")
     sx, sy, sz = struct.unpack_from("<3d", b, 131)
     ox, oy, oz = struct.unpack_from("<3d", b, 155)
+    # X,Y,Z are the first 3 int32 fields in every standard LAS point format (0-10), so
+    # fmt_id itself does not gate correctness here -- but pt_len and n do, since a wrong
+    # header offset (e.g. a non-LAS-1.2-1.4 file this reader was never meant to handle)
+    # would otherwise silently misread point boundaries rather than erroring.
+    assert pt_len >= 12, (
+        f"{path}: point record length {pt_len} B is smaller than the 12 B needed for "
+        f"X,Y,Z alone (point format id {fmt_id}) -- header offsets look wrong for this file.")
+    assert off_pts + n * pt_len <= len(b), (
+        f"{path}: header claims {n} points x {pt_len} B starting at byte {off_pts}, "
+        f"which needs {off_pts + n * pt_len} B but the file is only {len(b)} B -- "
+        f"header offsets look wrong for this file (format id {fmt_id}).")
+    if off_oci is not None:
+        assert off_oci + 4 <= eblk, (
+            f"{path}: 'Original cloud index' offset {off_oci} + 4 B overruns the "
+            f"{eblk} B extra-dimensions block -- header parsing disagrees with the "
+            f"raw record layout.")
     if max_points is not None and n > max_points:
         step = max(1, n // max_points)
     raw = np.frombuffer(b, np.uint8, count=n * pt_len, offset=off_pts).reshape(n, pt_len)

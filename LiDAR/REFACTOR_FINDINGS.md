@@ -164,29 +164,42 @@ The assignment specifically asked: given only `alignment_transforms.txt` + the r
 
 ---
 
-## Recommended cut line
+## Recommended cut line (phase 1) -- STATUS as of phase 2, 2026-08-11
 
 Above the line -- clearly worth doing in phase 2:
-1. Fix `slice_tube.py`'s stale output path (finding 1)
-2. Add fail-fast asserts to `las_tools.py` (finding 2)
-3. Verify (and if needed, re-export) `PF_junction_subsampled.xyz` (finding 3) --
-   recommend doing this FIRST and separately, since it may be a rule-3 STOP
-4. The reproducibility-note sentence in `CLAUDE.md`
+1. Fix `slice_tube.py`'s stale output path (finding 1) -- **DONE.** Now writes
+   `Data/LiDAR/lidar_line{N}.csv`; `CLAUDE.md` updated. See the golden-master note
+   below: fixing this path surfaced a pre-existing, unrelated reproducibility gap,
+   escalated separately (root `QandA.md`, rule 3).
+2. Add fail-fast asserts to `las_tools.py` (finding 2) -- **DONE.** Magic-byte, point-
+   record-length, and extra-dimension-width asserts added; verified against a
+   synthetic LAS-header buffer (no real `.las` exists in the project to test against
+   any more -- see the `lidar_scratch` deletion below).
+3. Verify (and if needed, re-export) `PF_junction_subsampled.xyz` (finding 3) -- **DONE,
+   see the updated finding [3] above: hypothesis refuted, file is clean, no action.**
+4. The reproducibility-note sentence in `CLAUDE.md` -- **DONE**, expanded into a full
+   "Reproducibility" section (verify-vs-redo-from-scratch, regression checks, and the
+   golden-master gap below).
 
-Below the line -- honestly optional:
-5. The `verify_alignment.py` compute/plot split (finding 4) -- real seam, but the
-   file is not painful to navigate today and the split carries re-verification risk
-   for marginal benefit at this project's remaining lifespan. Only worth it if the
-   session continues to grow this file.
+Below the line -- was "honestly optional", author approved it anyway:
+5. The `verify_alignment.py` compute/plot split (finding 4) -- **DONE.** Loaders +
+   `residual()` moved to `verify_alignment_io.py`; `verify_alignment.py` keeps the CLI
+   + plotting and imports from it. Verified byte-identical stdout (per-layer stats +
+   residuals) for both the default and `--gente` modes, before vs after the split.
+
+**New this phase:** one runnable entry point (`run_all.py`, item 6 of the phase-2
+dispatch) and a shared `goldenmaster.py` shim (Code-wide tool, promoted from Grav's).
+Golden-mastering `slice_tube.py`'s path fix surfaced a REAL, pre-existing
+reproducibility gap -- escalated to the root `QandA.md` (rule 3), not fixed here. See
+`CLAUDE.md`'s "Reproducibility" section for the summary and the QandA thread for full
+evidence. The area (203 m^2) is unaffected; the exact outline vertex positions are not
+currently regenerable from what's on disk.
 
 No dead code, no cross-session duplication beyond the intentional and already-clean
-reuse (`gt_metrics.py` imports `kabsch` from `recover_transform.py` rather than
-copy-pasting it), and no untested/untestable script found beyond what's already noted
-above -- `gt_metrics.py`'s "order check" print (`gt_metrics.py`, tube before/after
-rigid-fit RMS) already functions as an inline self-test; the one test I'd propose
-adding is a small script-level assertion that `slice_tube.py --no-write` reproduces
-the frozen areas (203 / 182 m^2) within a tight tolerance, catching exactly the kind
-of silent drift in finding 1 -- propose only, not written.
+reuse (`gt_metrics.py` imports `kabsch` from `recover_transform.py`, and now
+`test_slice_tube.py` imports its cases from `slice_tube.DEFAULT_SOURCE` rather than
+hardcoding its own copy). The proposed `slice_tube.py --no-write` area-assertion test
+is now written (`test_slice_tube.py`) and passing.
 
 ---
 
