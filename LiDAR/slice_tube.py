@@ -40,9 +40,21 @@ LINE_GEOM = {
 # Canonical source export + frozen thesis area (m^2) per line -- the single place
 # run_all.py (regeneration) and test_slice_tube.py (regression check) both read this
 # from, so the two can never disagree about which cloud is "the" input for a line.
+#
+# The canonical source folder is `LiDAR La Corona/Transect contours/` -- dedicated,
+# denser slab extractions made specifically for these two cross-sections (1368 slab
+# pts for L3 vs 688 from a generic crop of PF_tube_after.txt). CONFIRMED 2026-08-12:
+# line 3's contour file bit-reproduces the deployed lidar_line3.csv (max vertex offset
+# 6.8e-5 m, i.e. round-trips through the CSV's own %.4f write precision); a generic
+# crop of PF_tube_after.txt does NOT (176 vertices vs the deployed 172, area 203.16 vs
+# 203.27 -- close enough to round to the same integer, which is exactly why this went
+# unnoticed until golden-mastered). Line 5's two candidates were independently verified
+# to give IDENTICAL results (2056 slab pts, 180 vertices, 182 m^2 either way), so
+# Gente_tunnel_after.txt is kept there rather than switched for no reason.
 _REREG = BASE / "LiDAR La Corona" / "Reregistered clouds"
+_CONTOURS = BASE / "LiDAR La Corona" / "Transect contours"
 DEFAULT_SOURCE = {
-    3: (_REREG / "PF_tube_after.txt", 203),
+    3: (_CONTOURS / "Tunnel segment for L3 contour.txt", 203),
     5: (_REREG / "Gente_tunnel_after.txt", 182),
 }
 
@@ -130,6 +142,16 @@ def main():
         # close the polygon for a clean drawn loop
         cx = np.append(ox, ox[0])
         cz = np.append(oz, oz[0])
+        # Round x to the CSV's own write precision BEFORE deriving E,N from it (not
+        # after -- i.e. not full-precision-then-round-independently). This is
+        # deliberate, not a rounding-timing accident: it means a consumer reading the
+        # x column and a consumer reading easting/northing agree on the underlying
+        # point to the last written digit, which full-precision-then-round does not
+        # guarantee. It also matches the convention the deployed lidar_line3.csv was
+        # (accidentally) written under, which we are adopting on its merits -- see
+        # CLAUDE.md's Reproducibility section. Changing this order silently breaks
+        # goldenmaster.py by ~1e-4 m at a couple of rows; don't "fix" it back.
+        cx = np.round(cx, 4)
         # absolute EPSG:4083 coords of each vertex: it lies in the line's vertical
         # plane (perp offset ~0), so E,N = origin + dist * along-line unit vector.
         az = np.deg2rad(geom["azimuth"])

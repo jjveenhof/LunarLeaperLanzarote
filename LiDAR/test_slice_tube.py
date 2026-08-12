@@ -19,7 +19,12 @@ from slice_tube import (LINE_GEOM, DEFAULT_SOURCE, load_xyz, project_to_line,
 # (line, source export, frozen thesis area m^2) -- from slice_tube.DEFAULT_SOURCE,
 # the one place this mapping is defined (see main.tex results tables for the areas)
 CASES = [(line, path, area) for line, (path, area) in sorted(DEFAULT_SOURCE.items())]
-TOL_M2 = 1.0   # thesis values are reported to the nearest integer m^2
+# 0.5, not 1.0: the thesis area is the ROUNDED integer, so this test's job is "does the
+# unrounded area still round to that integer" -- 0.5 is the exact bound for that, no
+# looser. (goldenmaster.py separately gives byte-exact protection on the written CSV;
+# this test is the human-readable "does the number in the thesis still hold" check.)
+# Confirmed both lines are nowhere near this bound (203.27, 182.00) -- see DECISIONS.md.
+TOL_M2 = 0.5
 
 
 def area_for(line, xyz_path, halfwidth=1.0, nbins=180):

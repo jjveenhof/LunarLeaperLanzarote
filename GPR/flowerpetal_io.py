@@ -70,6 +70,9 @@ PROFILES = [
 
 
 def load_gnss_fp(csv_path):
+    # Deliberately duplicated in topo_correction.py (kept separate on purpose): the
+    # petal list is a frozen 3-item campaign fact that can't drift, and merging
+    # would invert the dependency direction (core importing from a plot-side module).
     df = pd.read_csv(csv_path)
     return df[df['Line'].isin(['FP1', 'FP2', 'FP3'])].copy()
 

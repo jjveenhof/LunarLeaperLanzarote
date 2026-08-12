@@ -7,6 +7,8 @@ Reproduce the two correction-budget tables in the thesis from the pipeline CSVs.
 Covers:
   tab:corr_budget  (main.tex) -- magnitude range and uncertainty of each CBA term
   tab:tc_perline   (main.tex) -- along-profile variation of the terrain correction
+  tab:se-budget    (main.tex) -- per-channel area-uncertainty budget for the inversion
+                                 (needs the inversion artifacts; skipped if absent)
 
 Why this exists
 ---------------
@@ -28,6 +30,8 @@ All values are mGal, relative to the per-line per-day base station (g_base = 0).
 """
 
 import sys
+from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -48,6 +52,12 @@ THESIS_TC_PERLINE = {
     3: (0.099, 0.016, 0.050, 0.020),
     4: (0.112, 0.040, 0.135, 0.014),
     5: (0.090, 0.003, 0.013, 0.029),
+}
+# tab:se-budget: (data, picks, velocity, detrend, quad-sum, MC) in m^2, rounded as printed.
+THESIS_SE_BUDGET = {
+    (3, "circle"):  (19, 28, 10, 12, 37, 41),
+    (3, "ellipse"): (15, 16,  7,  9, 25, 24),
+    (5, "circle"):  (23, 18, 15,  9, 34, 36),
 }
 
 
@@ -87,26 +97,73 @@ def corr_budget(sba, tc, coll):
 def tc_perline(tc, coll):
     """Along-profile variation of the terrain correction, per line.
 
-    Mean/std/span come from the colleague's ABSOLUTE Terrain_correction. The last
-    column ("Station SE") is the measurement SE it is compared against -- see
-    STATION_SE_NOTE: the thesis value for this column does NOT reproduce from any
-    statistic of SE_lsq / SE_SBA, and is reported here as median SE_lsq alongside the
-    thesis figure rather than silently reconciled."""
+    Mean/std/span: the colleague's ABSOLUTE Terrain_correction over ALL stations.
+    Station SE:    the MEDIAN SE_lsq over NON-BASE stations -- see STATION_SE_NOTE.
+
+    The two columns deliberately use different station sets. The base station's SE_lsq is
+    EXACTLY 0 by datum definition, so including it in a "typical station SE" would drag
+    every line toward a structural zero; its terrain correction, by contrast, is an
+    ordinary value like any other station's."""
     out = []
     for line, g in coll.groupby("Line"):
         d = g["Terrain_correction"].dropna()
-        se = tc[tc["Line"] == line]["SE_lsq"].dropna()
+        sub = tc[(tc["Line"] == line) & (tc["loc_id"] != 0)]      # drop the datum station
+        se = sub["SE_lsq"].dropna()
         out.append((int(line), float(d.mean()), float(d.std(ddof=1)),
                     float(d.max() - d.min()), float(se.median())))
     return out
 
 
-# The "Station SE" column of tab:tc_perline (0.014 / 0.020 / 0.014 / 0.029) could not be
-# reproduced from the pipeline: no statistic (mean / median / max / RMS, over all stations
-# or only those with a TC) of SE_lsq, SE_SBA or SE_elev yields it. Closest is mean SE_lsq
-# over TC-bearing stations (0.015 / 0.018 / 0.011 / 0.028). Flagged to the author under
-# REFACTOR.md rule 3 -- NOT reconciled here, in either direction.
+def se_budget():
+    """Per-channel area-uncertainty budget for each inversion case (tab:se-budget).
+
+    Returns {(line, mode): (data, picks, vel, det, quad_sum, mc)} in m^2, or None if the
+    inversion artifacts are not on disk. The first five come from `size_area_se`'s
+    first-order propagation, stored in the artifact by run_inversion.py; the MC column is
+    the SD of the artifact's posterior ensemble areas -- the SAME quantity reported in
+    tab:inversion-results and drawn by plot_area_summary.py.
+
+    This table was briefly listed in REPRODUCE.md as hand-written. It is not: every cell
+    is calculated, and all 18 reproduce exactly."""
+    sys.path.insert(0, str(Path(__file__).resolve().parent / "Inversion"))
+    try:
+        import invert_tube as it
+        import inversion_io as io
+    except ImportError:
+        return None
+    out = {}
+    for (line, mode) in THESIS_SE_BUDGET:
+        try:
+            d = io.load_artifact(line, mode)
+        except FileNotFoundError:
+            continue
+        areas = np.array([it.area_of(mode, s, c, f) for (s, _x, c, f) in d["ensemble"]])
+        out[(line, mode)] = (d["area_se_data"], d["area_se_pick"], d["area_se_vel"],
+                             d["area_se_det"], d["area_se_tot"], float(areas.std(ddof=1)))
+    return out or None
+
+
+# PROVENANCE of the "Station SE" column -- resolved 2026-08-12 (was a rule-3 escalation).
+# It is the MEDIAN SE_lsq over NON-BASE stations, rounded half-up to 3 dp:
+#     raw  L2 0.013808   L3 0.020285   L4 0.013541   L5 0.028816
+#     ->      0.014         0.020         0.014         0.029      = the thesis row exactly.
+# The thesis values are CORRECT. My original escalation was wrong, for two reasons:
+#   1. I averaged over ALL stations including the base, whose SE_lsq is EXACTLY 0 by datum
+#      definition. That structural zero pulled every line down, which is why my numbers
+#      were uniformly too small (0.012 / 0.015 / 0.012 / 0.026) rather than wrong in a
+#      random direction -- the uniform-offset signature I mistook for a stale pipeline.
+#   2. L4 sits on a rounding boundary. 0.013541 rounds half-up to 0.014; the 2026-08-01
+#      TAU_MIN fix moved it to 0.013447 -> 0.013. So L4 alone is genuinely pipeline-state
+#      dependent, by 0.0001 mGal. Verified by rebuilding the 2026-06-11 state (ed6f723).
+# NB numpy/Python round half to EVEN, so use round_half_up() when comparing to the thesis.
 STATION_SE_NOTE = True
+
+
+def round_half_up(x, nd=3):
+    """Round as a person or a spreadsheet would. Banker's rounding turns L4's 0.013541
+    into 0.013 at 3 dp, where the thesis (correctly) shows 0.014."""
+    q = Decimal("1").scaleb(-nd)
+    return float(Decimal(repr(float(x))).quantize(q, rounding=ROUND_HALF_UP))
 
 
 def report(rho=RHO_DEFAULT):
@@ -130,6 +187,18 @@ def report(rho=RHO_DEFAULT):
     print("\n-- LaTeX body, tab:tc_perline --")
     for line, mean, std, span, se in perline:
         print(f"    {line} & {mean:.3f} & {std:.3f} & {span:.3f} & {se:.3f} \\\\")
+
+    seb = se_budget()
+    print("\ntab:se-budget -- per-channel area-uncertainty budget (m^2)")
+    if seb is None:
+        print("  (no inversion artifacts on disk -- run Inversion/run_inversion.py)")
+    else:
+        print(f"  {'Line':<5}{'Shape':<9}{'data':>6}{'picks':>7}{'vel':>6}"
+              f"{'det':>6}{'quad':>7}{'MC':>6}")
+        for (line, mode), v in sorted(seb.items()):
+            print(f"  {line:<5}{mode:<9}" + "".join(f"{x:6.0f}" if i != 1 else f"{x:7.0f}"
+                                                    for i, x in enumerate(v[:4]))
+                  + f"{v[4]:7.0f}{v[5]:6.0f}")
 
     return budget, perline
 
@@ -163,9 +232,24 @@ def check(rho=RHO_DEFAULT):
             continue
         for label, g, w in zip(("mean", "std", "span", "SE"),
                                (mean, std, span, se), want):
-            if round(g, 3) != round(w, 3):
+            if round_half_up(g) != round_half_up(w):
                 bad.append(f"tab:tc_perline L{line} {label}: thesis {w}, "
-                           f"computed {round(g, 3)}")
+                           f"computed {round_half_up(g)} (raw {g:.6f})")
+
+    seb = se_budget()
+    if seb is None:
+        print("  (tab:se-budget not checked -- no inversion artifacts on disk)")
+    else:
+        cols = ("data", "picks", "velocity", "detrend", "quad-sum", "MC")
+        for key, want in THESIS_SE_BUDGET.items():
+            got = seb.get(key)
+            if got is None:
+                bad.append(f"tab:se-budget {key}: no artifact")
+                continue
+            for label, g, w in zip(cols, got, want):
+                if round(g) != w:
+                    bad.append(f"tab:se-budget L{key[0]} {key[1]} {label}: "
+                               f"thesis {w}, computed {round(g)}")
     return bad
 
 

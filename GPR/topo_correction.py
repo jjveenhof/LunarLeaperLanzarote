@@ -110,7 +110,11 @@ def load_gnss(csv_path):
 
 
 def load_gnss_fp(csv_path):
-    """Load FlowerPetals GNSS CSV, keep only FP1/FP2/FP3 rows."""
+    """Load FlowerPetals GNSS CSV, keep only FP1/FP2/FP3 rows.
+    Deliberately duplicated in flowerpetal_io.py (kept separate on purpose): the
+    petal list is a frozen 3-item campaign fact that can't drift, and merging would
+    force this compute core to import from a plot-side module -- the wrong
+    dependency direction after the F11/F12 splits."""
     df = pd.read_csv(csv_path)
     return df[df['Line'].isin(['FP1', 'FP2', 'FP3'])].copy()
 
@@ -120,6 +124,11 @@ def build_elevation_interp(gnss_df, line_key):
 
     line_key is an int (2, 3, 5) for the Lines CSV, or a str ('FP1' etc.)
     for the FlowerPetals CSV.
+
+    Looks like flowerpetal_io.build_track_interps but stays separate on purpose:
+    that one returns east/north/elev together in metre-mode; this one is elev-only
+    and its output feeds the topo NPZ (under golden-master coverage), so unifying
+    would risk perturbing a frozen thesis output for a tidiness gain.
     """
     sub = gnss_df[gnss_df['Line'] == line_key].copy()
 

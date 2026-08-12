@@ -170,7 +170,7 @@ Above the line -- clearly worth doing in phase 2:
 1. Fix `slice_tube.py`'s stale output path (finding 1) -- **DONE.** Now writes
    `Data/LiDAR/lidar_line{N}.csv`; `CLAUDE.md` updated. See the golden-master note
    below: fixing this path surfaced a pre-existing, unrelated reproducibility gap,
-   escalated separately (root `QandA.md`, rule 3).
+   escalated (root `QandA.md`, rule 3) and since **RESOLVED** -- see `DECISIONS.md`.
 2. Add fail-fast asserts to `las_tools.py` (finding 2) -- **DONE.** Magic-byte, point-
    record-length, and extra-dimension-width asserts added; verified against a
    synthetic LAS-header buffer (no real `.las` exists in the project to test against
@@ -190,10 +190,14 @@ Below the line -- was "honestly optional", author approved it anyway:
 **New this phase:** one runnable entry point (`run_all.py`, item 6 of the phase-2
 dispatch) and a shared `goldenmaster.py` shim (Code-wide tool, promoted from Grav's).
 Golden-mastering `slice_tube.py`'s path fix surfaced a REAL, pre-existing
-reproducibility gap -- escalated to the root `QandA.md` (rule 3), not fixed here. See
-`CLAUDE.md`'s "Reproducibility" section for the summary and the QandA thread for full
-evidence. The area (203 m^2) is unaffected; the exact outline vertex positions are not
-currently regenerable from what's on disk.
+reproducibility gap, escalated to the root `QandA.md` (rule 3) -- **since resolved,
+2026-08-12.** Two distinct bugs, both fixed: `DEFAULT_SOURCE[3]` was pointing at the
+wrong source cloud (a generic crop, not the dedicated `Transect contours/` export the
+deployed file actually came from), and E,N were being derived from full-precision `x`
+rather than write-precision-rounded `x` (a 1e-4 m convention mismatch against how the
+deployed file was originally produced). `slice_tube.py --line {3,5}` now reproduces
+both deployed CSVs bit-for-bit on a live run; `goldenmaster.py check` passes. Full
+story in `DECISIONS.md`; investigation trail in the root `QandA.md`.
 
 No dead code, no cross-session duplication beyond the intentional and already-clean
 reuse (`gt_metrics.py` imports `kabsch` from `recover_transform.py`, and now

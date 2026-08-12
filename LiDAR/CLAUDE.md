@@ -18,9 +18,12 @@ QandA.md entries directed here are tagged `From: [session] -> LiDAR`.
 - Code (here, in git): `Code/LiDAR/` -- `las_tools.py`, `verify_alignment.py` +
   `verify_alignment_io.py`, `slice_tube.py`, `recover_transform.py`, `gt_metrics.py`,
   `run_all.py` (one-command entry point), `test_slice_tube.py` + `goldenmaster.py`
-  (regression checks -- see "Reproducibility" below).
+  (regression checks -- see "Reproducibility" below), `DECISIONS.md` (the "why", for
+  facts not re-derivable from the code -- read it if something here looks arbitrary).
 - Data (large, outside git, in OneDrive): `../../LiDAR La Corona/` -- originals
-  `LaCorona.bin` and `LaCoronaUnshifted.bin` (CloudCompare native CCB2 format).
+  `LaCorona.bin` and `LaCoronaUnshifted.bin` (CloudCompare native CCB2 format);
+  `Transect contours/` holds the canonical L3/L5 cross-section source exports (see
+  `DECISIONS.md`).
 - Scratch: there is no longer an external scratch folder. `C:\Users\jj_ve\lidar_scratch`
   was DELETED 2026-08-11 -- 579 MB of superseded 15 Jun CloudCompare split-by-index
   re-exports of `LaCorona.bin` plus throwaway probe scripts, read by nothing in `Code/`
@@ -103,15 +106,19 @@ is NOT.** Worth stating plainly rather than leaving a successor to discover it:
 **Regression checks** (run after any code change, not as routine regeneration --
 see `Code/REFACTOR.md` rule 0 for the golden-master discipline):
 - `goldenmaster.py {snapshot,check}`: byte/float-exact check on `Data/LiDAR/lidar_line{3,5}.csv`.
-- `test_slice_tube.py`: asserts the L3/L5 outline AREAS (203 / 182 m^2) reproduce --
-  not covered by the CSV check above, since the area itself isn't a tracked column.
-- **Known gap** (2026-08-11, see `REFACTOR_FINDINGS.md` and the root `QandA.md` rule-3
-  thread): a fresh `slice_tube.py` run against the CURRENT `PF_tube_after.txt` does
-  NOT byte-reproduce the deployed `lidar_line3.csv` (176 vs 173 outline vertices, area
-  203.16 vs the frozen 203 m^2 -- same integer, different exact outline). The deployed
-  CSV was almost certainly built from a differently-formatted copy of the corrected
-  tube export that no longer exists on disk. Open with the author; do not "fix" it by
-  regenerating over the deployed file.
+- `test_slice_tube.py`: asserts the L3/L5 outline AREAS round to the frozen thesis
+  values (203 / 182 m^2) -- not covered by the CSV check above, since the raw area
+  isn't a tracked column.
+- **RESOLVED** (was a "known gap" 2026-08-11 to 2026-08-12; see `DECISIONS.md` for the
+  full story and `REFACTOR_FINDINGS.md` / root `QandA.md` for the investigation trail):
+  a fresh `slice_tube.py --line 3` used to NOT byte-reproduce the deployed
+  `lidar_line3.csv`. Two things were wrong, both fixed: (1) `DEFAULT_SOURCE[3]` pointed
+  at the wrong cloud (a generic crop, not the dedicated `Transect contours/` export --
+  see `DECISIONS.md`); (2) E,N were derived from full-precision x instead of
+  write-precision-rounded x, a 1e-4 m mismatch against how the deployed file was
+  originally produced (also `DECISIONS.md`). `slice_tube.py --line {3,5}` now
+  reproduces both deployed CSVs bit-for-bit; `goldenmaster.py check` passes on a live
+  (not `--no-write`) run of both lines.
 
 ## Export Convention
 Export aligned point cloud as ASCII XYZ from CloudCompare (File > Save As > ASCII cloud).

@@ -93,6 +93,7 @@ PDFs straight into the Overleaf clone (`THESIS_REPO`, default `C:\Users\jj_ve\th
 |---|---|
 | `tab:decay-fits` | **generated** by `make_decay_table.py` (`\input` in main.tex) |
 | `tab:corr_budget`, `tab:tc_perline` | **checked** by `make_thesis_tables.py --check` |
+| `tab:se-budget` | **checked** by `make_thesis_tables.py --check` (`se_budget()`). Channels from `invert_tube.size_area_se` (`area_se_data/pick/vel/det/tot`), stored in each artifact by `run_inversion.py`; the MC column is the SD of the artifact ensemble areas. All 18 cells reproduce exactly. |
 | `tab:detrend` | numbers printed by `detrend_regional.py` |
 | `tab:lsq_results` | numbers printed by `Inspect/inspect_lsq.py` |
 | `tab:inversion-results` | numbers printed by `run_inversion.py` |
@@ -113,15 +114,39 @@ Do not waste time looking for a script. There isn't one.
 | `fig:grav-loops` (`Equipment and Data Acquisition/GravimeterLoopsSchematic.pdf`) | Hand-drawn schematic of the survey loop design. | Edit the source in `Figure sources/`. |
 | `fig:workflow-grav`, `fig:workflow-inversion` | Hand-written TikZ, live in `thesis-overleaf/figures/workflow_*.tex`. | Edit the TikZ directly. |
 | `fig:grav-synthetic`, `fig:camacho-regional-trend` | External figures from the literature, not produced here. | Not ours -- re-cite. |
-| `tab:grav-acquisition`, `tab:lsq_symbols`, `tab:inv-config`, `tab:inv-grid`, `tab:unc-channels`, `tab:se-budget` | Hand-written descriptive tables (symbols, configuration, channel definitions). They describe the method rather than reporting computed results. | Edit `main.tex`. |
+| `tab:grav-acquisition`, `tab:lsq_symbols`, `tab:inv-config`, `tab:inv-grid`, `tab:unc-channels` | Hand-written descriptive tables (symbols, configuration, channel definitions). They describe the method rather than reporting computed results. | Edit `main.tex`. |
 
-### One known non-reproducing number
+`tab:se-budget` was listed here until 2026-08-12 and does NOT belong: every cell is a
+calculated area-uncertainty contribution, and all 18 reproduce from the artifacts. It is
+in the s3 table above. Do not confuse it with `tab:unc-channels`, which is the channel
+*definitions* table and is genuinely descriptive.
 
-The **"Station SE" column of `tab:tc_perline`** (0.014 / 0.020 / 0.014 / 0.029) does not
-reproduce from the pipeline. `make_thesis_tables.py --check` reports it as a mismatch
-against the computed 0.012 / 0.015 / 0.012 / 0.026. This is deliberately left unreconciled
-and is escalated to the author in the root `QandA.md` (2026-08-12). Do not "fix" either
-side without reading that entry -- the thesis is frozen.
+### Two cells that need a footnote (both L4, both understood)
+
+The `tab:tc_perline` **"Station SE" column is the MEDIAN `SE_lsq` over NON-BASE stations**,
+rounded half-up. The base station's SE is exactly 0 by datum definition, so averaging it in
+would be meaningless. Raw values: L2 0.013808, L3 0.020285, L4 0.013541, L5 0.028816 ->
+0.014 / 0.020 / 0.014 / 0.029, i.e. **the thesis row is correct**. (An earlier version of
+this file said the column could not be reproduced. That was wrong: the base station had
+been left in, which pulled every line toward zero.)
+
+Two L4 cells still differ from the thesis, and both are benign:
+
+| cell | thesis | now | why |
+|---|---|---|---|
+| L4 Station SE | 0.014 | 0.013 | Genuine pipeline-state difference, worth 0.0001 mGal. The 2026-08-01 `TAU_MIN` fix moved the raw median 0.013541 -> 0.013447, which crosses the 3-dp rounding boundary. Confirmed by rebuilding the 2026-06-11 state (`ed6f723`). |
+| L4 TC Std | 0.040 | 0.041 | Transcription slip. The raw value is 0.041143 and its input (`LL_gravity_corrections.csv`) has not changed since 12 June, so this one cannot be a pipeline-state effect. |
+
+`make_thesis_tables.py --check` reports exactly these two and nothing else. Neither is
+worth changing in a frozen thesis; do not "fix" either side.
+
+### One stale sentence in the Discussion
+
+`main.tex:1002` quotes the inversion SEs as 40 / 28 / 35 where the table, the Conclusion and
+the defence deck all say 41 / 24 / 36. Those prose numbers come from a run made BEFORE the
+2026-07-30 velocity-channel redesign: the ellipse value of 28 is unreachable with the
+current engine (24-25 at any plausible velocity sigma) but the pre-2026-07-30 engine gives
+27.1-27.2. See the root `QandA.md` (2026-08-12). Author's call; nothing changed.
 
 ---
 
