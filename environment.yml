@@ -1,7 +1,7 @@
 # Conda environment for the Lunar Leaper thesis code (GPR, gravimetry, LiDAR, QGIS helpers).
 #
 #     conda env create -f environment.yml
-#     conda activate GPR_plotting_LL
+#     conda activate lacorona-lunarleaper-thesis
 #
 # Then run any script with that env's python. See the root CLAUDE.md for the
 # invoke-by-full-path convention used on the author's machine.
@@ -15,7 +15,7 @@
 # Verified surface: every third-party module imported anywhere under Code/ is listed here.
 # Two exceptions, both intentional and documented below (pygimli, gdp).
 
-name: GPR_plotting_LL
+name: lacorona-lunarleaper-thesis
 
 channels:
   - conda-forge
