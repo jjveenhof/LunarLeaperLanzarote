@@ -1,7 +1,9 @@
-# LiDAR session -- Phase 1 refactor audit
+# LiDAR session -- Phase 1 refactor audit (+ phase 2 addenda)
 
-Scope: `Code/LiDAR/` (5 scripts, 998 lines). Audit only -- no code changed. Findings
-ranked by handover value / risk, per `Code/REFACTOR.md`.
+Scope: `Code/LiDAR/` (5 scripts, 998 lines). Findings ranked by handover value / risk,
+per `Code/REFACTOR.md`. Phase-1 content below is unedited except finding [3], updated
+2026-08-11 after direct verification (see its entry). New phase-2 material is appended
+at the end, dated.
 
 Goal sentence for reference: *a competent MSc student who has never seen this project
 can (1) verify any number in the thesis, (2) regenerate any figure, (3) extend the
@@ -55,32 +57,29 @@ work -- without asking the author.*
   files currently in use, which already satisfy the assumptions).
 - **Effort:** S
 
-### [3] `PF_junction_subsampled.xyz` likely still carries the pre-RTK-pin ~9 m error
+### [3] `PF_junction_subsampled.xyz` -- CHECKED 2026-08-11, hypothesis REFUTED, no action
 - **Where:** `LiDAR La Corona/Reregistered clouds/PF_junction_subsampled.xyz`
-  (file, not code); consumed by GPR's `plot_flowerpetal_3d.py` per `CLAUDE.md`'s
-  "Current Focus" item 5 note in the GPR session and thesis figures at
-  `main.tex:1373,1406` (captions "with LiDAR ground truth", "the true tube ceiling
-  clearly intersect with the GPR reflector").
-- **What:** File timestamp is **16 Jun** (pre-fix). The other three Puerta Falsa
-  exports that had the same "copied before the RTK nudge" bug (`PF_ref_after.txt`,
-  `PF_stitch_after.txt`, `PF_tube_after.txt`) were corrected and re-exported **11 Jul**
-  (this session, the `-9.17 E / +1.27 N` shift). `PF_junction_subsampled.xyz` was never
-  touched -- it is the same export vintage/format as the other three pre-fix files and
-  was explicitly flagged mid-session as deferred ("leave downstream consequences for
-  now"), then never revisited. Not present at all in `CLAUDE.md`'s Current Focus list,
-  so a successor has no record this is an open question.
-- **Why it hurts handover:** goal (1). Two thesis figure captions
-  (`main.tex:1373,1406`) make a specific spatial claim ("the true tube ceiling clearly
-  intersect with the GPR reflector") using this cloud. If it is off by ~9 m, that claim
-  needs re-checking before a defence answers a question about it.
-- **Proposed action:** NOT a code fix -- a verification task. Diff
-  `PF_junction_subsampled.xyz` against one of the corrected `PF_*_after.txt` files on a
-  shared identifiable feature (or just re-export the subsample from the now-corrected
-  full cloud). Recommend flagging to the user directly rather than silently folding
-  into phase 2, since it may be defence-relevant. Per REFACTOR.md rule 3, if you confirm
-  a real discrepancy this becomes a root-QandA STOP, not a routine finding.
-- **Touches numbers?:** Unresolved -- exactly the point. Possibly YES.
-- **Effort:** S to check, unknown to fix (re-export from CloudCompare if confirmed off).
+  (file, not code); consumed by GPR's `plot_flowerpetal_3d.py`, thesis figures at
+  `main.tex:1373,1406`.
+- **What:** Phase-1 flagged this as circumstantially likely to carry the pre-RTK-pin
+  ~9.17 E / -1.27 N offset (same file timestamp era -- 16 Jun -- as the three sibling
+  exports that DID have that bug). Directly verified per Supervisor's phase-2 priority-1
+  instruction: nearest-neighbour (horizontal, E/N only) from 50,000 sampled points of
+  `PF_junction_subsampled.xyz` to the corrected cave (`PF_ref_after.txt` +
+  `PF_stitch_after.txt` + `PF_tube_after.txt`) gives **median 0.00 m, mean 0.00 m** --
+  the file already matches the corrected registration essentially exactly. Applying the
+  recorded `-9.17 E / +1.27 N` pin on top makes it WORSE (median 0.17 m, mean 0.62 m),
+  confirming the file is not shifted and should not be. The 16 Jun timestamp was a red
+  herring -- it does not establish CloudCompare export order relative to the RTK-pin
+  application; the file content is what settles it, and it settles clean.
+- **Why it hurts handover:** N/A -- reporting as CONFIRMED CLEAN, not a problem.
+  `main.tex:1373,1406`'s claim is unaffected; no rule-3 escalation needed.
+- **Proposed action:** none for the file itself. Still recommend a one-line note in
+  `CLAUDE.md`'s Current Focus recording that `PF_junction_subsampled.xyz` was audited
+  and confirmed post-RTK-pin (2026-08-11), so this doesn't get re-flagged as a mystery
+  by a future audit -- cheap, closes the loop.
+- **Touches numbers?:** NO (verification only; nothing changed).
+- **Effort:** S (already done)
 
 ### [4] `verify_alignment.py` has a real compute/plot seam (503 lines)
 - **Where:** `verify_alignment.py` -- loaders `:93-207` (~115 lines) + `residual()`
@@ -136,7 +135,7 @@ reporting the full map since the checklist asks for it regardless.
 | L3/L5 cross-section areas (203 / 182 m^2) | inversion results tables `main.tex:937-938,1044` | `slice_tube.py` -> `Data/LiDAR/lidar_line{3,5}.csv` (see finding 1 for the stale write path) |
 | Sauro comparison figure | `fig:sauro-check` (`main.tex:1475`) | external (Sauro et al. 2020 scan) -- not LiDAR-session code, correctly so |
 | Flower-petal 3D snapshots w/ LiDAR ground truth | `fig:fp3d*`, `fig:fp3d-mig*` (`main.tex:1373,1406`) | GPR session's `plot_flowerpetal_3d.py`, consuming `PF_junction_subsampled.xyz` -- see finding 3 |
-| Overburden / envelope maps | (QGIS session figures) | `Reregistered clouds/Gente_envelope.shp`, `QGIS/caveheight_clean_laGente.tif` -- produced by LiDAR session, handed to QGIS |
+| Overburden / envelope maps | (QGIS session figures) | `Reregistered clouds/Gente_envelope.shp`, `QGIS project/caveheight_clean_laGente.tif` -- produced by LiDAR session, handed to QGIS |
 
 ---
 
@@ -188,3 +187,52 @@ rigid-fit RMS) already functions as an inline self-test; the one test I'd propos
 adding is a small script-level assertion that `slice_tube.py --no-write` reproduces
 the frozen areas (203 / 182 m^2) within a tight tolerance, catching exactly the kind
 of silent drift in finding 1 -- propose only, not written.
+
+---
+
+## Phase 2 -- `C:\Users\jj_ve\lidar_scratch` audit (2026-08-11)
+
+Per the new handover model, this folder is OUTSIDE the delivered project tree and has
+no backup -- anything here that a script depends on must move in, or the successor
+never gets it. Full inventory + cross-check against every `Code/LiDAR/` script:
+
+**Contents (all timestamped 15 Jun -- the day the LiDAR session started, one day
+BEFORE any actual alignment work began on 16 Jun per `CLAUDE.md`'s Current Focus):**
+- 46 `LaCorona_N_...las` files (~550 MB total) -- a one-time CloudCompare export of
+  the raw merged cloud split by `Original cloud index` (idx 0..45; most are the tiny
+  marker objects noted in `CLAUDE.md`'s Data Description, a handful are the 5
+  substantial clouds).
+- `stray_subsampled_bins/` -- 30 matching `..._RANDOM_SUBSAMPLED_...bin` files
+  (~44 MB), same split, subsampled for quick viewing.
+- 7 tiny one-off exploration scripts (`cloud_inspect.py`, `dims.py`, `headers.py`,
+  `idx_in_34.py`, `junction.py`, `probe.py`, `split_view.py`; ~9 KB combined) and 3
+  diagnostic PNGs (`junction.png`, `junction_check.png`, `split_top.png`; ~1.4 MB) --
+  first-look exploration of the cloud structure, before the CloudCompare workflow in
+  `CLAUDE.md` was settled.
+
+**Cross-check -- is any of it consumed?** Grepped all of `Code/` for
+`lidar_scratch`: only `CLAUDE.md` (describing the folder's PURPOSE) and
+`REFACTOR.md` (this task) mention it. Zero references from `las_tools.py`,
+`verify_alignment.py`, `slice_tube.py`, `recover_transform.py`, or `gt_metrics.py` --
+none of them hardcode a `lidar_scratch` path (`las_tools.py`'s CLI takes paths as
+`sys.argv`, not a hardcoded default).
+
+**Verdict: nothing here is load-bearing.** The entire folder is a superseded,
+one-time investigation dump that predates the actual registration work -- the real
+decision record for that work is `alignment_transforms.txt`, in git. Regenerability is
+moot for the same reason (nothing depends on it), but for completeness: the LAS/bin
+exports are trivial re-exports of `LaCorona.bin` (still safe in OneDrive), so nothing
+here is irreplaceable in the sense the data-safety rule cares about.
+
+**Proposed action (NOT executed -- awaiting confirmation per rule 5):**
+- The 46 LAS + 30 subsampled bins (~594 MB): no reason to move them into the project
+  tree. Recommend simply leaving `lidar_scratch` behind (nothing depends on it, so
+  its absence from the handover changes nothing) or deleting it outright -- author's
+  call, since rule 5 makes an outright delete something only the author approves.
+- The 7 small scripts + 3 PNGs (~1.4 MB): borderline decision-history value ("this is
+  how the cloud structure was first explored"), but `alignment_transforms.txt` already
+  captures the actual decisions that mattered, so this is low-value. If the author
+  wants it preserved anyway, propose copying to `Code/LiDAR/Legacy/lidar_scratch_exploration/`
+  with a one-line header per rule 5; otherwise fine to leave behind too.
+- Either way: no code or CLAUDE.md change is required as a result of this audit --
+  there is no gap to document, since nothing reads from this location.

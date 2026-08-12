@@ -19,8 +19,13 @@ QandA.md entries directed here are tagged `From: [session] -> LiDAR`.
   `slice_tube.py`, `recover_transform.py`, `gt_metrics.py`.
 - Data (large, outside git, in OneDrive): `../../LiDAR La Corona/` -- originals
   `LaCorona.bin` and `LaCoronaUnshifted.bin` (CloudCompare native CCB2 format).
-- Scratch (large derived exports, OUTSIDE OneDrive): `C:\Users\jj_ve\lidar_scratch\`.
-  Keep bulky LAS/ASCII exports here so they do not churn OneDrive sync.
+- Scratch: there is no longer an external scratch folder. `C:\Users\jj_ve\lidar_scratch`
+  was DELETED 2026-08-11 -- 579 MB of superseded 15 Jun CloudCompare split-by-index
+  re-exports of `LaCorona.bin` plus throwaway probe scripts, read by nothing in `Code/`
+  (audited in `REFACTOR_FINDINGS.md`, "Phase 2"). Anything it held is a mechanical
+  re-export of the `.bin` above. Do not recreate it: the successor receives the project
+  folder, so a scratch area outside that folder is invisible to them and unbacked-up.
+  Put bulky intermediates inside the tree instead, and gitignore them.
 
 ## Data Description
 `LaCorona.bin` holds 5 substantial clouds plus many tiny marker objects. The site data
