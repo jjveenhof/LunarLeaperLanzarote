@@ -20,9 +20,10 @@ GUI step this script cannot do):
     CloudCompare Workflow section and alignment_transforms.txt for the recorded
     matrices. Applying those matrices in CloudCompare is how a successor VERIFIES the
     delivered registration; it is not automatable from here.
-  - test_slice_tube.py (the area-regression assertion) and goldenmaster.py (the CSV
-    diff) -- run those explicitly as part of a refactor step, not as routine
-    regeneration; see REFACTOR.md rule 0.
+  - test_slice_tube.py (the area-regression assertion), goldenmaster.py (the CSV diff),
+    and test_goldenmaster_coverage.py (is every output file tracked) -- run those
+    explicitly as part of a refactor step, not as routine regeneration; see
+    REFACTOR.md rule 0. See README.md for the exact commands.
 
 Run: python run_all.py
 """

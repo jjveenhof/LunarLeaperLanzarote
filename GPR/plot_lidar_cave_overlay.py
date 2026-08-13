@@ -116,8 +116,17 @@ def prepare(n):
     print('  {}: elevation alignment max diff {:.3f} m (ok)'.format(key, dmax))
 
     # --- project the outline onto the actual dense GNSS track (not a straight fit) ---
-    lid = np.genfromtxt(str(LIDAR_DIR / 'lidar_line{}.csv'.format(n)),
-                        delimiter=',', names=True)
+    lid_path = LIDAR_DIR / 'lidar_line{}.csv'.format(n)
+    lid = np.genfromtxt(str(lid_path), delimiter=',', names=True)
+    # Cross-session schema contract (REFACTOR.md phase-3 item 3b): Grav/grav_utils.py
+    # reads this same file. Assert the expected columns here so a wrong-column read
+    # (e.g. a re-exported CSV with a header change) fails legibly instead of silently
+    # mis-registering the outline.
+    expected_cols = {'x', 'z', 'easting', 'northing'}
+    actual_cols = set(lid.dtype.names or ())
+    if actual_cols != expected_cols:
+        sys.exit('{}: unexpected columns in {} -- got {}, expected {}'.format(
+            key, lid_path, sorted(actual_cols), sorted(expected_cols)))
     lx, perp = project_to_track(np.asarray(east), np.asarray(north), dist_axis,
                                 lid['easting'], lid['northing'])
     ly = ref_elev - lid['z']                     # depth below datum

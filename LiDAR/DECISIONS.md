@@ -52,3 +52,44 @@ verified via `goldenmaster.py check` on a live (not `--no-write`) run of both li
 **If this convention is ever "cleaned up" back to full-precision-then-round, it will
 silently break `goldenmaster.py` by ~1e-4 m at ~2 rows.** That is expected, not a bug --
 see the comment at the rounding site before "fixing" it.
+
+The split above, stated end to end: `x,z` are produced live and reproduce bit-for-bit
+from `slice_tube.py` against the sources named in the first entry. `easting,northing`
+were retrofitted onto the deployed CSV by a since-lost one-off script (`augment_en.py`),
+and are now reproduced deliberately -- not by rediscovering that script, but by matching
+its output convention (round-x-first) in the live writer. A successor who finds this
+"inconsistent" and tries to make E,N "properly" derive from full-precision x is the
+exact failure mode this decision exists to prevent -- it is the more natural-looking
+choice and it is the wrong one, because it silently orphans the deployed file bit-exact
+guarantee for a difference too small to ever matter physically (0.1 mm).
+
+## Redo-from-scratch registration is NOT reproducible (2026-08-12)
+
+**Verifying the delivered registration is fully reproducible. Re-registering from raw
+scans, if it were ever needed again, is not.** This is the single most load-bearing fact
+in this session for anyone tempted to extend the work (e.g. "just re-run the alignment
+on the rest of the tube") -- it must not live only as a prose paragraph in `CLAUDE.md`
+that a successor might skim past.
+
+`alignment_transforms.txt` records the exact net 4x4 matrix (+ RMS) for every
+registration step (Puerta Falsa's StitchMove/TubeMove, La Gente's Tunnel/Jameo). Given
+those matrices and the raw `.bin`, applying them in CloudCompare (Edit > Apply
+Transformation) deterministically reproduces the delivered, corrected exports -- that
+part has no operator judgement in it and `slice_tube.py` / `gt_metrics.py` /
+`verify_alignment.py` are then deterministic downstream of it.
+
+But the matrices themselves were not computed from nothing: each one seeds from a manual
+by-eye rotate/translate in CloudCompare (see the CloudCompare Workflow section of
+`CLAUDE.md`, and `alignment_transforms.txt` sec. 2/4's initial coarse step), which then
+gets refined by a Z-locked ICP fit. ICP converges to the nearest local optimum of
+whatever by-eye seed it was given -- for the ~51 degree Puerta Falsa swing in particular,
+a different plausible-looking by-eye starting rotation is not guaranteed to converge to
+the same answer. There is no recorded procedure that removes the operator from that
+first step, and none is being retrofitted now (out of scope for the thesis; see
+`CLAUDE.md`'s "DROPPED" note on the whole-tube re-registration idea).
+
+**Practical consequence:** if a successor ever needs to register a NEW scan (e.g. to
+extend the tube coverage), they cannot just "run the same pipeline" -- they must redo
+the CloudCompare by-eye step themselves, and their numeric result is not guaranteed to
+match what a different operator would get. Verifying or extending the EXISTING two sites
+(Puerta Falsa, La Gente) never requires this -- only net-new registration does.

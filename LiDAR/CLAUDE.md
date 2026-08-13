@@ -17,9 +17,11 @@ QandA.md entries directed here are tagged `From: [session] -> LiDAR`.
 ## Locations
 - Code (here, in git): `Code/LiDAR/` -- `las_tools.py`, `verify_alignment.py` +
   `verify_alignment_io.py`, `slice_tube.py`, `recover_transform.py`, `gt_metrics.py`,
-  `run_all.py` (one-command entry point), `test_slice_tube.py` + `goldenmaster.py`
-  (regression checks -- see "Reproducibility" below), `DECISIONS.md` (the "why", for
-  facts not re-derivable from the code -- read it if something here looks arbitrary).
+  `run_all.py` (one-command entry point), `test_slice_tube.py` +
+  `test_goldenmaster_coverage.py` + `goldenmaster.py` (regression checks -- see
+  "Reproducibility" below), `DECISIONS.md` (the "why", for facts not re-derivable from
+  the code -- read it if something here looks arbitrary), `README.md` (how to run
+  things + thesis traceability table -- start there before this file).
 - Data (large, outside git, in OneDrive): `../../LiDAR La Corona/` -- originals
   `LaCorona.bin` and `LaCoronaUnshifted.bin` (CloudCompare native CCB2 format);
   `Transect contours/` holds the canonical L3/L5 cross-section source exports (see
@@ -106,6 +108,9 @@ is NOT.** Worth stating plainly rather than leaving a successor to discover it:
 **Regression checks** (run after any code change, not as routine regeneration --
 see `Code/REFACTOR.md` rule 0 for the golden-master discipline):
 - `goldenmaster.py {snapshot,check}`: byte/float-exact check on `Data/LiDAR/lidar_line{3,5}.csv`.
+- `test_goldenmaster_coverage.py`: asserts every file actually in `Data/LiDAR/` is
+  matched by a `goldenmaster.py` SOURCES glob, so a new output can't silently go
+  untracked (added 2026-08-12, phase 3 -- see `REFACTOR.md` item 3a).
 - `test_slice_tube.py`: asserts the L3/L5 outline AREAS round to the frozen thesis
   values (203 / 182 m^2) -- not covered by the CSV check above, since the raw area
   isn't a tracked column.
@@ -164,8 +169,8 @@ All alignment + derived products DONE. Full transform record in `alignment_trans
    E,N=absolute EPSG:4083 per vertex so Grav projects onto their own profile axis --
    see QandA). Areas: L3 203, L5 182 m^2. Centres match gravity x0 (76 vs 73; 51 vs 50).
    Validated by Grav. Ground-truth vertical accuracy ~0.2 m (see `gt_metrics.py`), fed to the
-   Discussion via the root QandA handoff. See "Reproducibility" below for a known gap
-   in regenerating this file exactly.
+   Discussion via the root QandA handoff. See "Reproducibility" below -- both lines now
+   regenerate bit-for-bit; a past gap here is RESOLVED, not open.
 5. **La Gente depth map + footprint** (2026-06-30). Corrected-Tunnel cave-top raster
    `QGIS project/caveheight_clean_laGente.tif` (2 m, ceiling = max Z) + plan-view envelope
    `Reregistered clouds/Gente_envelope.shp`, handed to QGIS for the overburden map

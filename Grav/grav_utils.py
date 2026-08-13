@@ -51,11 +51,53 @@ GNSS_DIR    = BASE / "Data/GNSS"
 LIDAR_DIR   = BASE / "Data/LiDAR"
 
 
+# The one genuine cross-session data contract in the project: the LiDAR session WRITES
+# these files, Grav and GPR READ them, and REFACTOR.md rule 8 protects the filenames by
+# convention only. Assert the columns at the read site so a changed schema fails loudly
+# here instead of silently producing a wrong overlay three plots downstream.
+LIDAR_COLUMNS = ("x", "z", "easting", "northing")
+
+
 def lidar_file(line):
     """Cave-outline CSV for a gravity line: columns x,z,easting,northing (the `x` is a
     legacy along-profile distance -- project easting/northing onto your own axis
     instead). Returns the path whether or not it exists; callers check."""
     return LIDAR_DIR / f"lidar_line{line}.csv"
+
+
+def check_lidar_schema(path, required=LIDAR_COLUMNS):
+    """Raise ValueError unless `path` has the expected LiDAR outline columns.
+
+    Cheap (reads the header line only) and called by every LiDAR read in this session.
+    A missing file is NOT an error -- callers already treat the overlay as optional and
+    check existence themselves; this only polices the schema of a file that IS there.
+    """
+    p = Path(path)
+    if not p.exists():
+        return
+    with open(p, "r", encoding="utf-8") as fh:
+        header = fh.readline().strip().lstrip("﻿")
+    cols = [c.strip() for c in header.split(",")]
+    missing = [c for c in required if c not in cols]
+    if missing:
+        raise ValueError(
+            f"{p.name}: LiDAR outline is missing column(s) {missing}. "
+            f"Found {cols}, expected at least {list(required)}. This file is produced by "
+            f"the LiDAR session and read by Grav and GPR -- if its schema really changed, "
+            f"both readers and Code/REFACTOR.md rule 8 need updating together."
+        )
+    return cols
+
+
+def load_lidar_outline(line):
+    """Validated LiDAR cave outline for a gravity line, or None if the file is absent.
+
+    Returns a numpy structured array (genfromtxt names=True), schema-checked first."""
+    p = lidar_file(line)
+    if not p.exists():
+        return None
+    check_lidar_schema(p)
+    return np.genfromtxt(p, delimiter=",", names=True)
 
 # Free-air gradient: dg/dh = -2g/R (standard geodetic value, valid at all latitudes)
 # g ~ 9.807 m/s2, R ~ 6371 km -> 2*9.807/6371000 = 3.079e-6 m/s2/m = 0.3079 mGal/m

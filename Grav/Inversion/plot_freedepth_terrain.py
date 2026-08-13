@@ -42,6 +42,7 @@ from matplotlib.legend_handler import HandlerTuple
 
 import invert_tube as it
 import freedepth as fd
+import grav_utils as _gu               # for the LiDAR schema check
 import terrain_common as pmt              # shared styling + data helpers (library only)
 from plot_utils import save_figure        # was reached via plot_model_terrain
 from forward_polygon import ellipse_vertices
@@ -122,6 +123,7 @@ def main():
         return np.append(vx, vx[0]), np.append(vz, vz[0])
 
     lf = it.lidar_file(args.line)
+    _gu.check_lidar_schema(lf)     # cross-session contract: fail loudly, not silently
     Ld = np.genfromtxt(lf, delimiter=",", names=True) if lf.exists() else None
 
     # ---- same canvas construction as plot_model_terrain -----------------------

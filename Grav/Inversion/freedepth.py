@@ -46,6 +46,7 @@ from matplotlib.lines import Line2D
 
 import invert_tube as it
 import run_inversion as drv
+import grav_utils as _gu               # for the LiDAR schema check
 
 LINES = (3, 5)
 CEIL_GRID = np.arange(1.0, 40.01, 0.25)      # free ceiling depth (m below surface)
@@ -129,6 +130,7 @@ def lidar_ceiling(line):
         return None
     import terrain_common as tc      # library, not the plotting script (was a lazy
     xs, zs, _, proj = tc.gravity_profile(line)   # import of plot_model_terrain)
+    _gu.check_lidar_schema(f)      # cross-session contract: fail loudly, not silently
     L = np.genfromtxt(f, delimiter=",", names=True)
     lx, lz = proj(L["easting"], L["northing"]), L["z"]
     return float(np.interp(lx[np.argmax(lz)], xs, zs) - lz.max())

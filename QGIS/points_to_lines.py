@@ -21,6 +21,11 @@ DATA_DIR = Path(__file__).parents[2] / "Data" / "GNSS" / "Cleaned"
 EPSG = 4083
 DATETIME_FORMAT = "%d.%m.%Y %H:%M:%S"
 
+# Every file this script writes. goldenmaster.py's SOURCES glob must cover all of these --
+# see test_goldenmaster_coverage.py, which asserts that directly rather than scanning
+# DATA_DIR (which also holds the input CSVs, not just outputs of this script).
+OUTPUT_FILES = ("GPR_Lines.geojson", "GPR_FlowerPetals.geojson")
+
 # Order field per line group
 LINE_ORDER = {
     2: "Time",
@@ -92,10 +97,10 @@ def main():
     petals_df["Time"] = pd.to_datetime(petals_df["Time"], format=DATETIME_FORMAT)
 
     line_features = points_to_lines(lines_df, LINE_ORDER)
-    write_geojson(line_features, DATA_DIR / "GPR_Lines.geojson")
+    write_geojson(line_features, DATA_DIR / OUTPUT_FILES[0])
 
     petal_features = petals_to_lines(petals_df, PETAL_LINES)
-    write_geojson(petal_features, DATA_DIR / "GPR_FlowerPetals.geojson")
+    write_geojson(petal_features, DATA_DIR / OUTPUT_FILES[1])
 
 
 if __name__ == "__main__":

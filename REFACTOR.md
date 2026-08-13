@@ -42,9 +42,13 @@ successor would waste an hour here" is a reason.
 
 5. **Quarantine beats delete.** Superseded scripts carry decision history -- that history
    IS handover value ("we tried this, it didn't work"). Move them to the session's
-   `Adhoc/` or `Legacy/` folder with a one-line header saying what it was for and why it
-   is not in the main chain. Propose an outright delete only for genuinely empty or
-   duplicated files, and list it separately so the author can veto.
+   `Legacy/` folder with a one-line header saying what it was for and why it is not in
+   the main chain. Propose an outright delete only for genuinely empty or duplicated
+   files, and list it separately so the author can veto.
+
+   *(Amended 2026-08-12: this rule originally said "`Adhoc/` or `Legacy/`", and two
+   sessions predictably picked different words. `Legacy/` is now the single project-wide
+   name -- see phase 3 item 2.)*
 
 6. **The plot-tuning rule still applies.** Do not restyle, resize, recolour, or "improve"
    any figure. If a refactor would change a figure's appearance, that is a regression.
@@ -146,6 +150,86 @@ commit) between stages:
 
 Stop and report if the approved list turns out to be wrong once you are inside the code.
 Discovering that a "dead" script is actually load-bearing is a good outcome, not a failure.
+
+## Phase 3 -- HANDOVER DOCUMENTATION (written 2026-08-12, after phase 2 closed)
+
+Phase 2 made the code reproducible. Phase 3 makes it navigable by someone who has never
+met the author. This is the last phase; after it the project is handed over as a folder,
+not as a git clone, so anything not written into a tracked file is lost.
+
+### The keep/cut test -- apply it to every sentence you write or keep
+
+> Does this stop a successor from making a mistake, or does it only tell them what we did?
+
+Keep the first. Cut the second, however hard-won it was. A `QandA.md` thread is a
+conversation, not a document -- and all four are gitignored, so nothing in them survives.
+Anything load-bearing must be migrated out of `QandA.md` into `DECISIONS.md` or `README.md`
+before this phase ends.
+
+The rule of thumb for what is load-bearing: a fact a successor **cannot re-derive from the
+code**. "`Transect contours/` is the canonical cross-section source, do not substitute a
+close-enough crop" passes. "We considered three options and picked B" fails unless knowing
+why B stops them re-picking A.
+
+### 1. Shared top-level vocabulary
+
+Every session directory ends phase 3 with the same three names at its top level:
+
+| File | Contains |
+|---|---|
+| `README.md` | What this session's code does, the one command to run it, and the map from thesis figure/table -> producing script. |
+| `DECISIONS.md` | Decisions a successor cannot re-derive from the code, one entry each, dated. |
+| `goldenmaster.py` | Already exists everywhere (Grav, GPR, LiDAR); QGIS to confirm whether it needs one at all. |
+
+Structure BELOW that level must earn its keep. Do not grow an empty `tests/` or `Legacy/`
+to match a bigger session -- QGIS at 115 lines across two scripts should not mimic Grav's
+layout. Matching vocabulary is the point; matching skeletons is cargo cult.
+
+### 2. `Adhoc/` vs `Legacy/` -- RULED: `Legacy/` wins
+
+Grav dissolved its `Adhoc/` (the name lied -- half its contents produced live thesis
+figures) and uses `Legacy/`. GPR created an `Adhoc/` in the same week. One idea, two words,
+and rule 5 above authored the ambiguity.
+
+`Legacy/` is the project-wide name, because it already is one outside `Code/`:
+`Data/Gravimetry/Processed/Legacy/` and `QGIS project/Legacy/` both predate this refactor.
+
+**GPR: rename `Adhoc/` -> `Legacy/`.** One trap, and it is expensive if missed --
+`Code/.gitignore:45` reads `GPR/Adhoc/Line5_100MHz_svd1_*`. That rule keeps ~43 MB of dead
+binary (including a 42 MB velocity-scan HTML) out of git. **Update the path in the same
+commit as the rename**, then confirm with `git status --porcelain GPR/Legacy/` and
+`git add -An GPR/Legacy/` that only `README.md` and `make_variant.py` would be added. If
+the six `Line5_100MHz_svd1_*` artifacts appear as untracked, STOP -- the ignore rule missed.
+
+### 3. Two tests, and only these two
+
+The golden masters cover the real risk (a successor silently changes a published number)
+better than unit tests do, because they are end-to-end and bit-exact. **Do not add unit
+tests to frozen code.** Every test added is surface a successor must understand before they
+dare touch anything, and it guards a threat -- feature development -- that does not exist.
+
+Two exceptions, both aimed at failures actually observed in this refactor:
+
+**3a. Golden-master completeness check** (each session that has a golden master). The golden
+master protects what is in its manifest; nothing checks the manifest is complete. A
+successor who adds a script writing a new numerical output gets no protection and no
+warning. Add a check that every output path the pipeline writes is a tracked path, and fail
+loudly on an untracked one.
+
+This is the `lidar_line3` class of bug: `test_slice_tube.py` passed for weeks with
+`TOL_M2 = 1.0` while `slice_tube.py` read the wrong point cloud, because both candidates
+rounded to 203. A tolerance test cannot see a near-miss; a coverage check sees the gap.
+
+**3b. Cross-session schema assertion** (Grav and GPR). Both read
+`Data/LiDAR/lidar_line{3,5}.csv` -- `Grav/grav_utils.py` and `GPR/plot_lidar_cave_overlay.py`.
+Rule 8 protects those filenames by convention only. Assert the expected column names at each
+read site so a wrong-column read fails legibly instead of silently. This is the only genuine
+cross-session data contract in the project.
+
+### 4. What the Supervisor owns -- do not do these yourself
+
+`Code/README.md`, `Code/REPRODUCE.md`, `Code/TRACEABILITY.md`. Flag anything you hit that
+belongs there and move on.
 
 ## Out of scope for all sessions
 

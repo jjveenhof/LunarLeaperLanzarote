@@ -94,6 +94,8 @@ The interactive GPRProcessing.ipynb and the standalone multiples schematic
 | `GPRFieldVisual.ipynb` | Field visualisation notebook (separate from processing) |
 | `tests/test_normalisation.py` | Verifies tracewise-rms-window window behaviour with synthetic data |
 | `tests/test_topo_correction.py` | Tests for topo_correction.py |
+| `tests/test_apply_processing.py` | Golden-master regression lock on `apply_processing` (the pipeline core) + capture-label/polarity/crop invariants |
+| `tests/test_goldenmaster_coverage.py` | Phase-3: fails if a script writes an `.npz` output outside the golden-master `SOURCES` manifest, or a source glob matches nothing |
 
 Data paths (relative to project root):
 - Raw stitched input: `Data/GPR/Stitched/{stem}_raw.npz` + `_raw.json` sidecar

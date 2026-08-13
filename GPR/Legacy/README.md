@@ -1,7 +1,8 @@
-# Code/GPR/Adhoc -- quarantined, not part of the reproduce chain
+# Code/GPR/Legacy -- quarantined, not part of the reproduce chain
 
-Moved here in the phase-2 handover refactor (F9, 2026-08-11). Nothing in the live
-pipeline reads any of this. Kept (not deleted) for decision history -- rule 5.
+Moved here in the phase-2 handover refactor (F9, 2026-08-11; folder renamed from
+`Adhoc/` to `Legacy/` in phase 3 to match the project-wide name). Nothing in the
+live pipeline reads any of this. Kept (not deleted) for decision history -- rule 5.
 
 ## `make_variant.py`
 Ad-hoc tool that reprocesses a profile with parameter overrides under a variant
