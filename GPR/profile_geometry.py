@@ -6,7 +6,7 @@ run_pipeline.py bakes flip_x by reversing the DATA columns of a flagged profile
 (currently Line3_50/100MHz) but leaves dist_axis in acquisition order -- so
 _processed.npz (and everything derived from it: topo, migrated) is internally
 inconsistent: data column i no longer corresponds to dist_axis[i]. That is a
-deliberate, unchanged design choice (see the root QandA flip_x thread) -- this
+deliberate, unchanged design choice -- this
 module does not touch the bake.
 
 Every consumer that attaches per-trace geometry (GNSS E/N, elevation) to a

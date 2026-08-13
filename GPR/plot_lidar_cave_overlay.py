@@ -5,7 +5,7 @@ cave outline overlaid (section + outline only -- no GPR picks). Two stacked pane
 (L3 top, L5 bottom), each with a primary Depth (m) axis and a secondary Elevation
 (m asl) axis, matching the final migrated-profile figures.
 
-Co-registration (per the Grav -> GPR QandA): the LiDAR outline CSVs store absolute
+Co-registration: the LiDAR outline CSVs store absolute
 REGCAN95 (EPSG:4083) coords; the legacy `x` column is IGNORED. Instead each outline
 vertex's (easting, northing) is projected onto the GPR section's own along-profile
 axis by least-squares regression of the section's (E,N) onto its dist_axis -- exactly

@@ -24,14 +24,10 @@ Grav/Inversion/artifacts/
 # OS clutter
 .DS_Store
 Thumbs.db
-GPR/QandA.md
 .gitignore
-QGIS/QandA.md
-Grav/QandA.md
-LiDAR/QandA.md
 
-# Phase-2 refactor golden master (regenerable snapshots; do not commit).
-# Every session's shim writes to <session>/_goldenmaster/ -- see Code/goldenmaster.py.
+# Golden-master snapshots (regenerable; do not commit).
+# Every method folder's shim writes to <folder>/_goldenmaster/ -- see Code/goldenmaster.py.
 _goldenmaster/
 
 # Quarantined GPR trial artifacts (Legacy/, moved there by refactor F9; renamed

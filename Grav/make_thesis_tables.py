@@ -123,7 +123,7 @@ def se_budget():
     the SD of the artifact's posterior ensemble areas -- the SAME quantity reported in
     tab:inversion-results and drawn by plot_area_summary.py.
 
-    This table was briefly listed in REPRODUCE.md as hand-written. It is not: every cell
+    This table is sometimes mistaken for a hand-written one. It is not: every cell
     is calculated, and all 18 reproduce exactly."""
     sys.path.insert(0, str(Path(__file__).resolve().parent / "Inversion"))
     try:

@@ -7,7 +7,7 @@ It runs `run_pipeline.py` (raw -> processed -> topo -> migrated NPZ/PNG -> dual-
 script that `run_pipeline.py` does not call itself. Each step is a subprocess; a
 failure is reported but does not stop the rest, and a summary is printed at the end.
 
-WHAT THIS DOES NOT DO (genuinely manual, human-in-the-loop -- see MANUAL_ARTIFACTS.md):
+WHAT THIS DOES NOT DO (genuinely manual, human-in-the-loop -- see README.md):
   1. Stitch raw field files       -> GPRFieldVisual.ipynb  (writes Data/GPR/Stitched/*_raw.npz)
   2. Tune + save processing params -> GPRProcessing.ipynb   (writes Data/GPR/Processed/*_params.json)
   3. Pick the migration velocity by eye off the Stolt velocity-scan HTML, then set
@@ -74,7 +74,7 @@ def main():
     for name, ok in results:
         print('  {:4s} {}'.format('OK' if ok else 'FAIL', name))
     print('  {}/{} steps succeeded'.format(n_ok, len(results)))
-    print('\nManual steps still required (see MANUAL_ARTIFACTS.md): 3D-HTML screenshots,')
+    print('\nManual steps still required (see README.md): 3D-HTML screenshots,')
     print('the velocity pick, and the two notebooks that produce raw NPZs + params JSONs.')
     sys.exit(0 if n_ok == len(results) else 1)
 

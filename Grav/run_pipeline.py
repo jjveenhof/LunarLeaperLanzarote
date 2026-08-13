@@ -28,7 +28,7 @@ What this script does NOT do (run these yourself, in this order, after it):
   make_decay_table.py           the appendix decay-fit LaTeX table
   make_thesis_tables.py         the correction-budget + per-line TC thesis tables
 
-See REPRODUCE.md in this folder for the full run order, including the figures.
+See README.md in this folder for the full run order, including the figures.
 
 Flags
 -----

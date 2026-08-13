@@ -8,7 +8,7 @@ live pipeline reads any of this. Kept (not deleted) for decision history -- rule
 Ad-hoc tool that reprocesses a profile with parameter overrides under a variant
 stem. It generated the L2 / SVD-notch trial. Its conclusion -- the Line 2 100 MHz
 spectral notch is a hardware artifact that SVD removal and spectral whitening do
-NOT fix -- is preserved in `Code/GPR/CLAUDE.md` (Current Focus) and in the two
+NOT fix -- is preserved in `Code/GPR/README.md` and in the two
 thesis-evidence figures `plot_l2_spectral_diagnostics.py` / `plot_l2_svd_whiten.py`.
 It was written to run from `Code/GPR/` (imports assume that dir on sys.path); move
 it back if you ever need to run it.
