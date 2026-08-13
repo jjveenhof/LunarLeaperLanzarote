@@ -56,7 +56,7 @@ Planning-stage shapefiles (`All GPR surveys.shp`, `ContextLine*`, `CentreLines*`
 `FlowerPetalLine*`, and ~10 more) plus the two unused `Fieldworkplanning*.qgz` projects
 were moved there after confirming via PyQGIS that none of them are referenced anywhere in
 `FieldworkReporting.qgz`. They carry decision history (early survey planning), which is
-why they were moved, not deleted (rule 5). **Do not load anything from `Legacy/` into the
+why they were moved, not deleted. **Do not load anything from `Legacy/` into the
 live project as a shortcut** -- if a layer there looks useful, treat that as a sign the
 live project's real equivalent should be found instead, not that the legacy one should be
 resurrected.
@@ -95,12 +95,12 @@ first time.
 ## Hand-parsing `.qgz`/`.qgs` XML with regex is unreliable for attribute order (2026-08-11)
 
 `.qgz` files are zip archives containing QGIS project XML -- readable directly (`zipfile`
-+ regex/`re`), and that is how the phase-1 audit found the two findings above. But a raw
++ regex/`re`), and that is how the two findings above were found. But a raw
 regex like `<Layout name="([^"]+)"` silently misses a layout if that particular `<Layout>`
 tag happens to serialize with attributes in a different order (QGIS does not guarantee
 attribute order is stable across every `<Layout>` element in a project) -- this is exactly
-how the phase-1 audit initially missed one of the two stale references in the finding
-above, and it was only caught by re-scanning more robustly during the 2026-08 cleanup.
+how one of the two stale references in the finding above was initially missed, caught only
+by re-scanning more robustly.
 
 **If parsing `.qgz` XML again: either use an attribute-order-independent match (find the
 tag, then search for `name="..."` anywhere inside it, don't anchor to position), or better,
@@ -121,9 +121,9 @@ should not be tracked; a directory scan would false-positive on them every run.
 
 ## Cross-folder data contracts: none exist here (2026-08-12)
 
-Checked per `REFACTOR.md` phase-3 item 3b (the schema-assertion test), which is explicitly
-scoped to Grav and GPR reading `Data/LiDAR/lidar_line{3,5}.csv`. QGIS's own outputs
+The project's only cross-folder data contract is Grav and GPR reading
+`Data/LiDAR/lidar_line{3,5}.csv`, and both assert its schema on load. QGIS's own outputs
 (`GPR_Lines.geojson`, `GPR_FlowerPetals.geojson`) are consumed only by the QGIS project
-itself, not by another session's Python -- no other session's code reads anything this
-session writes, or vice versa. **3b does not apply here; no schema-assertion test was
-added, deliberately, not by omission.**
+itself, not by another folder's Python -- no other folder's code reads anything this one
+writes, or vice versa. **No schema-assertion test was added here, deliberately, not by
+omission.**

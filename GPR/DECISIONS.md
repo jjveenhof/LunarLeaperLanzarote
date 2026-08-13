@@ -45,7 +45,7 @@ judged out of scope for the thesis. A successor should extend `SEGMENTS`, not re
 ## 4. The two `load_gnss_fp` copies stay separate -- do not merge them
 `topo_correction.py` and `flowerpetal_io.py` each define an identical two-line
 `load_gnss_fp`. This duplication is intentional; both call sites carry a comment saying so.
-Merging them would either invert the dependency direction the phase-2 splits established
+Merging them would either invert the current dependency direction
 (a compute core importing from a plot-side module) or perturb the golden-mastered topo NPZ.
 The duplicated content is the frozen 3-item list `['FP1','FP2','FP3']`, which cannot drift.
 The near-identical `build_elevation_interp` / `build_track_interps` pair stays separate for

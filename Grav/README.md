@@ -211,8 +211,8 @@ L3 circle 738/-161, L3 ellipse 506/-75, L5 circle 317/-1 -- **L5 is pure 1/rho, 
 Tolerance (rho departure before the induced area change exceeds 1 SE): **L3 +/-0.156
 (circle) / +/-0.147 (ellipse), L5 +/-0.323 g/cm3** -- 8.3 / 7.9 / 17.2% on the binding
 (downward) side. The SE reference is the MC SE (41.2 / 24.5 / 35.6 m^2), switched
-2026-08-01 from the analytic budget because the thesis reports the MC values, and a
-tolerance quoted against an SE the reader cannot find in the table is a trap.
+2026-08-01 from the analytic budget because the thesis reports the MC values; a
+tolerance quoted against an SE that appears nowhere in the tables would be unusable.
 
 The tolerance is the closed-form crossing of the fitted hyperbola with the A0 -/+ SE band,
 `rho = beta0/(A0 -/+ SE - beta1)` -- not an interpolation of the swept points (which
@@ -287,9 +287,8 @@ GPR-pick area. Similar areas would mean the result is insensitive to ~1 m pick d
 > and is an inverse crime.
 
 The free-depth and robustness results look contradictory and are not: the depth prior is **necessary**, but its **precision is
-forgiving**. That turns the "subjective picks" weakness into a strength and neutralises the
-ground-truth-bias worry -- a pick error of plausible size does not change the result, so
-residual bias is immaterial.
+forgiving**. A pick error of plausible size does not change the result, so residual bias in the picks
+is immaterial.
 
 ---
 
@@ -318,12 +317,12 @@ full list, including the hand-drawn loop schematic, the TikZ workflow figures, a
 descriptive tables. `Code/TRACEABILITY.md` also records the two known L4 cells in
 `tab:tc_perline` and the definition of its Station SE column.
 
-One item worth repeating here because it affects how you read the Discussion: **`main.tex:1002`
-quotes the inversion SEs as 40 / 28 / 35**, where the table, the Conclusion and the defence
-deck all say 41 / 24 / 36. Those prose numbers come from a run made before the 2026-07-30
-velocity-channel redesign -- the ellipse value of 28 is unreachable with the current engine
-(24-25 at any plausible velocity sigma), but the pre-2026-07-30 engine gives 27.1-27.2. The
-thesis is frozen; nothing was changed.
+One known internal discrepancy, recorded so it is not mistaken for a pipeline error:
+**`main.tex:1002` quotes the inversion SEs as 40 / 28 / 35**, where `tab:inversion-results`,
+`tab:se-budget` and the Conclusion all say 41 / 24 / 36. Those prose numbers come from a run
+made before the 2026-07-30 velocity-channel redesign -- the ellipse value of 28 is
+unreachable with the current engine (24-25 at any plausible velocity sigma), but the
+pre-2026-07-30 engine gives 27.1-27.2. The thesis is frozen; nothing was changed.
 
 ---
 
@@ -332,8 +331,7 @@ thesis is frozen; nothing was changed.
 `Legacy/` holds finished one-offs, kept for their decision history rather than deleted:
 `export_stations.py` (a one-time QGIS export), `visualise_lines.py` (plots the superseded
 simple-drift output), and `inspect_durations.py` (a one-time occupation-time check).
-`tests/inspect_lsq_line2.py` is a print-only diagnostic; it used to be named
-`test_drift_correction_lsq.py`, which implied coverage it never had.
+`tests/inspect_lsq_line2.py` is a print-only diagnostic despite living under `tests/`.
 
 `drift_correction.py` (simple linear drift) and `station_means.py` (station means) are the
 pre-LSQ and pre-decay methods, kept for comparison. Both still run against current inputs.
@@ -350,11 +348,11 @@ figure and imports `inspect_lsq.py`.
 ## 7. Orphan PDFs in the thesis repo (listed 2026-08-12, NOT deleted)
 
 These gravity PDFs sit in the thesis repo but no `\includegraphics` references them. Nothing
-was removed -- an unreferenced figure may still be wanted for the defence.
+was removed.
 
 | File | Status |
 |---|---|
-| `Inversion/area_summary.pdf` | **Intentional.** Not in `main.tex`, but cited by the defence deck. Keep. |
+| `Inversion/area_summary.pdf` | **Intentional.** Not referenced by `main.tex`; kept deliberately. |
 | `Grav/detrend_line{2,3,5}.pdf` | Superseded by the combined `detrend_fits.pdf`. Probably prunable. |
 | `Grav/line4_combined.pdf` | Older name; the thesis uses `line4_combined_CBA_rho1p875_seSBA.pdf`. |
 | `Inversion/invert_line3_circle.pdf`, `invert_line3_ellipse.pdf`, `invert_line5_circle.pdf` | Superseded by `misfit_row.pdf` plus the terrain figures. |

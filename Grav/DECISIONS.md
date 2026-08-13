@@ -24,7 +24,7 @@ digit, so no thesis number would move. But it WOULD shift every processed CSV at
 ~1e-8 level, which fails `goldenmaster.py check` against the 2026-08 baseline and forces a
 re-baseline -- the one operation the golden master deliberately refuses, because its whole
 value is "still produces the SUBMITTED thesis". After a re-baseline, PASS would only mean
-"matches whatever this refactor produced", which is a materially weaker guarantee.
+"matches whatever the current code produces", which is a materially weaker guarantee.
 A successor WILL notice the "wrong" `G` and want to fix it; this entry is what stops them.
 
 ## 2. `tab:tc_perline`'s "Station SE" column is the median `SE_lsq` over NON-BASE stations
@@ -61,47 +61,35 @@ old pipeline in a **detached `git worktree`** pointed at a **scratch copy of `Da
 to a throwaway folder so old plotting code cannot touch the real Overleaf clone. This
 leaves the working tree, the real data and the thesis repo completely untouched.
 
-## 4. One Discussion sentence (`main.tex:1002`) quotes PRE-2026-07-30 inversion SEs
-The Discussion's first "multi-method approach" paragraph says L3 circle/ellipse/L5 circle
-SEs of 40/28/35. Every other place in the thesis (`tab:inversion-results`, the Conclusion,
-`tab:se-budget`) says 41/24/36. The ellipse value (28) is the tell: it is unreachable with
-the current inversion engine at any plausible `velocity_sigma` (24-25 m^2), but the
-pre-2026-07-30 engine (multiplicative velocity scaling, before the common-mode depth-shift
-redesign recorded in `README.md`) gives 27.1-27.2 -- close enough, together with the
-qualitative direction, to be confident this is simply a sentence nobody swept after the
-velocity channel was fixed. **Do not "fix" `main.tex`** -- the thesis is frozen; this is
-answer-in-your-pocket material for the defence, not an edit.
-
-## 5. `freedepth.py`'s parallel `.npz` artifact format was NOT folded into `inversion_io`
-This was explicitly left undone during the 2026-08 cleanup -- not missed.
+## 4. `freedepth.py`'s parallel `.npz` artifact format was NOT folded into `inversion_io`
+This was left undone deliberately, not missed.
 `freedepth.py` persists the full chi2 CUBE (ceiling x size x x0), which
 `inversion_io`'s per-case artifact format has no slot for; `plot_freedepth_terrain.py`
-reads the cube directly. Folding it in is a real seam, but it is the only phase-2 item
-that would touch the free-depth artifacts the terrain twin depends on, so it was left
-for a dedicated pass rather than rushed alongside everything else. If picking this up,
+reads the cube directly. Folding it in is a real seam, but it would touch the free-depth
+artifacts the terrain twin depends on, so it was left for a dedicated pass. If picking this up,
 re-run `plot_freedepth_terrain.py` for both lines and diff the figures' input numbers,
 not just the golden master (the cube's shape carries information the per-case format
 would need to preserve some other way).
 
-## 6. Do not unify the per-line colour palette / station-marker maps yourself
-The shared palette lives in `Code/plot_utils.py`, not here -- flagged during the 2026-08
-cleanup and deliberately not fixed. The tie-station marker specifically differs between
+## 5. Do not unify the per-line colour palette / station-marker maps yourself
+The shared palette lives in `Code/plot_utils.py`, not here, and was deliberately left
+unharmonised. The tie-station marker specifically differs between
 `Legacy/visualise_lines.py` (`^`) and `Inversion/plot_model_terrain.py` /
 `terrain_common.py` (`v`); harmonising it would change the appearance of an
 already-published figure. If asked to unify the palette later, that discrepancy needs an
 explicit decision, not a silent pick.
 
-## 7. The truncated-case SEs on `area_summary.pdf` were stale until 2026-08-11 -- know the new numbers
+## 6. The truncated-case SEs on `area_summary.pdf` were stale until 2026-08-11
 `Inversion/plot_area_summary.py` used to carry a hand-transcribed results table that was
 never updated after the 2026-07-29 `velocity_sigma` change (0.010 -> 0.015). It now reads
 the artifacts directly and reports the MC SE, so it cannot go stale again.
 
 The areas were always right and reproduced exactly (320 / 227 / 278 / 210); only the SEs
-were wrong. **The consequence worth knowing before defending this figure:** the corrected
-truncated-circle SEs are LARGER than the stale ones (62 vs 48, 77 vs 58), so the truncated
-configurations sit **1.2-1.5 SE from the LiDAR truth, not the 1.6-2.0** the earlier version
-of the figure implied. The untruncated-model-selection conclusion is unaffected -- but the
-"truncation overshoots" argument is a little softer than the old slide showed.
+were wrong. **The consequence:** the corrected truncated-circle SEs are LARGER than the
+stale ones (62 vs 48, 77 vs 58), so the truncated configurations sit **1.2-1.5 SE from the
+LiDAR truth, not the 1.6-2.0** the earlier version of the figure implied. The
+untruncated-model-selection conclusion is unaffected, but the "truncation overshoots"
+argument is correspondingly softer.
 
-`area_summary.pdf` is not in `main.tex`; it exists for the defence. That is why it is worth
-keeping despite being an orphan output.
+`area_summary.pdf` is not referenced by `main.tex`; it is kept deliberately as an orphan
+output.

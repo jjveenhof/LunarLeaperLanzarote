@@ -1,4 +1,4 @@
-# QGIS session
+# QGIS
 
 Geospatial visualisation for the La Corona survey: overview maps of where the data was
 collected, the roof-thickness (overburden) rasters, and the print layouts that became
@@ -6,7 +6,7 @@ thesis figures. `DECISIONS.md` holds the load-bearing "why"; this file is everyt
 
 Thesis figure -> layout mapping is in `Code/TRACEABILITY.md`.
 
-## What this session produces
+## What this folder produces
 
 Two things, and they are not the same kind of thing:
 

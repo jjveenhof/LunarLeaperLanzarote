@@ -14,7 +14,7 @@ that or documents it.
 2. Read the `README.md` of whichever method you need -- `Grav/`, `GPR/`, `LiDAR/`,
    `QGIS/`. Each one gives the single command to run that method, the map from thesis
    figure/table to producing script, and what cannot be run because it was done by hand.
-3. Before changing anything, run that session's `goldenmaster.py check`. It must PASS on
+3. Before changing anything, run that folder's `goldenmaster.py check`. It must PASS on
    an untouched copy. If it does not, stop and find out why before you edit -- something
    is already different from what the thesis reports.
 
@@ -86,7 +86,7 @@ the fallback path is absent, the scripts still run, write the browse PNGs into
 `Data/GPR/Migration/tube_picks.csv` (the GPR depth prior that makes the inversion
 "GPR-constrained"). `QGIS` is independent -- it only needs the cleaned GNSS CSVs.
 
-The one formal cross-session data contract is `Data/LiDAR/lidar_line{3,5}.csv`, columns
+The one formal cross-folder data contract is `Data/LiDAR/lidar_line{3,5}.csv`, columns
 `x,z,easting,northing`. LiDAR writes it; `Grav/grav_utils.py` and
 `GPR/plot_lidar_cave_overlay.py` read it, and both assert the schema on load so a
 changed column fails immediately instead of silently producing a wrong figure. Do not
@@ -101,7 +101,7 @@ Be aware of these before concluding a script is missing:
   lets you *verify* the registration; it cannot be regenerated unattended.
 - **The GPR processing parameters** (`*_params.json`) were tuned in a notebook, and the
   migration velocity was picked by hand off an interactive scan. `GPR/run_all.py` reads
-  the saved choices and prints the steps it cannot do; see `GPR/MANUAL_ARTIFACTS.md`.
+  the saved choices and prints the steps it cannot do; see `GPR/README.md`.
 - **The QGIS overburden rasters and print layouts** are a GUI product. The recipe and
   every input are documented, but no script exists and one was deliberately not written
   -- see `QGIS/DECISIONS.md`.
@@ -110,18 +110,18 @@ These are documented decisions, not gaps.
 
 ## Verifying you have not changed a published number
 
-The thesis is frozen. Every session carries a **golden master**: a bit-exact snapshot of
+The thesis is frozen. Every method folder carries a **golden master**: a bit-exact snapshot of
 its numerical outputs, compared at zero tolerance.
 
 ```
-python goldenmaster.py check        # in any session folder
+python goldenmaster.py check        # in any method folder
 ```
 
 It compares values, never figures -- PNG and PDF bytes differ between runs even with
 identical data, so figures are verified through the numbers behind them. It also refuses
 to silently re-baseline: taking a new snapshot is an explicit, separate command.
 
-Alongside it, each session has a coverage check asserting that the golden master's
+Alongside it, each folder has a coverage check asserting that the golden master's
 manifest is *complete*, so a newly added output cannot go quietly unprotected. In `Grav/`
 and `GPR/` these run under `python -m pytest tests/`; in `LiDAR/` and `QGIS/` they are
 run directly as scripts.
@@ -135,7 +135,7 @@ run directly as scripts.
 
 - CRS is **EPSG:4083** (REGCAN95 / UTM zone 28N) throughout. Elevations are REGCAN95
   orthometric heights.
-- Each session folder holds a `DECISIONS.md`: dated entries for choices that the code
+- Each method folder holds a `DECISIONS.md`: dated entries for choices that the code
   cannot explain on its own. Read it before concluding something was done arbitrarily.
 - Where a constant is hardcoded because the thesis froze it, the code says so. Those are
   not cleanup targets.

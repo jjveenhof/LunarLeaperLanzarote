@@ -1,4 +1,4 @@
-# LiDAR session
+# LiDAR
 
 Point-cloud processing for the La Corona lava tube -- CloudCompare re-registration of the
 scans at the two measured sites, and the Python tooling that verifies that registration
@@ -139,17 +139,17 @@ python test_slice_tube.py                   # 3. do the outline AREAS still roun
    written column -- and which a tolerance test alone could not either. See `DECISIONS.md`
    for the near-miss this exists because of.
 
-## Cross-session contract: `Data/LiDAR/lidar_line{3,5}.csv`
+## Cross-folder contract: `Data/LiDAR/lidar_line{3,5}.csv`
 
 Columns `x,z,easting,northing` -- x = distance along the gravity line, z = absolute
-REGCAN95 elevation, easting/northing = absolute EPSG:4083 per vertex so the Grav session
-can project onto its own profile axis.
+REGCAN95 elevation, easting/northing = absolute EPSG:4083 per vertex so `Grav/` can
+project onto its own profile axis.
 
 Written here by `slice_tube.py`. Read by `Grav/grav_utils.py` (feeding the inversion's
 terrain plots) and `GPR/plot_lidar_cave_overlay.py`. Both consumers assert the column
 schema on load via `grav_utils.check_lidar_schema()`, added 2026-08-12, so a rename or
 reorder here fails immediately and legibly in both rather than silently producing a wrong
-figure. Renaming these files or their columns is still a cross-session change -- update
+figure. Renaming these files or their columns is still a cross-folder change -- update
 every reader in the same commit.
 
 ## Registration record
@@ -171,9 +171,9 @@ All alignment and derived products are done. The full transform record is in
    recovered frame-safe by `recover_transform.py` -- Jameo 7.6 m move plus a 1.83 degree
    tilt fix at RMS 2.9 cm; Tunnel 6.5 m, Z-locked, RMS 0.01 cm; drone topo -0.35 m datum drop.
 4. **Tube cross-sections for gravity** (2026-06-30; E,N added 2026-07-17; output moved to
-   `Data/LiDAR/` on 2026-08-11 because it is data consumed cross-session, not a `Code/`
+   `Data/LiDAR/` on 2026-08-11 because it is data consumed by other folders, not a `Code/`
    artifact). Areas 203 m^2 (L3) and 182 m^2 (L5); centres match the gravity x0 (76 vs 73,
-   51 vs 50). Validated by the Grav session.
+   51 vs 50). Validated against the gravity inversion.
 5. **La Gente depth map and footprint** (2026-06-30). Corrected-Tunnel cave-top raster
    `QGIS project/caveheight_clean_laGente.tif` (2 m cells, ceiling = max Z) plus the
    plan-view envelope `Reregistered clouds/Gente_envelope.shp`, handed to QGIS for the
@@ -186,5 +186,4 @@ piecewise -- cross-sections, depth maps, footprints, the 3-D plot -- and the two
 sites are locally exact. A merged product would be approximate along the 6-7 km between
 them and add no thesis value. The dataset has several other internal misalignments away
 from the measurement sites; those are left unfixed, with no bearing on the gravity or GPR
-lines. Re-registering the full tube end-to-end would be a reasonable separate project. It
-was not a gap in the thesis.
+lines. Re-registering the full tube end-to-end would be a reasonable separate project.

@@ -233,7 +233,7 @@ frozen. Method: `ls GPR/*.pdf` against every `\includegraphics{GPR/...}` in `mai
 `Line{3,5}_{50,100}MHz_picks.pdf` (superseded by the combined `_dual_freq_migrated_picks`),
 `Line{3,5}_dual_freq_migrated.pdf` (superseded by the `_picks` variant), and
 `Line{3,5}_dual_freq_topo.pdf` (the thesis only includes Line 2's). These regenerate on
-every pipeline run, so deleting them from Overleaf is cosmetic.
+every pipeline run, so their presence in the thesis repo is harmless.
 
 *Stale -- unproduced and unused*, safe to delete: `arrival_chart.pdf` (no producing script
 anywhere; superseded by `gpr_arrivals_schematic.pdf`) and `multiples_schematic.pdf`

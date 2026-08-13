@@ -7,7 +7,7 @@ Figure PDFs are written by `plot_utils.save_figure(fig, name, folder)`, which pu
 `<thesis repo>/<folder>/<name>.pdf` and a browse PNG in `Results/`. So a figure's PDF path
 plus this table is enough to find the code that drew it.
 
-For **how to run** any of these, see the session's own `README.md`. This file is the map,
+For **how to run** any of these, see the method folder's own `README.md`. This file is the map,
 not the instructions.
 
 ---
@@ -139,8 +139,8 @@ these for publishing anything: `ResearchModule` (empty, 0 map items),
 (outreach material).
 
 Two figures that look like they belong to QGIS but do not: `main.tex:601`
-(`GPR/petal_migration_map`) is the GPR session, and `main.tex:1479`
-(`Appendices/.../gente_check.png`) is the LiDAR session.
+(`GPR/petal_migration_map`) belongs to `GPR/`, and `main.tex:1479`
+(`Appendices/.../gente_check.png`) to `LiDAR/`.
 
 ---
 
@@ -151,10 +151,10 @@ Consolidated so nobody hunts for code that was never written.
 | Thesis output | What it is |
 |---|---|
 | `fig:grav-loops` (`GravimeterLoopsSchematic.pdf`) | Hand-drawn schematic of the loop design. Source in `Figure sources/`. |
-| `fig:workflow-grav`, `fig:workflow-inversion` | Hand-written TikZ, living in the thesis repo's `figures/workflow_*.tex`. Edit the TikZ. |
+| `fig:workflow-grav`, `fig:workflow-inversion` | Hand-written TikZ, living in the thesis repo's `figures/workflow_*.tex`. |
 | `fig:grav-synthetic`, `fig:camacho-regional-trend` | External figures from the literature. |
 | `fig:sauro-check` | External (Sauro et al. 2020). |
-| `tab:grav-acquisition`, `tab:lsq_symbols`, `tab:inv-config`, `tab:inv-grid`, `tab:unc-channels` | Descriptive tables -- symbols, configuration, channel definitions. They describe the method, they do not report computed results. Edit `main.tex`. |
+| `tab:grav-acquisition`, `tab:lsq_symbols`, `tab:inv-config`, `tab:inv-grid`, `tab:unc-channels` | Descriptive tables -- symbols, configuration, channel definitions. They describe the method, they do not report computed results, and they live only in `main.tex`. |
 | The QGIS overburden rasters (`cavetop_clean_masked*.tif`) | A GUI product. The recipe and all inputs are documented, but no script exists and one was deliberately not written. Budget 15-20 min of QGIS time per area. See `QGIS/DECISIONS.md`. |
 | The LiDAR re-registration | CloudCompare, seeded by eye then ICP. The 4x4 matrices in `LiDAR/alignment_transforms.txt` let you verify it; it cannot be regenerated unattended. |
 | GPR `*_params.json` and the migration velocity pick | Tuned in a notebook / picked off an interactive scan. `GPR/run_all.py` reads the saved choices and prints what it cannot do. |

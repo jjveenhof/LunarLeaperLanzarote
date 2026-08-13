@@ -12,8 +12,8 @@ denser slab extractions made specifically for `slice_tube.py` (L3: 1368 slab poi
 688 from a generic crop of `Reregistered clouds/PF_tube_after.txt`). `slice_tube.DEFAULT_SOURCE`
 originally pointed line 3 at the generic crop instead -- a near-miss that reproduced the
 right INTEGER area (203 either way) but a different exact outline (176 vertices vs the
-deployed CSV's 172; area 203.16 vs 203.27). Found and fixed during the phase-2 refactor
-when `goldenmaster.py` caught the byte-level mismatch.
+deployed CSV's 172; area 203.16 vs 203.27). Found and fixed when `goldenmaster.py` caught
+the byte-level mismatch.
 
 Line 5 was never affected -- its two candidate sources (`Transect contours/` and
 `Reregistered clouds/Gente_tunnel_after.txt`) were verified to give IDENTICAL results
@@ -32,7 +32,7 @@ an oversight -- see the comment at the rounding site in `slice_tube.py`'s `main(
 
 Why: the deployed `lidar_line3.csv` (the one cited in the thesis) had its E,N columns
 added by a one-off script, `augment_en.py`, that no longer exists anywhere in the
-project -- I searched the whole tree and could not find it. That script read `x` back
+project. That script read `x` back
 OUT of the already-written, already-rounded CSV text and derived E,N from that rounded
 value. A "more precise" live implementation (derive E,N from full-precision x, round
 once at the end) produces E,N that differ from the deployed file by ~1e-4 m (0.1 mm) at
@@ -67,8 +67,7 @@ guarantee for a difference too small to ever matter physically (0.1 mm).
 **Verifying the delivered registration is fully reproducible. Re-registering from raw
 scans, if it were ever needed again, is not.** This is the single most load-bearing fact
 here for anyone tempted to extend the work (e.g. "just re-run the alignment
-on the rest of the tube") -- it must not live only as a prose paragraph in `README.md`
-that a successor might skim past.
+on the rest of the tube").
 
 `alignment_transforms.txt` records the exact net 4x4 matrix (+ RMS) for every
 registration step (Puerta Falsa's StitchMove/TubeMove, La Gente's Tunnel/Jameo). Given
