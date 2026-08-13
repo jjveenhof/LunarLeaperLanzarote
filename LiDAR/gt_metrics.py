@@ -31,7 +31,7 @@ Metric notes (why the definitions are what they are):
     fit RMS ~ 0); La Gente clouds are matched by their invariant scalar signature
     (as in recover_transform.py) then fit with Kabsch.
 
-Run with the env python (see root CLAUDE.md); reads the exported clouds under
+Run with the env python (see Code/README.md); reads the exported clouds under
 'LiDAR La Corona/Reregistered clouds' and '.../Clouds to reconstruct transformations'.
 """
 import os
@@ -44,10 +44,14 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # Code/LiDAR
 import verify_alignment as V
 from recover_transform import kabsch
 
-DOCS = (r"C:\Users\jj_ve\OneDrive - Delft University of Technology\Documents"
-        r"\Thesis Lunar Leaper\LiDAR La Corona")
-REREG = DOCS + r"\Reregistered clouds"
-RECON = DOCS + r"\Clouds to reconstruct transformations"
+# Point clouds are DATA, outside the Code/ git repo: derive the project root from this
+# file's location (Code/LiDAR/ -> Code/ -> project root) rather than hardcoding it, so
+# the project folder can be moved or handed over without editing source.
+DOCS = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "LiDAR La Corona")
+REREG = os.path.join(DOCS, "Reregistered clouds")
+RECON = os.path.join(DOCS, "Clouds to reconstruct transformations")
 
 
 # --------------------------------------------------------------------------- io

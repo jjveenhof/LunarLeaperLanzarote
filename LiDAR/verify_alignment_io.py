@@ -21,9 +21,15 @@ Baseline (pre-alignment) idx2->idx0 residual was ~ mean 8.7 m / median 5.6 m.
 import os
 import numpy as np
 
+# Point clouds are DATA: they live outside the Code/ git repo, in the project root two
+# levels up from this file (Code/LiDAR/ -> Code/ -> project root). Derived, never
+# hardcoded, so the project folder can be moved or handed over without editing source.
+_LIDAR_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "LiDAR La Corona")
+
 # --- ASC mode: the three aligned exports -------------------------------------
-ASC_DIR = (r"C:\Users\jj_ve\OneDrive - Delft University of Technology\Documents"
-           r"\Thesis Lunar Leaper\LiDAR La Corona\Reregistered clouds")
+ASC_DIR = os.path.join(_LIDAR_DATA, "Reregistered clouds")
 ASC_FILES = [  # (label, filename, colour)
     ("ref",    "PF_ref_after.txt",    "tab:blue"),
     ("stitch", "PF_stitch_after.txt", "gold"),
@@ -41,8 +47,7 @@ LAS_PAIRS = [("light green idx2", "blue idx0"), ("dark green idx1", "light green
 # corrected drone crop). Unlike Puerta Falsa (internal blue-reference), this site
 # was fit to EXTERNAL truth, so the check is: Tunnel<->Jameo agree at the pit
 # throat, and both sit correctly under the RTK surface / on the drone.
-_DOCS = (r"C:\Users\jj_ve\OneDrive - Delft University of Technology\Documents"
-         r"\Thesis Lunar Leaper\LiDAR La Corona")
+_DOCS = _LIDAR_DATA
 GENTE_FILES = [  # (label, path, colour, is_sparse)
     # role-based colours, matching the Puerta Falsa check (truth<-bridge<-mover):
     #   drone surface = blue  (truth,  like PF_ref)
