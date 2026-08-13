@@ -1,10 +1,9 @@
 # GPR -- decisions a successor cannot re-derive from the code
 
 Each entry is a choice whose *reason* is invisible in the code: re-reading the scripts
-would not reveal it, and a successor could innocently undo it. Recorded here because the
-working discussion lived in `QandA.md`, which is gitignored and does not survive handover.
-For WHAT the code does and HOW to run it, see `README.md` and `CLAUDE.md`; this file is
-only the WHY behind non-obvious choices.
+would not reveal it, and a successor could innocently undo it. For WHAT the code does
+and HOW to run it, see `README.md`; this file is only the WHY behind non-obvious
+choices.
 
 ---
 

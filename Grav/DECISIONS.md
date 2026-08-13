@@ -1,14 +1,12 @@
 # Grav -- decisions a successor cannot re-derive from the code
 
 Each entry is a choice whose *reason* is invisible in the code: re-reading the scripts
-would not reveal it, and a successor could innocently undo it. Recorded here because the
-working discussion lived in `QandA.md`, which is gitignored and does not survive handover.
+would not reveal it, and a successor could innocently undo it.
 
-This is NOT a duplicate of `CLAUDE.md`'s "Current Focus" section -- that section is a
-proper decision journal (density-sweep / beta1 mechanism, the velocity-channel redesign,
-the settled-rule history) and stays exactly as it is; read it for the SCIENCE decisions.
-This file is the narrower set of decisions that came out of the post-submission refactor
-(2026-08) and would otherwise have been lost with the QandA.md threads that found them.
+For the SCIENCE decisions -- the density sweep and the beta1 mechanism, the
+velocity-channel redesign, the settled-rule history, what was deliberately not swept --
+read `README.md`, section 3. This file is the narrower set of decisions about the code
+and the numbers themselves.
 
 ---
 
@@ -69,14 +67,14 @@ SEs of 40/28/35. Every other place in the thesis (`tab:inversion-results`, the C
 `tab:se-budget`) says 41/24/36. The ellipse value (28) is the tell: it is unreachable with
 the current inversion engine at any plausible `velocity_sigma` (24-25 m^2), but the
 pre-2026-07-30 engine (multiplicative velocity scaling, before the common-mode depth-shift
-redesign recorded in `CLAUDE.md`) gives 27.1-27.2 -- close enough, together with the
+redesign recorded in `README.md`) gives 27.1-27.2 -- close enough, together with the
 qualitative direction, to be confident this is simply a sentence nobody swept after the
 velocity channel was fixed. **Do not "fix" `main.tex`** -- the thesis is frozen; this is
 answer-in-your-pocket material for the defence, not an edit.
 
 ## 5. `freedepth.py`'s parallel `.npz` artifact format was NOT folded into `inversion_io`
-This was finding [14] in `REFACTOR_FINDINGS.md`, explicitly left undone in phase 2 --
-not missed. `freedepth.py` persists the full chi2 CUBE (ceiling x size x x0), which
+This was explicitly left undone during the 2026-08 cleanup -- not missed.
+`freedepth.py` persists the full chi2 CUBE (ceiling x size x x0), which
 `inversion_io`'s per-case artifact format has no slot for; `plot_freedepth_terrain.py`
 reads the cube directly. Folding it in is a real seam, but it is the only phase-2 item
 that would touch the free-depth artifacts the terrain twin depends on, so it was left
@@ -86,9 +84,24 @@ not just the golden master (the cube's shape carries information the per-case fo
 would need to preserve some other way).
 
 ## 6. Do not unify the per-line colour palette / station-marker maps yourself
-`plot_utils.py` (colour palette, `plot_utils.py`) is owned by the Supervisor session, not
-Grav -- flagged, not fixed, in `REFACTOR_FINDINGS.md` finding [8]. The tie-station marker
-specifically differs between `Legacy/visualise_lines.py` (`^`) and
-`Inversion/plot_model_terrain.py`/`terrain_common.py` (`v`); harmonising it would change
-the appearance of an already-published figure (REFACTOR.md rule 6). If asked to unify the
-palette later, that discrepancy needs an explicit decision, not a silent pick.
+The shared palette lives in `Code/plot_utils.py`, not here -- flagged during the 2026-08
+cleanup and deliberately not fixed. The tie-station marker specifically differs between
+`Legacy/visualise_lines.py` (`^`) and `Inversion/plot_model_terrain.py` /
+`terrain_common.py` (`v`); harmonising it would change the appearance of an
+already-published figure. If asked to unify the palette later, that discrepancy needs an
+explicit decision, not a silent pick.
+
+## 7. The truncated-case SEs on `area_summary.pdf` were stale until 2026-08-11 -- know the new numbers
+`Inversion/plot_area_summary.py` used to carry a hand-transcribed results table that was
+never updated after the 2026-07-29 `velocity_sigma` change (0.010 -> 0.015). It now reads
+the artifacts directly and reports the MC SE, so it cannot go stale again.
+
+The areas were always right and reproduced exactly (320 / 227 / 278 / 210); only the SEs
+were wrong. **The consequence worth knowing before defending this figure:** the corrected
+truncated-circle SEs are LARGER than the stale ones (62 vs 48, 77 vs 58), so the truncated
+configurations sit **1.2-1.5 SE from the LiDAR truth, not the 1.6-2.0** the earlier version
+of the figure implied. The untruncated-model-selection conclusion is unaffected -- but the
+"truncation overshoots" argument is a little softer than the old slide showed.
+
+`area_summary.pdf` is not in `main.tex`; it exists for the defence. That is why it is worth
+keeping despite being an orphan output.

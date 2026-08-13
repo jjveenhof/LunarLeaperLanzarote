@@ -1,7 +1,7 @@
-# LiDAR session -- decision log
+# LiDAR -- decisions a successor cannot re-derive from the code
 
 Why things are the way they are, for facts a successor cannot re-derive from the code
-or CLAUDE.md alone. See `CLAUDE.md` for "what is true now"; this file is "why."
+alone. See `README.md` for "what is true now"; this file is "why."
 
 ---
 
@@ -13,8 +13,7 @@ denser slab extractions made specifically for `slice_tube.py` (L3: 1368 slab poi
 originally pointed line 3 at the generic crop instead -- a near-miss that reproduced the
 right INTEGER area (203 either way) but a different exact outline (176 vertices vs the
 deployed CSV's 172; area 203.16 vs 203.27). Found and fixed during the phase-2 refactor
-when `goldenmaster.py` caught the byte-level mismatch; full trail in the root `QandA.md`
-(2026-08-11/12 rule-3 thread) and `REFACTOR_FINDINGS.md`.
+when `goldenmaster.py` caught the byte-level mismatch.
 
 Line 5 was never affected -- its two candidate sources (`Transect contours/` and
 `Reregistered clouds/Gente_tunnel_after.txt`) were verified to give IDENTICAL results
@@ -67,8 +66,8 @@ guarantee for a difference too small to ever matter physically (0.1 mm).
 
 **Verifying the delivered registration is fully reproducible. Re-registering from raw
 scans, if it were ever needed again, is not.** This is the single most load-bearing fact
-in this session for anyone tempted to extend the work (e.g. "just re-run the alignment
-on the rest of the tube") -- it must not live only as a prose paragraph in `CLAUDE.md`
+here for anyone tempted to extend the work (e.g. "just re-run the alignment
+on the rest of the tube") -- it must not live only as a prose paragraph in `README.md`
 that a successor might skim past.
 
 `alignment_transforms.txt` records the exact net 4x4 matrix (+ RMS) for every
@@ -80,13 +79,13 @@ part has no operator judgement in it and `slice_tube.py` / `gt_metrics.py` /
 
 But the matrices themselves were not computed from nothing: each one seeds from a manual
 by-eye rotate/translate in CloudCompare (see the CloudCompare Workflow section of
-`CLAUDE.md`, and `alignment_transforms.txt` sec. 2/4's initial coarse step), which then
+`README.md`, and `alignment_transforms.txt` sec. 2/4's initial coarse step), which then
 gets refined by a Z-locked ICP fit. ICP converges to the nearest local optimum of
 whatever by-eye seed it was given -- for the ~51 degree Puerta Falsa swing in particular,
 a different plausible-looking by-eye starting rotation is not guaranteed to converge to
 the same answer. There is no recorded procedure that removes the operator from that
 first step, and none is being retrofitted now (out of scope for the thesis; see
-`CLAUDE.md`'s "DROPPED" note on the whole-tube re-registration idea).
+`README.md`'s "Deliberately not built" note on the whole-tube re-registration idea).
 
 **Practical consequence:** if a successor ever needs to register a NEW scan (e.g. to
 extend the tube coverage), they cannot just "run the same pipeline" -- they must redo
