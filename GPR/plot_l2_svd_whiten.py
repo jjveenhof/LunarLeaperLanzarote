@@ -2,7 +2,7 @@
 plot_l2_svd_whiten.py
 Trial figure: does SVD/eigenimage removal or spectral whitening fix the Line2
 100 MHz spectral notches (~75, ~160 MHz -- hardware artifact from the pulsEKKO
-antenna housing; see Code/GPR/CLAUDE.md Current Focus, and
+antenna housing; see Code/GPR/README.md Status, and
 plot_l2_spectral_diagnostics.py for the baseline notch evidence)?
 
 Both are OFF in the saved Line2_100MHz params (n_svd=0, whiten_window=0), so

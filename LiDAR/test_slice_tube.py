@@ -48,7 +48,7 @@ def main():
 
     if failed:
         print("\nFAIL -- an area drifted from the frozen thesis value. Stop and "
-              "escalate to the root QandA.md (REFACTOR.md rule 3). Do not 'fix' it.")
+              "find out WHY before going further. Do not 'fix' it.")
         return 1
     print("\nPASS -- both areas match the frozen thesis values.")
     return 0

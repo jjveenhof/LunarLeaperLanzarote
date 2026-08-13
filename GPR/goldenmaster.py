@@ -1,14 +1,14 @@
 """
-Golden-master shim for the GPR session -- see Code/goldenmaster.py for the machinery.
+Golden-master shim for the GPR outputs -- see Code/goldenmaster.py for the machinery.
 
-Declares WHICH GPR outputs are frozen for the post-submission refactor (REFACTOR.md
+Declares WHICH GPR outputs are frozen against regression (see Code/GPR/README.md
 rule 0). The comparison logic (npz key-by-key, absolute tolerance, NaN patterns,
-missing/extra = failure) lives in the shared module so all four sessions verify the
+missing/extra = failure) lives in the shared module so all four method folders verify the
 same way; do not fork it.
 
 Usage (from Code/GPR/):
-    python goldenmaster.py snapshot          # once, BEFORE any refactor edit
-    python goldenmaster.py check             # after every refactor step
+    python goldenmaster.py snapshot          # once, BEFORE editing anything
+    python goldenmaster.py check             # after every change
     python goldenmaster.py check --verbose
 
 Snapshot lands in Code/GPR/_goldenmaster/ (gitignored by the shared module).
@@ -31,4 +31,4 @@ SOURCES = [
 ]
 
 if __name__ == "__main__":
-    sys.exit(gm.main(GM_DIR, SOURCES, "the GPR session"))
+    sys.exit(gm.main(GM_DIR, SOURCES, "the GPR outputs"))

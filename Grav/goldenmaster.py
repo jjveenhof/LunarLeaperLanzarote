@@ -1,20 +1,20 @@
 """
-Golden-master snapshot + comparison for the GRAVIMETRY session.
+Golden-master snapshot + comparison for the GRAVIMETRY outputs.
 
-    python goldenmaster.py snapshot     # once, BEFORE any refactor edit
-    python goldenmaster.py check        # after every refactor step
+    python goldenmaster.py snapshot     # once, BEFORE editing anything
+    python goldenmaster.py check        # after every change
     python goldenmaster.py check --verbose
 
-The machinery lives in Code/goldenmaster.py and is shared by all four sessions (this file
+The machinery lives in Code/goldenmaster.py and is shared by all four method folders (this file
 was its original home; promoted 2026-08-11 so there is ONE implementation of the check
-that certifies every refactor step). Behaviour is unchanged and the existing snapshot in
+that certifies every change). Behaviour is unchanged and the existing snapshot in
 _goldenmaster/ stays valid -- the tags below are the same three it was written with.
 
-This file declares only WHICH outputs the gravimetry session owns. Everything else --
+This file declares only WHICH outputs the gravimetry code owns. Everything else --
 comparison rules, tolerance, reporting, the refusal to re-baseline -- is documented in
 Code/goldenmaster.py.
 
-Covered outputs (everything numerical this session produces):
+Covered outputs (everything numerical the gravimetry code produces):
   - Data/Gravimetry/Processed/*.csv          pipeline chain, all rho variants
   - Results/Grav/Inversion/artifacts/*.npz   inversion artifacts (inversion_io)
   - Results/Grav/Inversion/freedepth_*.npz   free-depth cubes
@@ -42,4 +42,4 @@ SOURCES = [
 
 
 if __name__ == "__main__":
-    sys.exit(gm.main(GM_DIR, SOURCES, "the gravimetry session"))
+    sys.exit(gm.main(GM_DIR, SOURCES, "the gravimetry outputs"))

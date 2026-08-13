@@ -128,7 +128,7 @@ def main():
         return np.append(vx, vx[0]), np.append(vz, vz[0])   # closed
 
     lidar = it.lidar_file(args.line)
-    gu.check_lidar_schema(lidar)   # cross-session contract: fail loudly, not silently
+    gu.check_lidar_schema(lidar)   # cross-folder contract: fail loudly, not silently
     Ld = np.genfromtxt(lidar, delimiter=",", names=True) if lidar.exists() else None
 
     # ---- ONE FIGURE PER SHAPE: anomaly (top) + terrain section (bottom), -----

@@ -4,12 +4,12 @@ Real pytest checks (previously a print-only demo that asserted nothing and was
 never collected -- rewritten for phase-2 handover).
 
 Locks the gdp normalisation behaviour the pipeline relies on
-(see Code/GPR/CLAUDE.md Conventions): `tracewise-rms-window` computes the scaling
+(see Code/GPR/README.md Conventions): `tracewise-rms-window` computes the scaling
 factor from ONLY the window region and applies it to the full trace, whereas the
 plain `tracewise-rms` type IGNORES the window parameter entirely.
 
 gdp is imported normally (it is a pinned pip install in the project env); no
-sys.path bootstrap is needed. See Code/GPR/CLAUDE.md "External dependency".
+sys.path bootstrap is needed. See Code/GPR/README.md "External dependency".
 
 Synthetic setup: 2 traces, each a strong early direct wave (trace 1 = 8x, trace 2
 = 4x) plus an identical weak late reflection. The window covers the late times

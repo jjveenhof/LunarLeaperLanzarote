@@ -12,7 +12,7 @@ SOURCES -- Data/GNSS/Cleaned/ also holds this script's INPUT CSVs
 (CleanedGNSS_GPR_Lines.csv, CleanedGNSS_GPR_FlowerPetals.csv), which are not tracked by
 goldenmaster.py and never should be, so a directory scan would false-positive on them
 every run. Instead this checks points_to_lines.py's own declared OUTPUT_FILES constant
-against goldenmaster.py's SOURCES patterns directly -- see REFACTOR.md phase 3 item 3a.
+against goldenmaster.py's SOURCES patterns directly -- see README.md, Verification.
 
 This test does NOT replace goldenmaster.py check -- it answers "is a declared output
 going untracked?" rather than "did a tracked file change?". Run both.

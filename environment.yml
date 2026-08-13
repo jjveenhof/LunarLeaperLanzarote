@@ -3,7 +3,7 @@
 #     conda env create -f environment.yml
 #     conda activate lacorona-lunarleaper-thesis
 #
-# Then run any script with that env's python. See the root CLAUDE.md for the
+# Then run any script with that env's python. See Code/README.md for the
 # invoke-by-full-path convention used on the author's machine.
 #
 # This is a CURATED spec, not a `conda env export` dump: it lists what the code actually
@@ -61,5 +61,5 @@ dependencies:
 #     validation:  conda create -n pygimli -c gimli -c conda-forge pygimli
 #
 #   GDAL / rasterio -- the QGIS raster work (overburden maps) is done in the QGIS GUI,
-#     not from Python. See Code/QGIS/CLAUDE.md for the recipe. Nothing under Code/
+#     not from Python. See Code/QGIS/README.md for the recipe. Nothing under Code/
 #     imports either library.

@@ -123,7 +123,7 @@ def main():
         return np.append(vx, vx[0]), np.append(vz, vz[0])
 
     lf = it.lidar_file(args.line)
-    _gu.check_lidar_schema(lf)     # cross-session contract: fail loudly, not silently
+    _gu.check_lidar_schema(lf)     # cross-folder contract: fail loudly, not silently
     Ld = np.genfromtxt(lf, delimiter=",", names=True) if lf.exists() else None
 
     # ---- same canvas construction as plot_model_terrain -----------------------

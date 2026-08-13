@@ -1,6 +1,6 @@
 """
 flowerpetal_io.py
-Data layer of the flower-petal 3D viewer (F12 split, REFACTOR.md): the profile
+Data layer of the flower-petal 3D viewer (split out of plot_flowerpetal_3d.py): the profile
 catalogue, GNSS/LiDAR/edge/plumb loaders, track interpolators, and the curtain
 geometry (petal_track / drape_curtain / split_panels). The Plotly scene builders
 (make_figure / write_html) and the CLI stay in plot_flowerpetal_3d.py.

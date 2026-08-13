@@ -10,4 +10,4 @@ GM_DIR = Path(__file__).resolve().parent / "_goldenmaster"
 SOURCES = [("geojson", DATA_DIR, "GPR_*.geojson")]
 
 if __name__ == "__main__":
-    sys.exit(gm.main(GM_DIR, SOURCES, "the QGIS session"))
+    sys.exit(gm.main(GM_DIR, SOURCES, "the QGIS outputs"))

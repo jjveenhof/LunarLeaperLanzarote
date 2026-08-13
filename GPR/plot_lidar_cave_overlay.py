@@ -118,7 +118,7 @@ def prepare(n):
     # --- project the outline onto the actual dense GNSS track (not a straight fit) ---
     lid_path = LIDAR_DIR / 'lidar_line{}.csv'.format(n)
     lid = np.genfromtxt(str(lid_path), delimiter=',', names=True)
-    # Cross-session schema contract (REFACTOR.md phase-3 item 3b): Grav/grav_utils.py
+    # Cross-folder schema contract (see Code/LiDAR/README.md): Grav/grav_utils.py
     # reads this same file. Assert the expected columns here so a wrong-column read
     # (e.g. a re-exported CSV with a header change) fails legibly instead of silently
     # mis-registering the outline.

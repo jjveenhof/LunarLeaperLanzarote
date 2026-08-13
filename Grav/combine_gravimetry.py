@@ -36,7 +36,7 @@ from pathlib import Path
 
 from grav_utils import BASE, GRAV_DIR, GNSS_DIR   # one definition of the project paths
 
-# Raw acquisition data -- READ ONLY (see the project CLAUDE.md "Data safety" section).
+# Raw acquisition data -- READ ONLY (see Code/README.md, "Data that cannot be replaced").
 CG5_DIR   = GRAV_DIR / "Field data"
 NOTES_DIR = GRAV_DIR / "Notes"
 GNSS_FILE = GNSS_DIR / "01.05.26/LunLeapLanzGrav.txt"

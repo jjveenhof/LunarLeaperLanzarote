@@ -1,6 +1,6 @@
 """
 plot_topo_section.py
-QC-figure half of the topo correction (F12 split, REFACTOR.md). topo_correction.py
+QC-figure half of the topo correction (compute/plot split). topo_correction.py
 keeps the numeric core (elevation interp, static shift, the `_topo.npz` writer);
 this module holds ONLY the single-panel topographic radargram PNG it emits.
 

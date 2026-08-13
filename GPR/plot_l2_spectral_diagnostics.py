@@ -1,7 +1,7 @@
 """
 plot_l2_spectral_diagnostics.py
 Diagnoses the Line2 100 MHz spectral notches (~75, ~160 MHz -- hardware artifact
-from the pulsEKKO antenna housing, not geology; see Code/GPR/CLAUDE.md Current
+from the pulsEKKO antenna housing, not geology; see Code/GPR/README.md Current
 Focus) against a normal 100 MHz line (Line3) for the thesis appendix.
 
 Machinery matches GPRProcessing.ipynb's "Mean proc." / "f,x Processed" panels

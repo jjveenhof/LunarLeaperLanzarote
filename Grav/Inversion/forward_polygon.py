@@ -10,7 +10,7 @@ Conventions: surface is flat at depth 0; depth is positive DOWNWARD; the modelle
 g_z is the void anomaly directly (compare to the detrended CBA residual, in mGal).
 
 Runs in ANY env (no pyGIMLi needed):
-    C:/Users/jj_ve/miniconda3/envs/GPR_plotting_LL/python.exe forward_polygon.py
+    python forward_polygon.py
 """
 
 import numpy as np

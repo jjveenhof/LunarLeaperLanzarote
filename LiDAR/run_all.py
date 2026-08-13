@@ -1,5 +1,5 @@
 """
-run_all.py -- one command to regenerate every LiDAR-session output that depends only
+run_all.py -- one command to regenerate every LiDAR output that depends only
 on the already-corrected point clouds (no manual CloudCompare work).
 
 Runs, in order:
@@ -12,18 +12,18 @@ Runs, in order:
 Each step's inputs are the corrected exports in `LiDAR La Corona/Reregistered clouds/`
 (and `Clouds to reconstruct transformations/` for the Gente before/after pair) --
 see slice_tube.DEFAULT_SOURCE for the canonical line->export mapping and
-CLAUDE.md's "reproducibility" note for what IS and is NOT regenerable this way.
+README.md's "Reproducibility" note for what IS and is NOT regenerable this way.
 
 NOT covered here (deliberately -- these are checks, not regeneration, or require a
 GUI step this script cannot do):
-  - The CloudCompare alignment itself: manual, by eye + ICP; see CLAUDE.md's
+  - The CloudCompare alignment itself: manual, by eye + ICP; see README.md's
     CloudCompare Workflow section and alignment_transforms.txt for the recorded
     matrices. Applying those matrices in CloudCompare is how a successor VERIFIES the
     delivered registration; it is not automatable from here.
   - test_slice_tube.py (the area-regression assertion), goldenmaster.py (the CSV diff),
     and test_goldenmaster_coverage.py (is every output file tracked) -- run those
     explicitly as part of a refactor step, not as routine regeneration; see
-    REFACTOR.md rule 0. See README.md for the exact commands.
+    any code change. See README.md for the exact commands.
 
 Run: python run_all.py
 """

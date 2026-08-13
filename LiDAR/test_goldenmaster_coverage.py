@@ -1,6 +1,6 @@
 """
 test_goldenmaster_coverage.py -- asserts the golden master's SOURCES globs cover every
-numerical output this session actually writes.
+numerical output this folder actually writes.
 
 goldenmaster.py protects what is IN its manifest; nothing checks the manifest is
 complete. A successor who adds a script writing a new file to Data/LiDAR/ gets no
@@ -11,7 +11,7 @@ a near-miss that nothing was checking for isn't caught by a tolerance, only by c
 
 This test does NOT replace goldenmaster.py check -- it answers a different question
 ("is anything in Data/LiDAR/ going untracked?") rather than "did a tracked file change?".
-Run both; see REFACTOR.md phase 3 item 3a.
+Run both; see README.md, Regression checks.
 
 Run: python test_goldenmaster_coverage.py
 """

@@ -11,8 +11,9 @@ must NOT be re-introduced (that would double-count the terrain effect).
 The modelled vertical response is therefore directly comparable to the
 detrended CBA residual (no further corrections applied).
 
-ENVIRONMENT: run with the `pygimli` conda env, NOT the main project env:
-    C:/Users/jj_ve/miniconda3/envs/pygimli/python.exe
+ENVIRONMENT: needs a conda env with `pygimli` installed. The main project env
+(environment.yml) deliberately does NOT include it -- this file is validation
+only, and nothing in the reproduce chain imports it.
 
 Self-test (python forward_lavatube.py) checks the pyGIMLi response against the
 analytic 2D infinite horizontal cylinder, which also fixes the output units.

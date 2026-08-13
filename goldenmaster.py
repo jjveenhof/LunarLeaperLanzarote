@@ -1,14 +1,14 @@
 """
-Golden-master snapshot + comparison, shared by all four method sessions.
+Golden-master snapshot + comparison, shared by all four method folders.
 
-Post-submission refactor safety net (Code/REFACTOR.md rule 0 / rule 2). The thesis is
-frozen, so every refactor step must leave the NUMBERS bit-for-bit where they were. Each
-session freezes its current outputs once, then re-checks them after each edit.
+Regression safety net for the whole of Code/ (see Code/README.md). The thesis is frozen,
+so any change to this code must leave the NUMBERS bit-for-bit where they were. Each
+method folder freezes its current outputs once, then re-checks them after each edit.
 
-This module holds the machinery. It is NOT run directly -- each session has a thin
+This module holds the machinery. It is NOT run directly -- each method folder has a thin
 `goldenmaster.py` shim that declares WHICH files it owns and calls `main()` here:
 
-    # Code/<Session>/goldenmaster.py
+    # Code/<Method>/goldenmaster.py
     import sys, pathlib
     sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))  # Code/
     import goldenmaster as gm
@@ -17,21 +17,20 @@ This module holds the machinery. It is NOT run directly -- each session has a th
 
     if __name__ == "__main__":
         sys.exit(gm.main(pathlib.Path(__file__).resolve().parent / "_goldenmaster",
-                         SOURCES, "gravimetry session"))
+                         SOURCES, "the gravimetry outputs"))
 
-Then, from the session directory:
+Then, from that folder:
 
-    python goldenmaster.py snapshot     # once, BEFORE any refactor edit
-    python goldenmaster.py check        # after every refactor step
+    python goldenmaster.py snapshot     # once, BEFORE editing anything
+    python goldenmaster.py check        # after every change
     python goldenmaster.py check --verbose
 
 There is one implementation on purpose: this is the script that certifies every other
-refactor step, and four divergent copies of the thing that checks for divergence would be
-worse than none. Originally written by the Grav session (2026-08-11) and promoted here
-unchanged in behaviour, plus a byte-exact fallback for formats the other sessions produce.
+change, and four divergent copies of the thing that checks for divergence would be worse
+than none.
 
 Figures are deliberately NOT covered: PNG/PDF bytes differ run to run even with identical
-data (timestamps, font hinting), so per rule 2 we verify the numbers a figure is drawn
+data (timestamps, font hinting), so what gets verified is the numbers a figure is drawn
 from, not the image.
 
 Comparison rules:
@@ -47,11 +46,12 @@ Absolute (not relative) tolerance is deliberate: a value that is exactly zero at
 -- e.g. Grav_lsq at the base station -- must stay exactly zero, and rtol would let it
 drift.
 
-Exit code 0 = identical, 1 = deviation. A deviation STOPS that refactor step and is
-escalated to the root QandA.md -- it is never quietly fixed (REFACTOR.md rule 3).
+Exit code 0 = identical, 1 = deviation. A deviation STOPS the work in progress and is
+investigated and explained -- it is never quietly fixed or re-baselined.
 
-Snapshots live in Code/<Session>/_goldenmaster/ and are gitignored by their own
-.gitignore (a few MB of regenerable output, and scaffolding rather than source).
+Snapshots live in Code/<Method>/_goldenmaster/ and are gitignored by their own
+.gitignore (a few MB of regenerable output). NOTE: because they are gitignored, they do
+NOT survive a `git clone` -- re-run `snapshot` to rebuild a baseline there.
 """
 
 import argparse
@@ -70,7 +70,7 @@ ATOL = 1e-12
 
 
 def _iter_sources(sources):
-    """Yield (tag, path) for every file currently on disk that a session tracks."""
+    """Yield (tag, path) for every tracked file currently on disk."""
     for tag, root, pattern in sources:
         root = Path(root)
         if not root.is_dir():
@@ -84,12 +84,12 @@ def snapshot(gm_dir, sources):
     if gm_dir.exists():
         print(f"Snapshot already exists at {gm_dir}")
         print("Refusing to overwrite -- a golden master is only valid if it predates the")
-        print("first refactor edit. Delete it by hand if you really mean to re-baseline.")
+        print("first edit. Delete it by hand if you really mean to re-baseline.")
         return 1
 
     gm_dir.mkdir(parents=True)
     # Self-contained ignore: keeps the snapshot out of git without touching the shared
-    # Code/.gitignore, which the Supervisor session owns.
+    # Code/.gitignore.
     (gm_dir / ".gitignore").write_text("*\n")
 
     n = 0
@@ -105,7 +105,7 @@ def snapshot(gm_dir, sources):
         count = len(list(d.glob("*"))) if d.is_dir() else 0
         print(f"  {tag:12s} {count:3d}  ({Path(root) / pattern})")
     if n == 0:
-        print("\nWARNING: nothing matched. Check the SOURCES globs in this session's shim"
+        print("\nWARNING: nothing matched. Check the SOURCES globs in this folder's shim"
               " -- an empty snapshot silently certifies nothing.")
         return 1
     return 0
@@ -246,8 +246,8 @@ def check(gm_dir, sources, verbose=False):
                 print(f"      {d}")
 
     if failures or missing:
-        print("\nFAIL -- stop this refactor step and escalate to the root QandA.md "
-              "(REFACTOR.md rule 3). Do not 'fix' the number.")
+        print("\nFAIL -- stop and find out WHY a published number moved "
+              "before going further. Do not 'fix' the number.")
         return 1
 
     if extra:
@@ -258,8 +258,8 @@ def check(gm_dir, sources, verbose=False):
     return 0
 
 
-def main(gm_dir, sources, description="this session"):
-    """argparse entry point for a session shim. Returns an exit code."""
+def main(gm_dir, sources, description="these outputs"):
+    """argparse entry point for a per-folder shim. Returns an exit code."""
     ap = argparse.ArgumentParser(
         description=f"Golden-master snapshot/check for {description}.")
     ap.add_argument("action", choices=["snapshot", "check"])

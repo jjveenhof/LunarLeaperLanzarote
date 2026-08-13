@@ -40,7 +40,7 @@ from grav_utils import PROC_DIR, RHO_DEFAULT, rho_str, sba_file
 
 # The values currently in main.tex, for --check. Keyed so a mismatch names the cell.
 # If a number here legitimately changes, the THESIS is what needs updating -- and per
-# REFACTOR.md rule 3 that is an escalation, not a quiet edit.
+# that is something to investigate and explain, not to quietly edit away.
 THESIS_CORR_BUDGET = {
     "obs_min": -0.49, "obs_max": +0.50, "obs_se_med": 0.015, "obs_se_max": 0.058,
     "elev_min": -0.41, "elev_max": +0.59, "elev_se_med": 0.003, "elev_se_max": 0.006,
@@ -264,6 +264,6 @@ if __name__ == "__main__":
             for b in bad:
                 print(f"  {b}")
             print("\nThe thesis is frozen: do NOT edit either side to make these agree.")
-            print("Escalate to the root QandA.md (REFACTOR.md rule 3).")
+            print("Find out WHY before changing anything.")
             sys.exit(1)
         print("OK -- every cell matches the values in main.tex.")

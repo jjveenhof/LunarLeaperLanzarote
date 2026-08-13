@@ -1,13 +1,13 @@
 """
 test_goldenmaster_coverage.py -- asserts goldenmaster.py's SOURCES globs cover every
-numerical output this session actually writes.
+numerical output the gravimetry code actually writes.
 
 goldenmaster.py protects what is IN its manifest; nothing checks the manifest is
 COMPLETE. A successor who adds a script that writes a new .csv to Data/Gravimetry/Processed/
 or a new .npz to Results/Grav/Inversion/ gets no protection and no warning --
 `goldenmaster.py check` would report it under "NEW" and still PASS. This is the same class
 of gap that let a wrong point cloud pass silently for weeks elsewhere in the project (see
-REFACTOR.md phase 3 item 3a): a near-miss nothing was checking for isn't caught by a
+see Code/Grav/README.md): a near-miss nothing was checking for isn't caught by a
 tolerance, only by coverage.
 
 This does NOT replace `python goldenmaster.py check` -- it answers a different question
@@ -19,7 +19,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-# NOT a plain `import goldenmaster` -- Code/Grav/goldenmaster.py (the session shim) itself
+# NOT a plain `import goldenmaster` -- Code/Grav/goldenmaster.py (the shim) itself
 # does `import goldenmaster as gm` internally to reach the SHARED Code/goldenmaster.py.
 # If this test also imports a module literally named "goldenmaster" while Code/Grav is on
 # sys.path, Python's module cache resolves the shim's internal import back to the shim
@@ -34,7 +34,7 @@ _spec = importlib.util.spec_from_file_location("_grav_goldenmaster_shim",
 shim = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(shim)
 
-SOURCES = shim.SOURCES         # this session's (tag, root, pattern) list
+SOURCES = shim.SOURCES         # this folder's (tag, root, pattern) list
 gm = shim.gm                   # the shared Code/goldenmaster.py -- reached via the shim's
                                # own `import goldenmaster as gm`, which is a distinct
                                # object from `shim` itself (see the collision note above)
@@ -50,7 +50,7 @@ def find_untracked():
     prefix. A new script writing e.g. Results/Grav/Inversion/some_other_thing.npz
     would sit in a tracked root, match no tracked pattern, and go unnoticed without
     this check."""
-    ext_by_root = {}                      # root -> set of extensions this session tracks
+    ext_by_root = {}                      # root -> set of extensions tracked here
     tracked = set()
     for _tag, root, pattern in SOURCES:
         root = Path(root)

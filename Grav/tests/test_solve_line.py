@@ -1,7 +1,7 @@
 """
 Closed-form round-trip test for the LSQ network adjustment.
 
-`drift_correction_lsq.solve_line` is the largest unasserted module in the session and
+`drift_correction_lsq.solve_line` is the largest unasserted module here and
 EVERY downstream number inherits it -- the station anomalies, the Bouguer chain, the
 detrended residual, and therefore the inversion. Before this file, `Code/Grav/` contained
 zero `assert` statements: the only other `test_` file is a print script bound to live

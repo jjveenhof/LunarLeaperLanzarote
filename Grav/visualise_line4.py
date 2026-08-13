@@ -34,7 +34,7 @@ from plot_utils import save_figure
 from grav_utils import (BASE, PROC_DIR, BOUGUER_DIR, LSQ_LINES, RHO_DEFAULT,
                         rho_str as rho_fmt, sba_file)
 
-# Marker colours matching the QGIS map styling (Code/QGIS/CLAUDE.md)
+# Marker colours matching the QGIS map styling (Code/QGIS/README.md)
 L4_COLOR   = "#FF4DB8"   # pink   -- Line 4 points
 L3_COLOR   = "#FF5C00"   # orange -- Line 3 points
 PATH_COLOR = "0.6"       # neutral grey for the connecting profile paths

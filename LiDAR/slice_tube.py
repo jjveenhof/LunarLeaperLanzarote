@@ -2,7 +2,7 @@
 slice_tube.py -- slice a LiDAR tube export in the vertical plane of a gravity line
 and write the cross-section outline + area for the Grav inversion overlay.
 
-The gravity profile crosses the tube obliquely; per the Grav session's request we
+The gravity profile crosses the tube obliquely; to match the gravity profiles we
 slice ALONG the line's vertical plane (a thin slab around it), NOT perpendicular to
 the tube axis, so the LiDAR outline is "stretched" the same way the 2-D gravity
 model is. We project the slab points onto (dist-along-line, absolute elevation),
@@ -14,12 +14,12 @@ Output: Data/LiDAR/lidar_line{N}.csv  with columns  x,z,easting,northing
   z = absolute REGCAN95 orthometric elevation (m)
   easting,northing = absolute EPSG:4083 coords of the vertex. A consumer can project
     these onto any profile-axis / distance-origin convention itself, so no baked
-    distance coordinate can go stale (see QandA.md, Grav 2026-07-17).
+    distance coordinate can go stale (E,N added for Grav 2026-07-17).
 plus the printed cross-sectional area (m^2). This is DATA, not a Code/ artifact -- it
-lives under Data/LiDAR/ (outside git) because it is consumed cross-session by Grav (and
+lives under Data/LiDAR/ (outside git) because it is consumed by Grav (and
 now also GPR); see grav_utils.lidar_file().
 
-Slice geometry (EPSG:4083 / REGCAN95 UTM 28N), from QandA.md:
+Slice geometry (EPSG:4083 / REGCAN95 UTM 28N), agreed with the gravity profiles:
   Line 3: origin (650620.7, 3227095.7), azimuth 353.6 deg
   Line 5: origin (649766.8, 3227446.2), azimuth 358.3 deg
 
@@ -149,7 +149,7 @@ def main():
         # point to the last written digit, which full-precision-then-round does not
         # guarantee. It also matches the convention the deployed lidar_line3.csv was
         # (accidentally) written under, which we are adopting on its merits -- see
-        # CLAUDE.md's Reproducibility section. Changing this order silently breaks
+        # README.md's Reproducibility section. Changing this order silently breaks
         # goldenmaster.py by ~1e-4 m at a couple of rows; don't "fix" it back.
         cx = np.round(cx, 4)
         # absolute EPSG:4083 coords of each vertex: it lies in the line's vertical

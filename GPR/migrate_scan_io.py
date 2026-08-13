@@ -1,7 +1,7 @@
 """
 migrate_scan_io.py
 Compute core of the Stolt migration scan -- the numeric half of the F11 split
-(REFACTOR.md). All the migration MATH lives here; migrate_velocity_scan.py keeps
+(compute/plot split). All the migration MATH lives here; migrate_velocity_scan.py keeps
 the CLI, the interactive velocity-scan HTML, and the static/before-after PNGs.
 
 Split so a successor can migrate a section from Python without the plotting layer,

@@ -44,7 +44,7 @@ except ValueError:
 
 INVERT_LINES = {4}
 
-# Per-line colours matching the QGIS map styling (Code/QGIS/CLAUDE.md)
+# Per-line colours matching the QGIS map styling (Code/QGIS/README.md)
 LINE_COLORS = {2: "#0099FF", 3: "#FF5C00", 5: "#00CC80"}
 DEFAULT_COLOR = "black"
 

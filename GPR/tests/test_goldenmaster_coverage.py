@@ -1,6 +1,6 @@
 """
 test_goldenmaster_coverage.py
-Phase-3 REFACTOR.md item 3a: the golden master protects what is in its manifest, but
+The golden master protects what is in its manifest, but
 nothing checks the manifest is COMPLETE. A successor who adds a script that writes a new
 numerical output gets no protection and no warning -- this test closes that gap.
 

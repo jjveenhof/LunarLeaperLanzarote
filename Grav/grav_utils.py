@@ -30,7 +30,7 @@ LSQ_LINES   = LSQ_DIR / "Lines"
 CORR_DIR    = RESULTS_DIR / "Corrections"
 BOUGUER_DIR = RESULTS_DIR / "Bouguer"
 
-# Input data directories (read-only -- raw acquisition data, see the project CLAUDE.md)
+# Input data directories (read-only -- raw acquisition data, see Code/README.md)
 GRAV_DIR    = BASE / "Data/Gravimetry"           # raw + combined, parent of Processed/
 GNSS_DIR    = BASE / "Data/GNSS"
 
@@ -45,14 +45,15 @@ GNSS_DIR    = BASE / "Data/GNSS"
 # (parents[2] from Inversion/Inspect/Adhoc reaches Code/, for plot_utils.) That single
 # bootstrap line is the only path arithmetic left outside this file; everything else --
 # BASE and every directory under it -- comes from here.
-# LiDAR cave cross-sections handed over by the LiDAR session -- ground truth for the
-# inversion, and now also consumed by the GPR session. They are DATA, so they live
+# LiDAR cave cross-sections produced by Code/LiDAR -- ground truth for the
+# inversion, and also consumed by Code/GPR. They are DATA, so they live
 # under Data/ (outside the Code/ git repo) rather than next to the scripts.
 LIDAR_DIR   = BASE / "Data/LiDAR"
 
 
-# The one genuine cross-session data contract in the project: the LiDAR session WRITES
-# these files, Grav and GPR READ them, and REFACTOR.md rule 8 protects the filenames by
+# The one genuine cross-folder data contract in the project: Code/LiDAR WRITES
+# these files, Grav and GPR READ them, and the contract described in
+# Code/LiDAR/README.md protects the filenames by
 # convention only. Assert the columns at the read site so a changed schema fails loudly
 # here instead of silently producing a wrong overlay three plots downstream.
 LIDAR_COLUMNS = ("x", "z", "easting", "northing")
@@ -68,7 +69,7 @@ def lidar_file(line):
 def check_lidar_schema(path, required=LIDAR_COLUMNS):
     """Raise ValueError unless `path` has the expected LiDAR outline columns.
 
-    Cheap (reads the header line only) and called by every LiDAR read in this session.
+    Cheap (reads the header line only) and called by every LiDAR read here.
     A missing file is NOT an error -- callers already treat the overlay as optional and
     check existence themselves; this only polices the schema of a file that IS there.
     """
@@ -83,8 +84,8 @@ def check_lidar_schema(path, required=LIDAR_COLUMNS):
         raise ValueError(
             f"{p.name}: LiDAR outline is missing column(s) {missing}. "
             f"Found {cols}, expected at least {list(required)}. This file is produced by "
-            f"the LiDAR session and read by Grav and GPR -- if its schema really changed, "
-            f"both readers and Code/REFACTOR.md rule 8 need updating together."
+            f"Code/LiDAR and read by Grav and GPR -- if its schema really changed, "
+            f"both readers must be updated in the same commit."
         )
     return cols
 
@@ -104,7 +105,7 @@ def load_lidar_outline(line):
 # The standard 0.3086 includes the ellipsoidal correction; at Lanzarote (29N) ~0.3085
 FAC_GRAD = 0.3086         # mGal/m
 
-# Newton's constant -- THE definition for this session. The Talwani forward model
+# Newton's constant -- THE definition for the gravimetry code. The Talwani forward model
 # (Inversion/forward_polygon.py, forward_fem.py, inspect_2d_validity.py) imports this
 # rather than restating it; it used to be spelled out in four places with two different
 # values (6.674e-11 here, 6.6743e-11 in all three forward models).
@@ -121,7 +122,7 @@ G_NEWTON  = 6.6743e-11    # m3 kg-1 s-2 (CODATA)
 # the Bouguer term by 4.5e-5 relative (max 0.009 uGal across all 130 stations, ~1000x
 # below the smallest reported digit), so it would change no thesis number -- but it WOULD
 # change every processed CSV at the 1e-8 level, so the on-disk chain would no longer
-# bit-match the thesis. Kept pinned deliberately; see Code/Grav/QandA.md 2026-08-12.
+# bit-match the thesis. Kept pinned deliberately; see Code/Grav/DECISIONS.md.
 # To unify, change 6.674e-11 to G_NEWTON here and re-baseline the golden master.
 G_BOUGUER = 6.674e-11     # m3 kg-1 s-2 -- frozen at the thesis value, do not "correct"
 BOUGUER_K = 2 * np.pi * G_BOUGUER * 1e3 * 1e5   # = 0.04192 mGal m-1 per g/cm3
