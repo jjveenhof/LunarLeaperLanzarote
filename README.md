@@ -65,10 +65,15 @@ intact -- moving `Code/` on its own breaks every path.
 `LiDAR La Corona/*.bin`. Everything under `Data/*/Processed/`, `Data/*/Topo/` and
 `Results/` is regenerable -- overwriting those is what the pipeline is for.
 
-Thesis LaTeX and the final figure PDFs live outside this tree entirely. Figure-writing
-code reads the location from the `THESIS_REPO` environment variable; if it is unset and
-the fallback path is absent, the scripts still run, write the browse PNGs into
-`Results/`, and print a one-time warning instead of the PDFs.
+Thesis LaTeX and the final figure PDFs live outside this tree entirely, in an Overleaf
+project. Figure-writing code reads the location from the `THESIS_REPO` environment
+variable; if it is unset and the fallback path is absent, the scripts still run, write the
+browse PNGs into `Results/`, and print a one-time warning instead of the PDFs -- so
+nothing here depends on having the LaTeX source.
+
+A dead copy of that source, taken at submission, sits at `Thesis LaTeX source/` in the
+project root, alongside the submitted PDF. It is an archive with no `.git`, not a working
+copy; see its `_SNAPSHOT.txt`.
 
 ## The four method folders
 
